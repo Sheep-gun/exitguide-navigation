@@ -18,6 +18,12 @@ Content-Type: application/json
   "locale": "ko-KR",
   "goal_id": "cancel_subscription",
   "goal_text": "구독을 해지하고 싶어",
+  "session": {
+    "last_confirmed_state_id": "membership_home",
+    "failed_element_ids": [],
+    "failed_candidate_meanings": [],
+    "retry_count": 0
+  },
   "screen_elements": [
     {
       "id": "node_12",
@@ -40,11 +46,14 @@ Content-Type: application/json
   "route_id": "example_android_cancel_subscription_ko_v1",
   "route_version": 1,
   "current_step": 2,
+  "current_state_id": "membership_management",
   "target_element_id": "node_12",
   "instruction": "멤버십 관리를 누르세요.",
   "warning": null,
   "requires_user_confirmation": false,
   "confidence": 0.94,
+  "navigation_state": "on_route",
+  "recovery": null,
   "source_files": [
     "example_android_cancel_subscription_ko_v1.md"
   ],
@@ -56,9 +65,36 @@ Content-Type: application/json
 
 ```text
 guided          안내 가능한 현재 단계
+reanchored      다른 단계 또는 경로 변형에서 현재 화면을 다시 찾음
+recovery_required 안전한 사용자 복귀 행동이 필요함
 needs_review     후보는 있지만 확신도가 낮음
 route_not_found  해당 앱·목적 경로가 없음
 goal_completed   목표 달성 화면이 확인됨
+```
+
+## 경로 복구 응답
+
+현재 화면을 검증 경로에 매칭할 수 없고 뒤로 가기가 안전할 때는 `target_element_id` 대신 복구 지시를 반환한다.
+
+```json
+{
+  "request_id": "req_124",
+  "route_id": "example_android_cancel_subscription_ko_v1",
+  "current_state_id": null,
+  "target_element_id": null,
+  "instruction": "현재 화면은 확인된 경로와 다릅니다. 이전 화면으로 한 번 돌아가 주세요.",
+  "warning": null,
+  "requires_user_confirmation": true,
+  "confidence": 0.41,
+  "navigation_state": "recovery_required",
+  "recovery": {
+    "type": "back",
+    "safe": true,
+    "expected_previous_state_id": "membership_home",
+    "retry_after_recovery": true
+  },
+  "status": "guided"
+}
 ```
 
 ## Terms 서비스와의 결합
@@ -86,3 +122,8 @@ Terms API 결과
 - `goal_id` 목록은 두 저장소에서 동일하게 유지한다.
 - `target_element_id`는 반드시 요청의 `screen_elements[].id` 중 하나이거나 `null`이어야 한다.
 - `requires_user_confirmation=true`인 결과는 자동 실행하지 않는다.
+- `failed_element_ids`에 포함된 요소는 같은 세션에서 다시 안내하지 않는다.
+- 대체 후보는 동일한 마지막 확인 화면에 존재하고 예상 다음 상태가 정의된 안전한 요소여야 한다.
+- `recovery.safe=false`인 단계에서는 일반적인 뒤로 가기를 요청하지 않는다.
+- 기본 최대 시도 횟수는 첫 후보와 대체 후보를 합쳐 2회다.
+- 최대 시도를 넘으면 `needs_review`를 반환하고 추가 후보를 추측하지 않는다.
