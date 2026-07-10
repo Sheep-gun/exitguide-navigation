@@ -88,6 +88,11 @@ UPSTAGE_ROUTE_SANDBOX_VECTOR_STORE_ID=
 
 실제 키가 들어 있는 `.env`는 Git에 포함하지 않는다.
 
+## MVP 시연
+
+- [Navigation·다크패턴 통합 MVP 시연 영상](MVP.mp4)
+- Windows 실행 파일: `dist/EGL-Navigation-MVP.exe`
+
 ## 현재 상태
 
 - [x] navigation 전용 Git 저장소 분리
@@ -96,6 +101,7 @@ UPSTAGE_ROUTE_SANDBOX_VECTOR_STORE_ID=
 - [x] 화면 인식형 메시지 내비게이션과 경로 복구 원칙 정의
 - [x] Upstage API 키 등록, Solar Pro 3 및 Vector Store 검색 권한 확인
 - [x] `egl-routes-prod`, `egl-sandbox-yanggeon` Vector Store 생성
+- [x] Navigation·다크패턴 통합 MVP 실행 파일 및 시연 영상 추가
 - [ ] Upstage Agent Files 업로드 프로젝트 권한 확인
 - [ ] 모범 경로 업로드·검색 스크립트 구현
 - [ ] FastAPI Navigation API 구현
