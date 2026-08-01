@@ -7,6 +7,7 @@ type ExitGuideOverlayModule = {
   openOverlaySettings: () => Promise<boolean>;
   isAccessibilityEnabled: () => Promise<boolean>;
   openAccessibilitySettings: () => Promise<boolean>;
+  getOverlayState: () => Promise<ExitGuideOverlayState>;
   startOverlay: (
     apiBaseUrl: string,
     goalText: string,
@@ -18,6 +19,12 @@ type ExitGuideOverlayModule = {
   ) => Promise<string>;
   stopOverlay: () => Promise<boolean>;
   clearOverlayStatus: () => Promise<boolean>;
+};
+
+export type ExitGuideOverlayState = {
+  running: boolean;
+  operationMode: "explore" | "record";
+  sessionId: string;
 };
 
 const nativeOverlay = NativeModules.ExitGuideOverlay as ExitGuideOverlayModule | undefined;
@@ -52,6 +59,13 @@ export async function openExitGuideAccessibilitySettings(): Promise<void> {
     return;
   }
   await nativeOverlay.openAccessibilitySettings();
+}
+
+export async function getExitGuideOverlayState(): Promise<ExitGuideOverlayState> {
+  if (!nativeOverlay) {
+    return { running: false, operationMode: "explore", sessionId: "" };
+  }
+  return nativeOverlay.getOverlayState();
 }
 
 export async function startExitGuideOverlay(

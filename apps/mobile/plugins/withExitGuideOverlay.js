@@ -205,10 +205,12 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.accessibility.AccessibilityManager;
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.WritableMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -308,6 +310,19 @@ public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
     intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
     reactContext.startActivity(intent);
     promise.resolve(true);
+  }
+
+  @ReactMethod
+  public void getOverlayState(Promise promise) {
+    android.content.SharedPreferences prefs = reactContext.getSharedPreferences(
+      "exitguide_overlay",
+      Context.MODE_PRIVATE
+    );
+    WritableMap state = Arguments.createMap();
+    state.putBoolean("running", ExitGuideOverlayService.isRunning());
+    state.putString("operationMode", prefs.getString("operationMode", "explore"));
+    state.putString("sessionId", prefs.getString("sessionId", ""));
+    promise.resolve(state);
   }
 
   @ReactMethod
@@ -496,6 +511,12 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 
 public class ExitGuideOverlayService extends Service {
+  private static volatile boolean serviceRunning = false;
+
+  public static boolean isRunning() {
+    return serviceRunning;
+  }
+
   private static final long SPINNER_ROTATION_PERIOD_MS = 1800L;
 
   /** Twelve-spoke loader matching the supplied reference image. */
@@ -688,6 +709,7 @@ public class ExitGuideOverlayService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
+    serviceRunning = true;
     windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
     mainHandler = new Handler(Looper.getMainLooper());
     restorePrefs();
@@ -710,6 +732,7 @@ public class ExitGuideOverlayService extends Service {
         return START_STICKY;
       }
       Log.i("ExitGuideOverlay", "stopping overlay by explicit request");
+      serviceRunning = false;
       navigationActive = false;
       awaitingUserStart = false;
       savePrefs();
@@ -771,6 +794,7 @@ public class ExitGuideOverlayService extends Service {
 
   @Override
   public void onDestroy() {
+    serviceRunning = false;
     removeBubble();
     try {
       unregisterReceiver(guidanceReceiver);

@@ -87,6 +87,8 @@ required_overlay_contracts = [
     '"record".equals(activeOperationMode)',
     '"recording".equals(phase)',
     'bubbleView.setText("REC")',
+    'public static boolean isRunning()',
+    'public void getOverlayState(Promise promise)',
     'PREF_START_NONCE',
     'PREF_EXPLORATION_ACTIVE',
     'startNonce = Long.toString(System.currentTimeMillis())',
@@ -241,6 +243,9 @@ for contract in [
     'releaseOperation("start");',
     'releaseOperation("stop");',
     '.catch((error: unknown)',
+    'reconcileGoldRecording()',
+    'getExitGuideOverlayState()',
+    'cancelNavigationGoldRecording(stored.apiBaseUrl, stored.recordingId)',
 ]:
     if contract not in overlay_controller:
         raise AssertionError(f"overlay controller is missing immediate busy/error contract: {contract}")

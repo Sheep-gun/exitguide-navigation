@@ -9,6 +9,7 @@ import {
 import {
   canDrawExitGuideOverlay,
   clearExitGuideOverlayStatus,
+  getExitGuideOverlayState,
   isExitGuideAccessibilityEnabled,
   isExitGuideOverlayAvailable,
   openExitGuideAccessibilitySettings,
@@ -33,6 +34,7 @@ export function useExitGuideOverlayController() {
   const [goldRecording, setGoldRecording] = useState<StoredGoldRecording | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const operationRef = useRef<"start" | "stop" | null>(null);
+  const goldReconcileRef = useRef(false);
 
   function releaseOperation(operation?: "start" | "stop") {
     if (operation === undefined || operation === "start") {
@@ -48,7 +50,7 @@ export function useExitGuideOverlayController() {
 
   useEffect(() => {
     void refreshPermission();
-    void loadGoldRecording().then(setGoldRecording);
+    void reconcileGoldRecording();
     const subscription = AppState.addEventListener("change", (state) => {
       // A native command is already dispatched before ExitGuide can move to
       // the background. Do not keep controls locked while JS is suspended.
@@ -57,6 +59,7 @@ export function useExitGuideOverlayController() {
         return;
       }
       void refreshPermission();
+      void reconcileGoldRecording();
     });
     return () => subscription.remove();
   }, []);
@@ -68,6 +71,39 @@ export function useExitGuideOverlayController() {
     ]);
     setHasPermission(overlayAllowed);
     setHasAccessibility(accessibilityAllowed);
+  }
+
+  async function reconcileGoldRecording() {
+    if (goldReconcileRef.current) {
+      return;
+    }
+    goldReconcileRef.current = true;
+    try {
+      const stored = await loadGoldRecording();
+      if (!stored) {
+        setGoldRecording(null);
+        return;
+      }
+      const nativeState = await getExitGuideOverlayState();
+      const isMatchingRecording =
+        nativeState.running &&
+        nativeState.operationMode === "record" &&
+        nativeState.sessionId === stored.recordingId;
+      if (isMatchingRecording) {
+        setGoldRecording(stored);
+        return;
+      }
+
+      await clearGoldRecording();
+      setGoldRecording(null);
+      void cancelNavigationGoldRecording(stored.apiBaseUrl, stored.recordingId).catch(() => undefined);
+      setMessage("중단된 Gold 기록을 정리했습니다. 기록 시작을 다시 눌러주세요.");
+    } catch {
+      // A temporary native bridge failure must not destroy a recoverable
+      // recording pointer. Keep the previous UI state and retry on resume.
+    } finally {
+      goldReconcileRef.current = false;
+    }
   }
 
   async function openOverlaySettings() {
