@@ -1427,7 +1427,7 @@ public class ExitGuideOverlayService extends Service {
 function accessibilityServiceConfigSource() {
   return `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewScrolled"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewScrolled|typeViewFocused|typeViewAccessibilityFocused|typeViewSelected"
   android:accessibilityFeedbackType="feedbackGeneric"
   android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
   android:canRetrieveWindowContent="true"
@@ -1636,6 +1636,40 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           + " eventTextCount=" + event.getText().size()
           + " hasDescription=" + (event.getContentDescription() != null)
       );
+    } else if ("record".equals(activeOperationMode)
+        && lastScreenFingerprint.length() > 0
+        && pendingPerformedElementId.length() == 0
+        && (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+          || event.getEventType() == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_SELECTED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_FOCUSED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED)) {
+      // Some Compose-based apps (notably Netflix) omit TYPE_VIEW_CLICKED but
+      // include the activated menu's exact semantic label on the ensuing
+      // focus/content/window event. Match that label against the previous
+      // screen's unique clickable index so the human demonstration remains a
+      // real selected candidate rather than an unlabeled screen transition.
+      String performedElementId = elementIdForEvent(event);
+      if (performedElementId.length() == 0
+          && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // Compose can expose only a generic destination such as "bottom
+        // sheet" or "external link". Preserve the demonstrated screen
+        // transition for server-side semantic recovery and human review.
+        performedElementId = "__screen_change__";
+      }
+      if (performedElementId.length() > 0) {
+        pendingFromScreen = lastScreenFingerprint;
+        pendingPerformedElementId = performedElementId;
+        pendingRecommendationId = "";
+        pendingTransitionOutcome = "navigated";
+        pendingActionKind = "click";
+        pendingTransitionSequence = ++transitionSequenceCounter;
+        Log.i(
+          LOG_TAG,
+          "semantic click fallback matched eventType=" + lastEventType
+            + " unresolved=" + "__screen_change__".equals(performedElementId)
+        );
+      }
     } else if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
         && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0
         && pendingPerformedElementId.length() == 0) {
@@ -2856,9 +2890,11 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
 
   private String elementIdForEvent(AccessibilityEvent event) {
     if (event.getContentDescription() != null) {
-      String match = lastClickableElementIds.get(
-        "description|" + clean(event.getContentDescription().toString()).toLowerCase(Locale.ROOT)
-      );
+      String key = clean(event.getContentDescription().toString()).toLowerCase(Locale.ROOT);
+      String match = lastClickableElementIds.get("description|" + key);
+      if (match == null) {
+        match = lastClickableElementIds.get("text|" + key);
+      }
       if (match != null) {
         return match;
       }
@@ -2867,9 +2903,11 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       if (text == null) {
         continue;
       }
-      String match = lastClickableElementIds.get(
-        "text|" + clean(text.toString()).toLowerCase(Locale.ROOT)
-      );
+      String key = clean(text.toString()).toLowerCase(Locale.ROOT);
+      String match = lastClickableElementIds.get("text|" + key);
+      if (match == null) {
+        match = lastClickableElementIds.get("description|" + key);
+      }
       if (match != null) {
         return match;
       }
@@ -2905,6 +2943,9 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String eventTypeName(int eventType) {
     if (eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) return "view_clicked";
     if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) return "view_scrolled";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) return "view_focused";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED) return "view_accessibility_focused";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_SELECTED) return "view_selected";
     if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return "window_content_changed";
     return "window_state_changed";
   }

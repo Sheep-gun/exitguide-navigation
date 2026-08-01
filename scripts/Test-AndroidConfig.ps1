@@ -197,6 +197,16 @@ for gold_pacing_contract in (
         raise AssertionError(
             f"Gold recording must expose and prioritize per-click persistence: {gold_pacing_contract}"
         )
+if 'typeViewFocused|typeViewAccessibilityFocused|typeViewSelected' not in overlay_plugin:
+    raise AssertionError("Accessibility config must subscribe to Compose focus/selection events")
+for compose_gold_contract in (
+    'performedElementId = "__screen_change__";',
+    'semantic click fallback matched eventType=',
+):
+    if compose_gold_contract not in overlay_plugin or compose_gold_contract not in generated_accessibility:
+        raise AssertionError(
+            f"Compose Gold recording fallback is missing: {compose_gold_contract}"
+        )
 duplicate_failure_guard = (
     'if (!force && pendingPerformedElementId.length() == 0\n'
     '          && treeSignature.equals(lastFailedTreeSignature))'

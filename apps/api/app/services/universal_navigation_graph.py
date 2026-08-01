@@ -356,7 +356,7 @@ class UniversalNavigationGraphRepository:
                             break
                     recorded_action = transition.action_kind
                     if (
-                        transition.action_kind == "scroll_forward"
+                        transition.action_kind in {"click", "scroll_forward"}
                         and not sanitize_text(str((selected or {}).get("label", "")))
                     ):
                         inferred_row = _infer_gold_row_click(
@@ -2497,28 +2497,31 @@ def _infer_gold_row_click(
 ) -> dict[str, object] | None:
     """Recover a custom list-row click exposed by Android as a scroll event.
 
-    A few RecyclerView implementations omit TYPE_VIEW_CLICKED for a tapped
-    row. Recovery is intentionally conservative: the new screen's first
-    semantic title must identify exactly one low-risk clickable candidate on
-    the preceding screen. Ordinary list scrolling has no unique match and is
-    kept as ``scroll_forward``.
+    A few RecyclerView and Compose implementations omit TYPE_VIEW_CLICKED for
+    a tapped row. Recovery is intentionally conservative: the new screen's
+    first semantic title must identify exactly one low-risk clickable
+    candidate on the preceding screen. Ordinary list scrolling has no unique
+    match and is kept as ``scroll_forward``.
     """
 
     chrome_labels = {
         "back",
+        "bottom sheet",
+        "external link",
         "go back",
         "navigate up",
         "뒤로",
         "뒤로 가기",
         "위로 이동",
+        "하단 시트",
+        "외부 링크",
     }
-    destination_title = ""
+    destination_titles: list[str] = []
     for element in destination_elements[:24]:
         label = sanitize_text(element.content_description or element.text)
-        if label and label.casefold() not in chrome_labels:
-            destination_title = label
-            break
-    if not destination_title or not isinstance(stored_candidates, list):
+        if label and label.casefold() not in chrome_labels and label not in destination_titles:
+            destination_titles.append(label)
+    if not destination_titles or not isinstance(stored_candidates, list):
         return None
 
     matches: list[dict[str, object]] = []
@@ -2526,8 +2529,19 @@ def _infer_gold_row_click(
         if not isinstance(candidate, dict):
             continue
         label = sanitize_text(str(candidate.get("label", "")))
+        label_token = _semantic_token(label)
+        semantic_match = False
+        for destination_title in destination_titles:
+            destination_token = _semantic_token(destination_title)
+            if label.casefold() == destination_title.casefold() or (
+                len(destination_token) >= 2
+                and bool(label_token)
+                and (destination_token in label_token or label_token in destination_token)
+            ):
+                semantic_match = True
+                break
         if (
-            label.casefold() == destination_title.casefold()
+            semantic_match
             and str(candidate.get("role", "")) in {"button", "image", "link"}
             and str(candidate.get("risk_level", "blocked")) == "low"
         ):

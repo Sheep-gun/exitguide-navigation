@@ -134,6 +134,91 @@ def main() -> None:
         assert inferred == ("notifications", "알림", "click")
         repository.cancel_gold_recording("row-session")
 
+        compose_start = observe(
+            repository,
+            request(
+                "compose-1",
+                "compose-session",
+                [
+                    element("profile-settings", "Profile settings"),
+                    element("account", "Account"),
+                ],
+            ),
+        )
+        observe(
+            repository,
+            request(
+                "compose-2",
+                "compose-session",
+                [
+                    {
+                        **element("profile-title", "Profile"),
+                        "role": "text",
+                        "clickable": False,
+                    }
+                ],
+                transition={
+                    "from_screen_fingerprint": compose_start.screen_fingerprint,
+                    "performed_element_id": "__screen_change__",
+                    "action_kind": "click",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        connection = sqlite3.connect(database)
+        try:
+            compose_inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'compose-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert compose_inferred == ("profile-settings", "Profile settings", "click")
+        repository.cancel_gold_recording("compose-session")
+
+        account_start = observe(
+            repository,
+            request(
+                "account-1",
+                "account-session",
+                [element("account", "Account"), element("help", "Help Center")],
+            ),
+        )
+        observe(
+            repository,
+            request(
+                "account-2",
+                "account-session",
+                [
+                    {**element("external", "External link"), "role": "text", "clickable": False},
+                    {**element("brand", "Netflix"), "role": "text", "clickable": False},
+                    {**element("account-title", "Account"), "role": "text", "clickable": False},
+                ],
+                transition={
+                    "from_screen_fingerprint": account_start.screen_fingerprint,
+                    "performed_element_id": "__screen_change__",
+                    "action_kind": "click",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        connection = sqlite3.connect(database)
+        try:
+            account_inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'account-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert account_inferred == ("account", "Account", "click")
+        repository.cancel_gold_recording("account-session")
+
         output = root / "training.jsonl"
         script = Path(__file__).resolve().parents[3] / "scripts" / "Export-NavigationGoldTraining.py"
         subprocess.run(
