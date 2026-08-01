@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -71,6 +72,67 @@ def main() -> None:
             notes="approved",
         )
         assert reviewed["status"] == "human_gold"
+
+        row_start = observe(
+            repository,
+            request(
+                "row-1",
+                "row-session",
+                [
+                    {
+                        "id": "settings-list",
+                        "parent_id": "root",
+                        "text": None,
+                        "content_description": None,
+                        "view_id": "com.example.gold:id/settings-list",
+                        "role": "list",
+                        "clickable": False,
+                        "enabled": True,
+                        "visible": True,
+                        "scrollable": True,
+                        "bounds": [0, 80, 1080, 2200],
+                    },
+                    element("notifications", "알림"),
+                ],
+            ),
+        )
+        observe(
+            repository,
+            request(
+                "row-2",
+                "row-session",
+                [
+                    {
+                        **element("back", "위로 이동"),
+                        "content_description": "위로 이동",
+                    },
+                    {
+                        **element("notification-title", "알림"),
+                        "role": "text",
+                        "clickable": False,
+                    },
+                ],
+                transition={
+                    "from_screen_fingerprint": row_start.screen_fingerprint,
+                    "performed_element_id": "settings-list",
+                    "action_kind": "scroll_forward",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        connection = sqlite3.connect(database)
+        try:
+            inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'row-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert inferred == ("notifications", "알림", "click")
+        repository.cancel_gold_recording("row-session")
 
         output = root / "training.jsonl"
         script = Path(__file__).resolve().parents[3] / "scripts" / "Export-NavigationGoldTraining.py"

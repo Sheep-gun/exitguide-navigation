@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import {
   cancelNavigationGoldRecording,
   completeNavigationGoldRecording,
+  ExitGuideApiError,
 } from "../api/exitguideApi";
 import {
   canDrawExitGuideOverlay,
@@ -240,7 +241,18 @@ export function useExitGuideOverlayController() {
       setGoldRecording(null);
       setMessage("Gold 기록을 취소했습니다.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Gold 기록을 취소하지 못했습니다.");
+      // The server creates the recording on the first observed target-app
+      // screen. Cancelling before that observation legitimately returns 404,
+      // but the local placeholder still has to be cleared or the UI remains
+      // stuck in recording mode.
+      if (error instanceof ExitGuideApiError && error.status === 404) {
+        await stopExitGuideOverlay();
+        await clearGoldRecording();
+        setGoldRecording(null);
+        setMessage("Gold 기록이 시작되기 전 취소되어 초기화했습니다.");
+      } else {
+        setMessage(error instanceof Error ? error.message : "Gold 기록을 취소하지 못했습니다.");
+      }
     } finally {
       setGoldBusy(false);
     }

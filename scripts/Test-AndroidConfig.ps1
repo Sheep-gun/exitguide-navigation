@@ -174,11 +174,29 @@ event_handler_end = overlay_plugin.find("public void onInterrupt()", event_handl
 event_handler = overlay_plugin[event_handler_start:event_handler_end]
 event_filter = event_handler.find("isRelevantAccessibilityEventPackage(packageName)")
 event_metadata = event_handler.find("lastActivityName =")
-event_schedule = event_handler.rfind("scheduleAnalysis(false)")
+event_schedule = event_handler.rfind("scheduleAnalysis(urgentGoldTransition)")
 if event_handler_start < 0 or min(event_filter, event_metadata, event_schedule) < 0:
     raise AssertionError("accessibility event filtering contract is incomplete")
 if not event_filter < event_metadata < event_schedule:
     raise AssertionError("irrelevant package events must be rejected before metadata or queue mutation")
+click_priority_guard = (
+    '&& "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0\n'
+    '        && pendingPerformedElementId.length() == 0)'
+)
+if click_priority_guard not in overlay_plugin or click_priority_guard not in generated_accessibility:
+    raise AssertionError(
+        "recording scroll events must not overwrite an unsubmitted human click transition"
+    )
+for gold_pacing_contract in (
+    "boolean urgentGoldTransition",
+    "boolean queuedGoldObservation",
+    "scheduleAnalysis(urgentGoldTransition)",
+    "scheduleAnalysis(queuedGoldObservation)",
+):
+    if gold_pacing_contract not in overlay_plugin or gold_pacing_contract not in generated_accessibility:
+        raise AssertionError(
+            f"Gold recording must expose and prioritize per-click persistence: {gold_pacing_contract}"
+        )
 duplicate_failure_guard = (
     'if (!force && pendingPerformedElementId.length() == 0\n'
     '          && treeSignature.equals(lastFailedTreeSignature))'

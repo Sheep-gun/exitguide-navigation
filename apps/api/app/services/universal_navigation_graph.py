@@ -18,6 +18,7 @@ from app.schemas import (
     UniversalNavigationGraphTransition,
     UniversalNavigationGraphUpdate,
     UniversalNavigationDiscoveredRoute,
+    UniversalNavigationElement,
     UniversalNavigationObserveRequest,
     UniversalNavigationRouteStep,
     UniversalNavigationScreen,
@@ -353,6 +354,18 @@ class UniversalNavigationGraphRepository:
                         ):
                             selected = candidate
                             break
+                    recorded_action = transition.action_kind
+                    if (
+                        transition.action_kind == "scroll_forward"
+                        and not sanitize_text(str((selected or {}).get("label", "")))
+                    ):
+                        inferred_row = _infer_gold_row_click(
+                            stored_candidates,
+                            request.screen.elements,
+                        )
+                        if inferred_row is not None:
+                            selected = inferred_row
+                            recorded_action = "click"
                     if selected is None and transition.action_kind == "click":
                         action = connection.execute(
                             """
@@ -377,10 +390,10 @@ class UniversalNavigationGraphRepository:
                         WHERE step_id = ?
                         """,
                         (
-                            transition.performed_element_id,
+                            str((selected or {}).get("element_id", transition.performed_element_id)),
                             str((selected or {}).get("element_key", "")),
                             sanitize_text(str((selected or {}).get("label", ""))),
-                            transition.action_kind,
+                            recorded_action,
                             str((selected or {}).get("risk_level", "low")),
                             transition.outcome,
                             observation.screen_fingerprint,
@@ -2476,6 +2489,50 @@ def sanitize_text(value: str | None) -> str:
     text = LONG_NUMBER_PATTERN.sub("[number]", text)
     text = TOKEN_PATTERN.sub("[secret]", text)
     return text[:500]
+
+
+def _infer_gold_row_click(
+    stored_candidates: object,
+    destination_elements: list[UniversalNavigationElement],
+) -> dict[str, object] | None:
+    """Recover a custom list-row click exposed by Android as a scroll event.
+
+    A few RecyclerView implementations omit TYPE_VIEW_CLICKED for a tapped
+    row. Recovery is intentionally conservative: the new screen's first
+    semantic title must identify exactly one low-risk clickable candidate on
+    the preceding screen. Ordinary list scrolling has no unique match and is
+    kept as ``scroll_forward``.
+    """
+
+    chrome_labels = {
+        "back",
+        "go back",
+        "navigate up",
+        "뒤로",
+        "뒤로 가기",
+        "위로 이동",
+    }
+    destination_title = ""
+    for element in destination_elements[:24]:
+        label = sanitize_text(element.content_description or element.text)
+        if label and label.casefold() not in chrome_labels:
+            destination_title = label
+            break
+    if not destination_title or not isinstance(stored_candidates, list):
+        return None
+
+    matches: list[dict[str, object]] = []
+    for candidate in stored_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        label = sanitize_text(str(candidate.get("label", "")))
+        if (
+            label.casefold() == destination_title.casefold()
+            and str(candidate.get("role", "")) in {"button", "image", "link"}
+            and str(candidate.get("risk_level", "blocked")) == "low"
+        ):
+            matches.append(candidate)
+    return matches[0] if len(matches) == 1 else None
 
 
 def _semantic_token(value: object) -> str:

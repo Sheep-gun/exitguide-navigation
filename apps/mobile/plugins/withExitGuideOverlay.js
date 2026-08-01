@@ -1637,7 +1637,12 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           + " hasDescription=" + (event.getContentDescription() != null)
       );
     } else if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
-        && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0) {
+        && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0
+        && pendingPerformedElementId.length() == 0) {
+      // Android apps often emit a RecyclerView scroll event as a side effect
+      // of navigating to a new screen. Preserve the user's preceding click;
+      // otherwise that synthetic event overwrites the demonstrated action
+      // and turns a valid Gold route into a sequence of scroll_forward steps.
       AccessibilityNodeInfo source = event.getSource();
       String performedElementId = source == null ? "__scroll__" : stableNodeId(source);
       if (source != null) {
@@ -1650,7 +1655,16 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       pendingActionKind = "scroll_forward";
       pendingTransitionSequence = ++transitionSequenceCounter;
     }
-    scheduleAnalysis(false);
+    boolean urgentGoldTransition = "record".equals(activeOperationMode)
+      && pendingPerformedElementId.length() > 0;
+    if (urgentGoldTransition) {
+      // Gold collection is intentionally paced per transition. The compact
+      // overlay stays on "저장 중" until the clicked screen has reached the
+      // server, then returns to REC so the recorder knows the next click is
+      // safe to perform.
+      sendIndicator(false, "저장 중");
+    }
+    scheduleAnalysis(urgentGoldTransition);
   }
 
   @Override
@@ -2258,7 +2272,11 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       mainHandler.post(new Runnable() {
         @Override
         public void run() {
-          scheduleAnalysis(false);
+          boolean queuedGoldObservation = "record".equals(activeOperationMode);
+          if (queuedGoldObservation) {
+            sendIndicator(false, "저장 중");
+          }
+          scheduleAnalysis(queuedGoldObservation);
         }
       });
     }
