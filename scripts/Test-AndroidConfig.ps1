@@ -54,6 +54,10 @@ required_overlay_contracts = [
     "ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION",
     "pendingTransitionSequence = ++transitionSequenceCounter",
     "clearPendingTransition(submittedTransitionSequence)",
+    "lastRecordingSemanticSignature",
+    "recordingSemanticSignature(elements)",
+    'pendingPerformedElementId = "__semantic_screen_change__"',
+    "deferred semantic Gold transition until destination settles",
     "elementIdForEvent(event)",
     "indexClickableElements(elements)",
     "ambiguousClickableKeys",
@@ -162,6 +166,10 @@ for contract in [
     "REQUEST_FAILURE_RETRY_DELAY_MS = 2500L",
     'request.put("app_version", appVersion(packageName))',
     'getPackageManager().getPackageInfo(packageName, 0)',
+    "lastRecordingSemanticSignature",
+    "recordingSemanticSignature(elements)",
+    'pendingPerformedElementId = "__semantic_screen_change__"',
+    "deferred semantic Gold transition until destination settles",
 ]:
     if contract not in generated_accessibility:
         raise AssertionError(

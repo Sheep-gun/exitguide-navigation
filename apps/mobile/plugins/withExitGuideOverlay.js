@@ -1550,6 +1550,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String lastActivityName = "";
   private String lastEventType = "window_state_changed";
   private String lastTreeSignature = "";
+  private String lastRecordingSemanticSignature = "";
   private String lastScreenFingerprint = "";
   private String lastRecommendationId = "";
   private String lastSelectedElementId = "";
@@ -1798,6 +1799,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       activeStartNonce = startNonce;
       sessionId = requestedSessionId.length() == 0 ? UUID.randomUUID().toString() : requestedSessionId;
       lastTreeSignature = "";
+      lastRecordingSemanticSignature = "";
       lastScreenFingerprint = "";
       lastRecommendationId = "";
       lastSelectedElementId = "";
@@ -1934,6 +1936,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       }
       indexClickableElements(elements);
       String treeSignature = sha256(packageName + "|" + goalText + "|" + lastActivityName + "|" + elements.toString());
+      String recordingSemanticSignature = recordingSemanticSignature(elements);
       boolean force = forceNextAnalysis;
       forceNextAnalysis = false;
       if (!force && pendingPerformedElementId.length() == 0
@@ -1950,6 +1953,27 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         finishRequestCycle();
         return;
       }
+      boolean inferredGoldScreenChange = "record".equals(activeOperationMode)
+        && pendingPerformedElementId.length() == 0
+        && lastScreenFingerprint.length() > 0
+        && lastRecordingSemanticSignature.length() > 0
+        && recordingSemanticSignature.length() > 0
+        && !recordingSemanticSignature.equals(lastRecordingSemanticSignature);
+      if (inferredGoldScreenChange) {
+        // Some custom Android views (including Baemin's bottom navigation and
+        // gear button) emit only a changed accessibility tree. Preserve the
+        // preceding screen long enough for the server to match the new screen
+        // title against one unique low-risk candidate. The special marker is
+        // deliberately not accepted as a Gold action when that match fails.
+        pendingFromScreen = lastScreenFingerprint;
+        pendingPerformedElementId = "__semantic_screen_change__";
+        pendingRecommendationId = "";
+        pendingTransitionOutcome = "navigated";
+        pendingActionKind = "click";
+        pendingTransitionSequence = ++transitionSequenceCounter;
+        sendIndicator(false, "저장 중");
+        Log.i(LOG_TAG, "semantic tree change queued for conservative Gold recovery");
+      }
       JSONObject request = buildRequest(packageName, goalText, elements);
       long submittedTransitionSequence = request.has("transition")
         ? pendingTransitionSequence
@@ -1958,6 +1982,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         apiBaseUrl,
         request,
         treeSignature,
+        recordingSemanticSignature,
         submittedTransitionSequence,
         goalText,
         startNonce
@@ -2181,6 +2206,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     final String apiBaseUrl,
     final JSONObject request,
     final String treeSignature,
+    final String submittedRecordingSemanticSignature,
     final long submittedTransitionSequence,
     final String submittedGoal,
     final String submittedStartNonce
@@ -2221,6 +2247,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           JSONObject response = new JSONObject(responseBody);
           clearObservationRequestFailure();
           lastTreeSignature = treeSignature;
+          lastRecordingSemanticSignature = submittedRecordingSemanticSignature;
           lastScreenFingerprint = response.optString("screen_fingerprint", "");
           JSONObject graphUpdate = response.optJSONObject("graph_update");
           JSONObject recommendation = response.optJSONObject("recommendation");
@@ -2247,8 +2274,23 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           // A slow model response must never erase a click that happened
           // after this request was submitted. Clear only the exact transition
           // snapshot carried by this response.
-          clearPendingTransition(submittedTransitionSequence);
-          publishOverlayState(response, recommendation);
+          JSONObject submittedTransition = request.optJSONObject("transition");
+          boolean submittedSemanticScreenChange = submittedTransition != null
+            && "__semantic_screen_change__".equals(
+              submittedTransition.optString("performed_element_id", "")
+            );
+          boolean goldTransitionRecorded = graphUpdate != null
+            && graphUpdate.optBoolean("transition_recorded", false);
+          if (!submittedSemanticScreenChange || goldTransitionRecorded) {
+            clearPendingTransition(submittedTransitionSequence);
+            publishOverlayState(response, recommendation);
+          } else {
+            // A loading/intermediate screen could not yet identify the tapped
+            // control. Keep the original from-screen marker so the settled
+            // destination can resolve it on the next observation.
+            Log.i(LOG_TAG, "deferred semantic Gold transition until destination settles");
+            sendIndicator(false, "저장 중");
+          }
           if ("destination_reached".equals(response.optString("phase", ""))) {
             postCompletionTiming(
               apiBaseUrl,
@@ -2830,6 +2872,42 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       if (description.length() > 0) return description;
     }
     return lastActivityName;
+  }
+
+  private String recordingSemanticSignature(JSONArray elements) throws Exception {
+    JSONArray semantic = new JSONArray();
+    for (int index = 0; index < elements.length(); index += 1) {
+      JSONObject item = elements.optJSONObject(index);
+      if (item == null || item.optBoolean("password", false)
+          || "exitguide:ocr".equals(item.optString("view_id", ""))) {
+        continue;
+      }
+      JSONObject feature = new JSONObject();
+      feature.put("role", item.optString("role", "text"));
+      feature.put("clickable", item.optBoolean("clickable", false));
+      feature.put("scrollable", item.optBoolean("scrollable", false));
+      feature.put("checkable", item.optBoolean("checkable", false));
+      String label = clean(item.optString("text", ""));
+      if (label.length() == 0) {
+        label = clean(item.optString("content_description", ""));
+      }
+      label = label.toLowerCase(Locale.ROOT)
+        .replaceAll("\\\\d+", "")
+        .replaceAll("\\\\s+", " ")
+        .trim();
+      if (label.length() > 0) {
+        feature.put("label", label);
+      } else {
+        String viewId = clean(item.optString("view_id", ""))
+          .toLowerCase(Locale.ROOT)
+          .replaceAll("\\\\d+", "");
+        if (viewId.length() > 0) {
+          feature.put("view_id", viewId);
+        }
+      }
+      semantic.put(feature);
+    }
+    return semantic.length() == 0 ? "" : sha256(semantic.toString());
   }
 
   private void indexClickableElements(JSONArray elements) {

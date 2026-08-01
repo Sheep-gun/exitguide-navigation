@@ -292,6 +292,7 @@ class UniversalNavigationGraphRepository:
             "captured_at": request.screen.captured_at,
             "elements": json.loads(_screen_structure_json(request.screen)),
         }
+        gold_transition_recorded = False
         with self._connection() as connection:
             existing = connection.execute(
                 "SELECT status FROM navigation_gold_recordings WHERE recording_id = ?",
@@ -380,27 +381,87 @@ class UniversalNavigationGraphRepository:
                         ).fetchone()
                         if action is not None:
                             selected = dict(action)
-                    connection.execute(
-                        """
-                        UPDATE navigation_gold_steps SET
-                          selected_element_id = ?, selected_element_key = ?,
-                          selected_label = ?, selected_action = ?,
-                          selected_risk_level = ?, outcome = ?,
-                          next_screen_fingerprint = ?, updated_at = ?
-                        WHERE step_id = ?
-                        """,
-                        (
-                            str((selected or {}).get("element_id", transition.performed_element_id)),
-                            str((selected or {}).get("element_key", "")),
-                            sanitize_text(str((selected or {}).get("label", ""))),
-                            recorded_action,
-                            str((selected or {}).get("risk_level", "low")),
-                            transition.outcome,
-                            observation.screen_fingerprint,
-                            now,
-                            prior["step_id"],
-                        ),
+                    # A semantic tree-change marker is generated before the
+                    # destination has settled. It is evidence that a user
+                    # action probably occurred, not itself a selected control.
+                    # Persist it only when the new screen identifies exactly
+                    # one low-risk candidate from the preceding screen.
+                    unresolved_semantic_change = (
+                        transition.performed_element_id == "__semantic_screen_change__"
+                        and selected is None
                     )
+                    if not unresolved_semantic_change:
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_steps SET
+                              selected_element_id = ?, selected_element_key = ?,
+                              selected_label = ?, selected_action = ?,
+                              selected_risk_level = ?, outcome = ?,
+                              next_screen_fingerprint = ?, updated_at = ?
+                            WHERE step_id = ?
+                            """,
+                            (
+                                str((selected or {}).get("element_id", transition.performed_element_id)),
+                                str((selected or {}).get("element_key", "")),
+                                sanitize_text(str((selected or {}).get("label", ""))),
+                                recorded_action,
+                                str((selected or {}).get("risk_level", "low")),
+                                transition.outcome,
+                                observation.screen_fingerprint,
+                                now,
+                                prior["step_id"],
+                            ),
+                        )
+                        gold_transition_recorded = True
+
+            if transition is None:
+                # Last-resort recovery for custom views that emit neither a
+                # click nor a usable focus event. Only a structurally different
+                # destination whose title matches one unique low-risk candidate
+                # may label the preceding step. Dynamic timers/carousels remain
+                # ordinary unselected observations.
+                prior = connection.execute(
+                    """
+                    SELECT * FROM navigation_gold_steps
+                    WHERE recording_id = ? AND selected_action IS NULL
+                    ORDER BY ordinal DESC LIMIT 1
+                    """,
+                    (request.session_id,),
+                ).fetchone()
+                if (
+                    prior is not None
+                    and str(prior["screen_fingerprint"]) != observation.screen_fingerprint
+                    and _gold_screen_change_is_distinct(
+                        prior["screen_context_json"],
+                        request.screen,
+                    )
+                ):
+                    try:
+                        stored_candidates = json.loads(str(prior["candidates_json"] or "[]"))
+                    except json.JSONDecodeError:
+                        stored_candidates = []
+                    inferred = _infer_gold_row_click(stored_candidates, request.screen.elements)
+                    if inferred is not None:
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_steps SET
+                              selected_element_id = ?, selected_element_key = ?,
+                              selected_label = ?, selected_action = 'click',
+                              selected_risk_level = ?, outcome = 'navigated',
+                              next_screen_fingerprint = ?, updated_at = ?
+                            WHERE step_id = ?
+                            """,
+                            (
+                                str(inferred.get("element_id", "")),
+                                str(inferred.get("element_key", "")),
+                                sanitize_text(str(inferred.get("label", ""))),
+                                str(inferred.get("risk_level", "low")),
+                                observation.screen_fingerprint,
+                                now,
+                                prior["step_id"],
+                            ),
+                        )
+                        gold_transition_recorded = True
 
             latest = connection.execute(
                 """
@@ -458,7 +519,9 @@ class UniversalNavigationGraphRepository:
                     ),
                 )
             connection.commit()
-        return self.gold_recording(request.session_id)
+        result = self.gold_recording(request.session_id)
+        result["transition_recorded"] = gold_transition_recorded
+        return result
 
     def complete_gold_recording(
         self,
@@ -2489,6 +2552,60 @@ def sanitize_text(value: str | None) -> str:
     text = LONG_NUMBER_PATTERN.sub("[number]", text)
     text = TOKEN_PATTERN.sub("[secret]", text)
     return text[:500]
+
+
+def _gold_screen_change_is_distinct(
+    stored_screen_context: object,
+    destination_screen: UniversalNavigationScreen,
+    *,
+    maximum_similarity: float = 0.72,
+) -> bool:
+    """Reject dynamic same-screen refreshes before inferring a missing click."""
+
+    try:
+        context = json.loads(str(stored_screen_context or "{}"))
+    except json.JSONDecodeError:
+        return False
+    prior_elements = context.get("elements", []) if isinstance(context, dict) else []
+    try:
+        destination_elements = json.loads(_screen_structure_json(destination_screen))
+    except json.JSONDecodeError:
+        return False
+    prior_features = _gold_structure_features(prior_elements)
+    destination_features = _gold_structure_features(destination_elements)
+    if len(prior_features) < 3 or len(destination_features) < 3:
+        return False
+    similarity = len(prior_features & destination_features) / max(
+        1,
+        len(prior_features | destination_features),
+    )
+    return similarity < maximum_similarity
+
+
+def _gold_structure_features(raw_elements: object) -> set[str]:
+    if not isinstance(raw_elements, list):
+        return set()
+    features: set[str] = set()
+    for item in raw_elements:
+        if not isinstance(item, dict) or str(item.get("view_id", "")) == "exitguide:ocr":
+            continue
+        role = _semantic_token(item.get("role")) or "unknown"
+        state = "".join(
+            (
+                "c" if bool(item.get("clickable")) else "-",
+                "s" if bool(item.get("scrollable")) else "-",
+            )
+        )
+        # Counts, timers, prices, and rotating promotion numbers are not screen
+        # identity. Removing digits keeps an idle app from inventing Gold clicks.
+        label = re.sub(r"[0-9]+", "", _semantic_token(item.get("label")))
+        view_id = re.sub(r"[0-9]+", "", _semantic_token(item.get("view_id")))
+        features.add(f"shape:{role}:{state}")
+        if label:
+            features.add(f"label:{role}:{state}:{label}")
+        elif view_id:
+            features.add(f"view:{role}:{state}:{view_id}")
+    return features
 
 
 def _infer_gold_row_click(

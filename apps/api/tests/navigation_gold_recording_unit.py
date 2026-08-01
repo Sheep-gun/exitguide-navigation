@@ -219,6 +219,147 @@ def main() -> None:
         assert account_inferred == ("account", "Account", "click")
         repository.cancel_gold_recording("account-session")
 
+        semantic_start = observe(
+            repository,
+            request(
+                "semantic-1",
+                "semantic-session",
+                [
+                    label_element("home-title", "홈", role="heading"),
+                    element("my-baemin", "마이배민"),
+                    element("orders", "주문내역"),
+                ],
+            ),
+        )
+        loading = observe(
+            repository,
+            request(
+                "semantic-2",
+                "semantic-session",
+                [label_element("loading", "불러오는 중")],
+                transition={
+                    "from_screen_fingerprint": semantic_start.screen_fingerprint,
+                    "performed_element_id": "__semantic_screen_change__",
+                    "action_kind": "click",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        assert loading.graph_update.transition_recorded is False
+        settled = observe(
+            repository,
+            request(
+                "semantic-3",
+                "semantic-session",
+                [
+                    label_element("my-title", "마이배민", role="heading"),
+                    element("settings", "환경설정"),
+                    element("support", "고객센터"),
+                ],
+                transition={
+                    "from_screen_fingerprint": semantic_start.screen_fingerprint,
+                    "performed_element_id": "__semantic_screen_change__",
+                    "action_kind": "click",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        assert settled.graph_update.transition_recorded is True
+        connection = sqlite3.connect(database)
+        try:
+            semantic_inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'semantic-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert semantic_inferred == ("my-baemin", "마이배민", "click")
+        repository.cancel_gold_recording("semantic-session")
+
+        passive_start = observe(
+            repository,
+            request(
+                "passive-1",
+                "passive-session",
+                [
+                    label_element("profile-title", "마이배민", role="heading"),
+                    element("settings", "환경설정"),
+                    element("support", "고객센터"),
+                ],
+            ),
+        )
+        passive_destination = observe(
+            repository,
+            request(
+                "passive-2",
+                "passive-session",
+                [
+                    label_element("settings-title", "환경설정", role="heading"),
+                    element("delivery-alert", "배달현황 알림"),
+                    element("review-alert", "리뷰 작성 알림"),
+                ],
+            ),
+        )
+        assert passive_start.screen_fingerprint != passive_destination.screen_fingerprint
+        assert passive_destination.graph_update.transition_recorded is True
+        connection = sqlite3.connect(database)
+        try:
+            passive_inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'passive-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert passive_inferred == ("settings", "환경설정", "click")
+        repository.cancel_gold_recording("passive-session")
+
+        idle_start = observe(
+            repository,
+            request(
+                "idle-1",
+                "idle-session",
+                [
+                    label_element("home-title", "홈", role="heading"),
+                    label_element("countdown", "10분 남음"),
+                    element("settings", "환경설정"),
+                    element("orders", "주문내역"),
+                ],
+            ),
+        )
+        idle_refresh = observe(
+            repository,
+            request(
+                "idle-2",
+                "idle-session",
+                [
+                    label_element("home-title", "홈", role="heading"),
+                    label_element("countdown", "9분 남음"),
+                    element("settings", "환경설정"),
+                    element("orders", "주문내역"),
+                ],
+            ),
+        )
+        assert idle_start.screen_fingerprint != idle_refresh.screen_fingerprint
+        assert idle_refresh.graph_update.transition_recorded is False
+        connection = sqlite3.connect(database)
+        try:
+            idle_selected = connection.execute(
+                """
+                SELECT selected_action FROM navigation_gold_steps
+                WHERE recording_id = 'idle-session' AND ordinal = 0
+                """
+            ).fetchone()
+        finally:
+            connection.close()
+        assert idle_selected == (None,)
+        repository.cancel_gold_recording("idle-session")
+
         output = root / "training.jsonl"
         script = Path(__file__).resolve().parents[3] / "scripts" / "Export-NavigationGoldTraining.py"
         subprocess.run(
@@ -290,6 +431,14 @@ def element(element_id: str, label: str) -> dict[str, object]:
         "enabled": True,
         "visible": True,
         "bounds": [20, 100, 1000, 180],
+    }
+
+
+def label_element(element_id: str, label: str, *, role: str = "text") -> dict[str, object]:
+    return {
+        **element(element_id, label),
+        "role": role,
+        "clickable": False,
     }
 
 

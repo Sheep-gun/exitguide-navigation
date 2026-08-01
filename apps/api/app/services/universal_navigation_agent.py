@@ -566,12 +566,14 @@ def observe_universal_navigation(
             or "navigation.unknown"
         )
         db_started = time.perf_counter()
-        repository.record_gold_observation(
+        gold_update = repository.record_gold_observation(
             request=request,
             candidates=candidates,
             observation=observation,
             target_function=target_function,
         )
+        if bool(gold_update.get("transition_recorded", False)):
+            graph_update = graph_update.model_copy(update={"transition_recorded": True})
         timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
         response = UniversalNavigationObserveResponse(
             request_id=request.request_id,
