@@ -187,6 +187,19 @@ The demo report and web/mobile status surfaces use this endpoint so quality drif
 
 These fixtures are sanitized demo outputs. They do not include API keys, authorization headers, raw model request payloads, or raw source archives.
 
+## Human Gold Recording
+
+`POST /v1/navigation/agent/observe` accepts `operation_mode=record`. In this mode the API returns `status=recording`, `phase=recording`, `decision_mode=human_recording`, no recommendation, and `automation.safe_to_execute=false`. The supplied session ID is the Gold recording ID.
+
+The observation stores the redacted screen context and full candidate set. A following observation may include `transition.action_kind` (`click`, `scroll_forward`, or `back`) and labels the candidate selected by the human on the preceding screen.
+
+- `GET /v1/navigation/gold/recordings/{recording_id}` returns recording status and counts.
+- `POST /v1/navigation/gold/recordings/{recording_id}/complete` confirms the destination and safe stop, then moves the recording to `review_pending`.
+- `POST /v1/navigation/gold/recordings/{recording_id}/review` explicitly promotes it to `human_gold` or rejects it.
+- `POST /v1/navigation/gold/recordings/{recording_id}/cancel` cancels an active recording.
+
+No recording endpoint automatically creates a serving route. Human Gold remains training/evaluation evidence until a separate route-validation workflow approves a route.
+
 ## Universal Navigation Performance
 
 `POST /v1/navigation/agent/observe` accepts optional `client_timing`:

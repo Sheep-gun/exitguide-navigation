@@ -893,6 +893,7 @@ UniversalNavigationStatus = Literal[
     "goal_completed",
     "needs_user_input",
     "no_safe_action",
+    "recording",
 ]
 UniversalNavigationDecisionMode = Literal[
     "exaone",
@@ -900,6 +901,7 @@ UniversalNavigationDecisionMode = Literal[
     "route_cache",
     "function_graph_exploration",
     "deterministic_fallback",
+    "human_recording",
 ]
 UniversalNavigationTransitionOutcome = Literal[
     "navigated",
@@ -908,7 +910,7 @@ UniversalNavigationTransitionOutcome = Literal[
     "unexpected",
     "cancelled",
 ]
-UniversalNavigationOperationMode = Literal["guide", "explore"]
+UniversalNavigationOperationMode = Literal["guide", "explore", "record"]
 UniversalNavigationPhase = Literal[
     "guide",
     "exploring",
@@ -916,6 +918,7 @@ UniversalNavigationPhase = Literal[
     "guiding",
     "destination_reached",
     "stopped",
+    "recording",
 ]
 UniversalNavigationAutomationAction = Literal["none", "click", "scroll_forward", "back", "stop"]
 UniversalNavigationMeasurementSource = Literal[
@@ -962,6 +965,7 @@ class UniversalNavigationScreen(BaseModel):
 class UniversalNavigationTransition(BaseModel):
     from_screen_fingerprint: str = Field(pattern=r"^us_[a-f0-9]{16}$")
     performed_element_id: str = Field(min_length=1, max_length=240)
+    action_kind: Literal["click", "scroll_forward", "back"] = "click"
     recommendation_id: str | None = Field(default=None, pattern=r"^ur_[a-f0-9]{16}$")
     outcome: UniversalNavigationTransitionOutcome = "navigated"
 
@@ -1086,6 +1090,45 @@ class UniversalNavigationCompletionTiming(BaseModel):
     session_id: str = Field(min_length=1, max_length=120)
     time_to_confirmed_destination_ms: float = Field(gt=0.0, le=3_600_000.0)
     measurement_source: Literal["real_device"] = "real_device"
+
+
+NavigationGoldRecordingStatus = Literal[
+    "recording",
+    "review_pending",
+    "human_gold",
+    "rejected",
+    "cancelled",
+]
+
+
+class NavigationGoldRecordingCompleteRequest(BaseModel):
+    destination_correct: bool = True
+    safe_stop: bool = True
+    reviewer: str = Field(default="device_user", min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class NavigationGoldRecordingReviewRequest(BaseModel):
+    decision: Literal["human_gold", "rejected"]
+    reviewer: str = Field(min_length=1, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class NavigationGoldRecordingResponse(BaseModel):
+    recording_id: str
+    status: NavigationGoldRecordingStatus
+    app_package: str
+    app_version: str
+    locale: str
+    goal_text: str
+    target_function: str
+    step_count: int = Field(ge=0)
+    selected_step_count: int = Field(ge=0)
+    destination_screen_fingerprint: str | None = None
+    destination_correct: bool | None = None
+    safe_stop: bool | None = None
+    reviewer: str | None = None
+    review_notes: str | None = None
 
 
 class UniversalNavigationObserveResponse(BaseModel):

@@ -26,6 +26,23 @@ type MobileRuntimeConfig = {
   api_base_url: string;
 };
 
+export type NavigationGoldRecording = {
+  recording_id: string;
+  status: "recording" | "review_pending" | "human_gold" | "rejected" | "cancelled";
+  app_package: string;
+  app_version: string;
+  locale: string;
+  goal_text: string;
+  target_function: string;
+  step_count: number;
+  selected_step_count: number;
+  destination_screen_fingerprint: string | null;
+  destination_correct: boolean | null;
+  safe_stop: boolean | null;
+  reviewer: string | null;
+  review_notes: string | null;
+};
+
 type AnalyzeScreenshotInput = {
   apiBaseUrl: string;
   providerSettings?: AiProviderSettings;
@@ -74,6 +91,34 @@ export class ExitGuideApiError extends Error {
 
 export async function fetchApiStatus(apiBaseUrl: string): Promise<ApiStatus> {
   return requestJson<ApiStatus>(`${normalizeApiBaseUrl(apiBaseUrl)}/v1/status`);
+}
+
+export async function completeNavigationGoldRecording(
+  apiBaseUrl: string,
+  recordingId: string,
+): Promise<NavigationGoldRecording> {
+  return requestJson<NavigationGoldRecording>(
+    `${normalizeApiBaseUrl(apiBaseUrl)}/v1/navigation/gold/recordings/${encodeURIComponent(recordingId)}/complete`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        destination_correct: true,
+        safe_stop: true,
+        reviewer: "device_user",
+      }),
+    },
+  );
+}
+
+export async function cancelNavigationGoldRecording(
+  apiBaseUrl: string,
+  recordingId: string,
+): Promise<NavigationGoldRecording> {
+  return requestJson<NavigationGoldRecording>(
+    `${normalizeApiBaseUrl(apiBaseUrl)}/v1/navigation/gold/recordings/${encodeURIComponent(recordingId)}/cancel`,
+    { method: "POST" },
+  );
 }
 
 export async function fetchReadiness(apiBaseUrl: string): Promise<DemoReadiness> {

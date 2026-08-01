@@ -93,6 +93,7 @@ try {
     "tests/navigation_graph_merge_unit.py",
     "tests/android_control_index_unit.py",
     "tests/universal_navigation_agent_unit.py",
+    "tests/navigation_gold_recording_unit.py",
     "tests/universal_navigation_explorer_unit.py",
     "tests/navigation_semantics_safety_unit.py",
     "tests/universal_navigation_api_unit.py",

@@ -10,12 +10,12 @@ type ExitGuideOverlayModule = {
   startOverlay: (
     apiBaseUrl: string,
     goalText: string,
-    operationMode: "explore",
+    operationMode: "explore" | "record",
     providerId: string,
     providerApiKey: string,
     providerModel: string,
     providerBaseUrl: string,
-  ) => Promise<boolean>;
+  ) => Promise<string>;
   stopOverlay: () => Promise<boolean>;
   clearOverlayStatus: () => Promise<boolean>;
 };
@@ -58,14 +58,15 @@ export async function startExitGuideOverlay(
   apiBaseUrl: string,
   goalText: string,
   providerSettings: AiProviderSettings,
-): Promise<void> {
+  operationMode: "explore" | "record" = "explore",
+): Promise<string> {
   if (!nativeOverlay) {
     throw new Error("화면 위 아이콘은 APK에서 사용할 수 있습니다.");
   }
-  await nativeOverlay.startOverlay(
+  return nativeOverlay.startOverlay(
     apiBaseUrl,
     goalText,
-    "explore",
+    operationMode,
     providerSettings.providerId,
     providerSettings.apiKey,
     providerSettings.model,

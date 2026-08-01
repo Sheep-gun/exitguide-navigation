@@ -405,11 +405,17 @@ export function HomeScreen() {
         />
 
         <OverlayControls
+          goldActive={Boolean(overlay.goldRecording)}
+          goldBusy={overlay.goldBusy}
+          goldDisabled={!apiBaseUrl.trim() || !purposeText.trim()}
           hasAccessibility={overlay.hasAccessibility}
           hasPermission={overlay.hasPermission}
           message={overlay.message}
+          onCancelGold={() => void overlay.cancelGoldRecording()}
+          onCompleteGold={() => void overlay.completeGoldRecording()}
           onOpenAccessibilitySettings={() => void overlay.openAccessibilitySettings()}
           onOpenOverlaySettings={() => void overlay.openOverlaySettings()}
+          onStartGold={() => void overlay.startGoldRecording(apiBaseUrl, purposeText, providerSettings)}
           onStop={() => void overlay.stopNavigation()}
           stopDisabled={false}
           stopLoading={overlay.stopBusy}

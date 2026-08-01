@@ -210,6 +210,7 @@ import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import java.util.List;
+import java.util.UUID;
 
 public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
   private final ReactApplicationContext reactContext;
@@ -331,10 +332,12 @@ public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
     }
 
     Intent intent = new Intent(reactContext, ExitGuideOverlayService.class);
+    String navigationSessionId = UUID.randomUUID().toString();
     intent.setAction(ExitGuideOverlayService.ACTION_START);
     intent.putExtra(ExitGuideOverlayService.EXTRA_API_BASE_URL, apiBaseUrl);
     intent.putExtra(ExitGuideOverlayService.EXTRA_GOAL_TEXT, goalText);
     intent.putExtra(ExitGuideOverlayService.EXTRA_OPERATION_MODE, operationMode);
+    intent.putExtra(ExitGuideOverlayService.EXTRA_SESSION_ID, navigationSessionId);
     intent.putExtra(ExitGuideOverlayService.EXTRA_PROVIDER_ID, providerId);
     intent.putExtra(ExitGuideOverlayService.EXTRA_PROVIDER_API_KEY, providerApiKey);
     intent.putExtra(ExitGuideOverlayService.EXTRA_PROVIDER_MODEL, providerModel);
@@ -344,7 +347,7 @@ public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
     } else {
       reactContext.startService(intent);
     }
-    promise.resolve(true);
+    promise.resolve(navigationSessionId);
   }
 
   @ReactMethod
@@ -617,6 +620,7 @@ public class ExitGuideOverlayService extends Service {
   public static final String EXTRA_API_BASE_URL = "apiBaseUrl";
   public static final String EXTRA_GOAL_TEXT = "goalText";
   public static final String EXTRA_OPERATION_MODE = "operationMode";
+  public static final String EXTRA_SESSION_ID = "sessionId";
   public static final String EXTRA_PROVIDER_ID = "providerId";
   public static final String EXTRA_PROVIDER_API_KEY = "providerApiKey";
   public static final String EXTRA_PROVIDER_MODEL = "providerModel";
@@ -630,6 +634,7 @@ public class ExitGuideOverlayService extends Service {
   private static final String PREF_API_BASE_URL = "apiBaseUrl";
   private static final String PREF_GOAL_TEXT = "goalText";
   private static final String PREF_OPERATION_MODE = "operationMode";
+  private static final String PREF_SESSION_ID = "sessionId";
   private static final String PREF_START_NONCE = "startNonce";
   private static final String PREF_EXPLORATION_ACTIVE = "explorationActive";
   private static final String PREF_PROVIDER_ID = "providerId";
@@ -650,6 +655,7 @@ public class ExitGuideOverlayService extends Service {
   private String apiBaseUrl = "";
   private String goalText = "";
   private String operationMode = "explore";
+  private String navigationSessionId = "";
   private String startNonce = "";
   private String providerId = "server";
   private String providerApiKey = "";
@@ -735,6 +741,8 @@ public class ExitGuideOverlayService extends Service {
       goalText = intent.getStringExtra(EXTRA_GOAL_TEXT) != null ? intent.getStringExtra(EXTRA_GOAL_TEXT) : goalText;
       operationMode = intent.getStringExtra(EXTRA_OPERATION_MODE) != null
         ? intent.getStringExtra(EXTRA_OPERATION_MODE) : operationMode;
+      navigationSessionId = intent.getStringExtra(EXTRA_SESSION_ID) != null
+        ? intent.getStringExtra(EXTRA_SESSION_ID) : navigationSessionId;
       providerId = intent.getStringExtra(EXTRA_PROVIDER_ID) != null ? intent.getStringExtra(EXTRA_PROVIDER_ID) : providerId;
       providerApiKey = intent.getStringExtra(EXTRA_PROVIDER_API_KEY) != null ? intent.getStringExtra(EXTRA_PROVIDER_API_KEY) : providerApiKey;
       providerModel = intent.getStringExtra(EXTRA_PROVIDER_MODEL) != null ? intent.getStringExtra(EXTRA_PROVIDER_MODEL) : providerModel;
@@ -850,7 +858,11 @@ public class ExitGuideOverlayService extends Service {
     startNonce = Long.toString(System.currentTimeMillis());
     savePrefs();
     removeReadyMessage();
-    updateIndicator(true, "");
+    if ("record".equals(operationMode)) {
+      updateRecordPreparingIndicator();
+    } else {
+      updateIndicator(true, "");
+    }
     Log.i("ExitGuideOverlay", "navigation exploration started by overlay button");
     requestNavigationAnalysis(true);
   }
@@ -1121,7 +1133,8 @@ public class ExitGuideOverlayService extends Service {
     SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
     apiBaseUrl = prefs.getString(PREF_API_BASE_URL, "");
     goalText = prefs.getString(PREF_GOAL_TEXT, "");
-    operationMode = "explore";
+    operationMode = prefs.getString(PREF_OPERATION_MODE, "explore");
+    navigationSessionId = prefs.getString(PREF_SESSION_ID, "");
     startNonce = prefs.getString(PREF_START_NONCE, "");
     navigationActive = prefs.getBoolean(PREF_EXPLORATION_ACTIVE, false);
     awaitingUserStart = !navigationActive;
@@ -1136,7 +1149,8 @@ public class ExitGuideOverlayService extends Service {
       .edit()
       .putString(PREF_API_BASE_URL, apiBaseUrl)
       .putString(PREF_GOAL_TEXT, goalText)
-      .putString(PREF_OPERATION_MODE, "explore")
+      .putString(PREF_OPERATION_MODE, operationMode)
+      .putString(PREF_SESSION_ID, navigationSessionId)
       .putString(PREF_START_NONCE, startNonce)
       .putBoolean(PREF_EXPLORATION_ACTIVE, navigationActive)
       .putString(PREF_PROVIDER_ID, providerId)
@@ -1177,6 +1191,31 @@ public class ExitGuideOverlayService extends Service {
         bubbleParams.height = dp(48);
         windowManager.updateViewLayout(bubbleView, bubbleParams);
         showReadyMessage();
+      }
+    });
+  }
+
+  private void updateRecordPreparingIndicator() {
+    mainHandler.post(new Runnable() {
+      @Override
+      public void run() {
+        if (bubbleView == null || bubbleParams == null) {
+          return;
+        }
+        removeReadyMessage();
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(112, 39, 39));
+        background.setShape(GradientDrawable.OVAL);
+        bubbleView.setSpinnerMode(false);
+        bubbleView.setText("...");
+        bubbleView.setTextSize(12);
+        bubbleView.setTextColor(Color.WHITE);
+        bubbleView.setPadding(0, 0, 0, 0);
+        bubbleView.setBackground(background);
+        bubbleParams.width = dp(48);
+        bubbleParams.height = dp(48);
+        windowManager.updateViewLayout(bubbleView, bubbleParams);
+        showToast("화면 기록을 준비 중입니다. REC가 표시되면 경로를 직접 수행하세요.");
       }
     });
   }
@@ -1237,6 +1276,20 @@ public class ExitGuideOverlayService extends Service {
         }
         GradientDrawable background = new GradientDrawable();
         if (exploring) {
+          if ("record".equals(operationMode)) {
+            background.setColor(Color.rgb(176, 38, 38));
+            background.setShape(GradientDrawable.OVAL);
+            bubbleView.setSpinnerMode(false);
+            bubbleView.setText("REC");
+            bubbleView.setTextSize(11);
+            bubbleView.setTextColor(Color.WHITE);
+            bubbleView.setPadding(0, 0, 0, 0);
+            bubbleView.setBackground(background);
+            bubbleParams.width = dp(48);
+            bubbleParams.height = dp(48);
+            windowManager.updateViewLayout(bubbleView, bubbleParams);
+            return;
+          }
           bubbleView.setSpinnerMode(false);
           bubbleView.setText("");
           bubbleView.setPadding(0, 0, 0, 0);
@@ -1457,6 +1510,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private static final String PREF_API_BASE_URL = "apiBaseUrl";
   private static final String PREF_GOAL_TEXT = "goalText";
   private static final String PREF_OPERATION_MODE = "operationMode";
+  private static final String PREF_SESSION_ID = "sessionId";
   private static final String PREF_START_NONCE = "startNonce";
   private static final String PREF_EXPLORATION_ACTIVE = "explorationActive";
   private static final long ANALYSIS_DEBOUNCE_MS = 650L;
@@ -1479,6 +1533,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String pendingPerformedElementId = "";
   private String pendingRecommendationId = "";
   private String pendingTransitionOutcome = "navigated";
+  private String pendingActionKind = "click";
   private long transitionSequenceCounter = 0L;
   private long pendingTransitionSequence = 0L;
   private String activeGoal = "";
@@ -1570,6 +1625,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           ? lastRecommendationId
           : "";
         pendingTransitionOutcome = "navigated";
+        pendingActionKind = "click";
         pendingTransitionSequence = ++transitionSequenceCounter;
       }
       Log.i(
@@ -1580,6 +1636,19 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           + " eventTextCount=" + event.getText().size()
           + " hasDescription=" + (event.getContentDescription() != null)
       );
+    } else if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
+        && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0) {
+      AccessibilityNodeInfo source = event.getSource();
+      String performedElementId = source == null ? "__scroll__" : stableNodeId(source);
+      if (source != null) {
+        source.recycle();
+      }
+      pendingFromScreen = lastScreenFingerprint;
+      pendingPerformedElementId = performedElementId.length() == 0 ? "__scroll__" : performedElementId;
+      pendingRecommendationId = "";
+      pendingTransitionOutcome = "navigated";
+      pendingActionKind = "scroll_forward";
+      pendingTransitionSequence = ++transitionSequenceCounter;
     }
     scheduleAnalysis(false);
   }
@@ -1635,7 +1704,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
     String apiBaseUrl = clean(prefs.getString(PREF_API_BASE_URL, ""));
     String goalText = clean(prefs.getString(PREF_GOAL_TEXT, ""));
-    String operationMode = "explore";
+    String operationMode = clean(prefs.getString(PREF_OPERATION_MODE, "explore"));
+    String requestedSessionId = clean(prefs.getString(PREF_SESSION_ID, ""));
     String startNonce = clean(prefs.getString(PREF_START_NONCE, ""));
     if (!prefs.getBoolean(PREF_EXPLORATION_ACTIVE, false)) {
       return;
@@ -1654,7 +1724,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       activeGoal = goalText;
       activeOperationMode = operationMode;
       activeStartNonce = startNonce;
-      sessionId = UUID.randomUUID().toString();
+      sessionId = requestedSessionId.length() == 0 ? UUID.randomUUID().toString() : requestedSessionId;
       lastTreeSignature = "";
       lastScreenFingerprint = "";
       lastRecommendationId = "";
@@ -2012,6 +2082,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       JSONObject transition = new JSONObject();
       transition.put("from_screen_fingerprint", pendingFromScreen);
       transition.put("performed_element_id", pendingPerformedElementId);
+      transition.put("action_kind", pendingActionKind);
       if (pendingRecommendationId.length() > 0) {
         transition.put("recommendation_id", pendingRecommendationId);
       }
@@ -2523,6 +2594,10 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
 
   private void publishOverlayState(JSONObject response, JSONObject recommendation) {
     String phase = response.optString("phase", "guide");
+    if ("recording".equals(phase)) {
+      sendIndicator(true, "");
+      return;
+    }
     if ("destination_reached".equals(phase)) {
       String label = recommendation == null ? "" : recommendation.optString("selected_label", "").trim();
       sendIndicator(
@@ -2798,6 +2873,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     pendingPerformedElementId = "";
     pendingRecommendationId = "";
     pendingTransitionOutcome = "navigated";
+    pendingActionKind = "click";
     pendingTransitionSequence = 0L;
   }
 

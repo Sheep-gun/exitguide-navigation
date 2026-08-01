@@ -1,6 +1,9 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas import (
+    NavigationGoldRecordingCompleteRequest,
+    NavigationGoldRecordingResponse,
+    NavigationGoldRecordingReviewRequest,
     NavigationFunctionCatalogResponse,
     NavigationGuideRequest,
     NavigationGuideResponse,
@@ -32,6 +35,79 @@ def navigation_guide(request: NavigationGuideRequest) -> NavigationGuideResponse
 @router.post("/v1/navigation/agent/observe", response_model=UniversalNavigationObserveResponse)
 def universal_navigation_observe(request: UniversalNavigationObserveRequest) -> UniversalNavigationObserveResponse:
     return observe_universal_navigation(request)
+
+
+@router.get(
+    "/v1/navigation/gold/recordings/{recording_id}",
+    response_model=NavigationGoldRecordingResponse,
+)
+def navigation_gold_recording(recording_id: str) -> NavigationGoldRecordingResponse:
+    repository = get_universal_navigation_repository()
+    try:
+        return NavigationGoldRecordingResponse(**repository.gold_recording(recording_id))
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Gold recording was not found.") from error
+
+
+@router.post(
+    "/v1/navigation/gold/recordings/{recording_id}/complete",
+    response_model=NavigationGoldRecordingResponse,
+)
+def navigation_gold_recording_complete(
+    recording_id: str,
+    request: NavigationGoldRecordingCompleteRequest,
+) -> NavigationGoldRecordingResponse:
+    repository = get_universal_navigation_repository()
+    try:
+        result = repository.complete_gold_recording(
+            recording_id,
+            destination_correct=request.destination_correct,
+            safe_stop=request.safe_stop,
+            reviewer=request.reviewer,
+            notes=request.notes,
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Gold recording was not found.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return NavigationGoldRecordingResponse(**result)
+
+
+@router.post(
+    "/v1/navigation/gold/recordings/{recording_id}/review",
+    response_model=NavigationGoldRecordingResponse,
+)
+def navigation_gold_recording_review(
+    recording_id: str,
+    request: NavigationGoldRecordingReviewRequest,
+) -> NavigationGoldRecordingResponse:
+    repository = get_universal_navigation_repository()
+    try:
+        result = repository.review_gold_recording(
+            recording_id,
+            decision=request.decision,
+            reviewer=request.reviewer,
+            notes=request.notes,
+        )
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Gold recording was not found.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return NavigationGoldRecordingResponse(**result)
+
+
+@router.post(
+    "/v1/navigation/gold/recordings/{recording_id}/cancel",
+    response_model=NavigationGoldRecordingResponse,
+)
+def navigation_gold_recording_cancel(recording_id: str) -> NavigationGoldRecordingResponse:
+    repository = get_universal_navigation_repository()
+    try:
+        return NavigationGoldRecordingResponse(**repository.cancel_gold_recording(recording_id))
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="Gold recording was not found.") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.get("/v1/navigation/agent/graph", response_model=UniversalNavigationGraphResponse)

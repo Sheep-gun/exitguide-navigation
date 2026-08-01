@@ -5,22 +5,34 @@ import { colors, radii } from "../styles/theme";
 import { ActionButton } from "./ActionButton";
 
 type OverlayControlsProps = {
+  goldActive: boolean;
+  goldBusy: boolean;
+  goldDisabled: boolean;
   hasAccessibility: boolean;
   hasPermission: boolean;
   message: string | null;
+  onCancelGold: () => void;
+  onCompleteGold: () => void;
   onOpenAccessibilitySettings: () => void;
   onOpenOverlaySettings: () => void;
+  onStartGold: () => void;
   onStop: () => void;
   stopDisabled: boolean;
   stopLoading: boolean;
 };
 
 export function OverlayControls({
+  goldActive,
+  goldBusy,
+  goldDisabled,
   hasAccessibility,
   hasPermission,
   message,
+  onCancelGold,
+  onCompleteGold,
   onOpenAccessibilitySettings,
   onOpenOverlaySettings,
+  onStartGold,
   onStop,
   stopDisabled,
   stopLoading,
@@ -41,6 +53,23 @@ export function OverlayControls({
         저장된 경로가 있으면 즉시 안내하고, 없으면 안전한 메뉴 클릭과 스크롤로 경로를 탐색합니다. 최종 버튼은 사용자가 직접 누릅니다.
       </Text>
       <View style={styles.buttonStack}>
+        {goldActive ? (
+          <>
+            <ActionButton loading={goldBusy} onPress={onCompleteGold}>
+              목적지 도착 · Gold 기록 완료
+            </ActionButton>
+            <ActionButton disabled={goldBusy} onPress={onCancelGold} tone="secondary">
+              Gold 기록 취소
+            </ActionButton>
+          </>
+        ) : (
+          <ActionButton disabled={goldDisabled} loading={goldBusy} onPress={onStartGold}>
+            실기기 Gold 기록 시작
+          </ActionButton>
+        )}
+        <Text style={styles.goldHelper}>
+          기록 중에는 ExitGuide가 자동 클릭하지 않습니다. 올바른 경로를 직접 누른 뒤 REC 아이콘으로 돌아와 완료하세요.
+        </Text>
         <ActionButton onPress={onOpenOverlaySettings} tone="secondary">
           화면 위 표시 권한 열기
         </ActionButton>
@@ -106,6 +135,11 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     lineHeight: 19,
+  },
+  goldHelper: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
   },
   buttonStack: {
     gap: 8,

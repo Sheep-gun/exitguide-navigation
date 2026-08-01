@@ -159,6 +159,7 @@
 - `GET /v1/navigation/functions`
 - `GET /v1/navigation/agent/graph`
 - `GET /v1/navigation/agent/performance`
+- `GET /v1/navigation/gold/recordings/{recording_id}`
 - `POST /v1/prompt/demo`
 - `POST /v1/analyze`
 - `POST /v1/analyze/demo`
@@ -167,6 +168,9 @@
 - `POST /v1/navigation/guide`
 - `POST /v1/navigation/agent/observe`
 - `POST /v1/navigation/agent/performance/complete`
+- `POST /v1/navigation/gold/recordings/{recording_id}/complete`
+- `POST /v1/navigation/gold/recordings/{recording_id}/review`
+- `POST /v1/navigation/gold/recordings/{recording_id}/cancel`
 - `POST /v1/dark-pattern/inspect`
 
 ## Best Next Steps

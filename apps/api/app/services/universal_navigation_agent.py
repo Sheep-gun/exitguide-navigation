@@ -17,6 +17,7 @@ import httpx
 from app.config import Settings, get_settings
 from app.resource_paths import get_resource_root
 from app.schemas import (
+    UniversalNavigationAutomation,
     UniversalNavigationCandidate,
     UniversalNavigationObserveRequest,
     UniversalNavigationObserveResponse,
@@ -554,6 +555,50 @@ def observe_universal_navigation(
         if catalog_goal_plan.intent == GOAL_GOVERNANCE_BLOCKED_INTENT
         else infer_goal_plan(request.goal_text, catalog)
     )
+    if request.operation_mode == "record":
+        # Gold recording is observation-only.  The human owns every action;
+        # neither governance fallback, cached routes, nor a model may replace
+        # the candidate they actually chose on the device.
+        target_function = (
+            goal_plan.terminal_function
+            or catalog_goal_plan.terminal_function
+            or goal_plan.intent
+            or "navigation.unknown"
+        )
+        db_started = time.perf_counter()
+        repository.record_gold_observation(
+            request=request,
+            candidates=candidates,
+            observation=observation,
+            target_function=target_function,
+        )
+        timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
+        response = UniversalNavigationObserveResponse(
+            request_id=request.request_id,
+            session_id=request.session_id,
+            status="recording",
+            screen_fingerprint=observation.screen_fingerprint,
+            goal_interpretation=goal_plan.intent,
+            decision_mode="human_recording",
+            phase="recording",
+            candidates=candidates,
+            recommendation=None,
+            graph_update=graph_update,
+            automation=UniversalNavigationAutomation(
+                action="none",
+                safe_to_execute=False,
+                reason="Human Gold recording never automates user actions.",
+            ),
+            warnings=[],
+        )
+        return _attach_performance(
+            request=request,
+            response=response,
+            observation=observation,
+            repository=repository,
+            request_started=request_started,
+            timing=timing,
+        )
     low_evidence_stop = _requires_low_evidence_stop(
         catalog_plan=catalog_goal_plan,
         goal_plan=goal_plan,

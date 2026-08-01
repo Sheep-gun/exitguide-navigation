@@ -265,6 +265,337 @@ class UniversalNavigationGraphRepository:
             executed_transition_outcome=executed_transition_outcome,
         )
 
+    def record_gold_observation(
+        self,
+        *,
+        request: UniversalNavigationObserveRequest,
+        candidates: list[UniversalNavigationCandidate],
+        observation: ObservationResult,
+        target_function: str,
+    ) -> dict[str, object]:
+        """Persist a user-driven demonstration without serving or promoting it.
+
+        The current screen is stored with its complete candidate set.  A
+        transition arriving with the next observation labels the candidate on
+        the preceding screen that the human actually selected.
+        """
+
+        app_key = _app_key(request.app_package, request.app_version, request.locale)
+        goal_key = fingerprint_goal(request.goal_text)
+        now = _utc_now()
+        candidate_payload = [candidate.model_dump(mode="json") for candidate in candidates]
+        screen_context = {
+            "activity_name": sanitize_text(request.screen.activity_name),
+            "window_title": sanitize_text(request.screen.window_title),
+            "event_type": sanitize_text(request.screen.event_type),
+            "captured_at": request.screen.captured_at,
+            "elements": json.loads(_screen_structure_json(request.screen)),
+        }
+        with self._connection() as connection:
+            existing = connection.execute(
+                "SELECT status FROM navigation_gold_recordings WHERE recording_id = ?",
+                (request.session_id,),
+            ).fetchone()
+            if existing is not None and str(existing["status"]) != "recording":
+                raise ValueError(
+                    f"Gold recording {request.session_id} is already {existing['status']}."
+                )
+            connection.execute(
+                """
+                INSERT INTO navigation_gold_recordings (
+                  recording_id, app_key, app_package, app_version, locale,
+                  goal_key, goal_text, target_function, status,
+                  start_screen_fingerprint, destination_screen_fingerprint,
+                  destination_correct, safe_stop, reviewer, review_notes,
+                  started_at, updated_at, completed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'recording', ?, NULL,
+                          NULL, NULL, NULL, NULL, ?, ?, NULL)
+                ON CONFLICT(recording_id) DO UPDATE SET
+                  target_function = excluded.target_function,
+                  updated_at = excluded.updated_at
+                """,
+                (
+                    request.session_id,
+                    app_key,
+                    request.app_package,
+                    request.app_version,
+                    request.locale,
+                    goal_key,
+                    sanitize_text(request.goal_text),
+                    target_function,
+                    observation.screen_fingerprint,
+                    now,
+                    now,
+                ),
+            )
+
+            transition = request.transition
+            if transition is not None:
+                prior = connection.execute(
+                    """
+                    SELECT * FROM navigation_gold_steps
+                    WHERE recording_id = ? AND screen_fingerprint = ?
+                      AND selected_action IS NULL
+                    ORDER BY ordinal DESC LIMIT 1
+                    """,
+                    (request.session_id, transition.from_screen_fingerprint),
+                ).fetchone()
+                if prior is not None:
+                    selected: dict[str, object] | None = None
+                    try:
+                        stored_candidates = json.loads(str(prior["candidates_json"] or "[]"))
+                    except json.JSONDecodeError:
+                        stored_candidates = []
+                    for candidate in stored_candidates if isinstance(stored_candidates, list) else []:
+                        if (
+                            isinstance(candidate, dict)
+                            and str(candidate.get("element_id", "")) == transition.performed_element_id
+                        ):
+                            selected = candidate
+                            break
+                    if selected is None and transition.action_kind == "click":
+                        action = connection.execute(
+                            """
+                            SELECT element_key, label, risk_level
+                            FROM universal_actions
+                            WHERE screen_fingerprint = ? AND last_element_id = ?
+                            """,
+                            (
+                                transition.from_screen_fingerprint,
+                                transition.performed_element_id,
+                            ),
+                        ).fetchone()
+                        if action is not None:
+                            selected = dict(action)
+                    connection.execute(
+                        """
+                        UPDATE navigation_gold_steps SET
+                          selected_element_id = ?, selected_element_key = ?,
+                          selected_label = ?, selected_action = ?,
+                          selected_risk_level = ?, outcome = ?,
+                          next_screen_fingerprint = ?, updated_at = ?
+                        WHERE step_id = ?
+                        """,
+                        (
+                            transition.performed_element_id,
+                            str((selected or {}).get("element_key", "")),
+                            sanitize_text(str((selected or {}).get("label", ""))),
+                            transition.action_kind,
+                            str((selected or {}).get("risk_level", "low")),
+                            transition.outcome,
+                            observation.screen_fingerprint,
+                            now,
+                            prior["step_id"],
+                        ),
+                    )
+
+            latest = connection.execute(
+                """
+                SELECT step_id, ordinal, screen_fingerprint, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = ? ORDER BY ordinal DESC LIMIT 1
+                """,
+                (request.session_id,),
+            ).fetchone()
+            duplicate_unselected_screen = (
+                latest is not None
+                and str(latest["screen_fingerprint"]) == observation.screen_fingerprint
+                and latest["selected_action"] is None
+                and transition is None
+            )
+            if duplicate_unselected_screen:
+                connection.execute(
+                    """
+                    UPDATE navigation_gold_steps SET
+                      screen_context_json = ?, candidates_json = ?, updated_at = ?
+                    WHERE step_id = ?
+                    """,
+                    (
+                        json.dumps(screen_context, ensure_ascii=False, separators=(",", ":")),
+                        json.dumps(candidate_payload, ensure_ascii=False, separators=(",", ":")),
+                        now,
+                        latest["step_id"],
+                    ),
+                )
+            else:
+                ordinal = 0 if latest is None else int(latest["ordinal"]) + 1
+                step_id = hashlib.sha256(
+                    f"{request.session_id}|{ordinal}|{observation.screen_fingerprint}".encode("utf-8")
+                ).hexdigest()[:24]
+                connection.execute(
+                    """
+                    INSERT INTO navigation_gold_steps (
+                      step_id, recording_id, ordinal, screen_fingerprint,
+                      screen_context_json, candidates_json,
+                      selected_element_id, selected_element_key, selected_label,
+                      selected_action, selected_risk_level, outcome,
+                      next_screen_fingerprint, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL,
+                              NULL, NULL, ?, ?)
+                    """,
+                    (
+                        step_id,
+                        request.session_id,
+                        ordinal,
+                        observation.screen_fingerprint,
+                        json.dumps(screen_context, ensure_ascii=False, separators=(",", ":")),
+                        json.dumps(candidate_payload, ensure_ascii=False, separators=(",", ":")),
+                        now,
+                        now,
+                    ),
+                )
+            connection.commit()
+        return self.gold_recording(request.session_id)
+
+    def complete_gold_recording(
+        self,
+        recording_id: str,
+        *,
+        destination_correct: bool,
+        safe_stop: bool,
+        reviewer: str,
+        notes: str | None,
+    ) -> dict[str, object]:
+        now = _utc_now()
+        with self._connection() as connection:
+            recording = connection.execute(
+                "SELECT status FROM navigation_gold_recordings WHERE recording_id = ?",
+                (recording_id,),
+            ).fetchone()
+            if recording is None:
+                raise KeyError(recording_id)
+            if str(recording["status"]) != "recording":
+                raise ValueError(f"Gold recording {recording_id} is already {recording['status']}.")
+            destination = connection.execute(
+                """
+                SELECT screen_fingerprint FROM navigation_gold_steps
+                WHERE recording_id = ? ORDER BY ordinal DESC LIMIT 1
+                """,
+                (recording_id,),
+            ).fetchone()
+            if destination is None:
+                raise ValueError("Gold recording has no captured screens.")
+            connection.execute(
+                """
+                UPDATE navigation_gold_recordings SET
+                  status = 'review_pending', destination_screen_fingerprint = ?,
+                  destination_correct = ?, safe_stop = ?, reviewer = ?,
+                  review_notes = ?, updated_at = ?, completed_at = ?
+                WHERE recording_id = ?
+                """,
+                (
+                    destination["screen_fingerprint"],
+                    int(destination_correct),
+                    int(safe_stop),
+                    sanitize_text(reviewer),
+                    sanitize_text(notes or "") or None,
+                    now,
+                    now,
+                    recording_id,
+                ),
+            )
+            connection.commit()
+        return self.gold_recording(recording_id)
+
+    def review_gold_recording(
+        self,
+        recording_id: str,
+        *,
+        decision: str,
+        reviewer: str,
+        notes: str | None,
+    ) -> dict[str, object]:
+        if decision not in {"human_gold", "rejected"}:
+            raise ValueError("Review decision must be human_gold or rejected.")
+        now = _utc_now()
+        with self._connection() as connection:
+            recording = connection.execute(
+                "SELECT status, destination_correct, safe_stop FROM navigation_gold_recordings WHERE recording_id = ?",
+                (recording_id,),
+            ).fetchone()
+            if recording is None:
+                raise KeyError(recording_id)
+            if str(recording["status"]) != "review_pending":
+                raise ValueError("Only review_pending recordings can be reviewed.")
+            if decision == "human_gold" and (
+                int(recording["destination_correct"] or 0) != 1
+                or int(recording["safe_stop"] or 0) != 1
+            ):
+                raise ValueError("Human Gold requires a correct destination and safe stop.")
+            connection.execute(
+                """
+                UPDATE navigation_gold_recordings SET status = ?, reviewer = ?,
+                  review_notes = ?, updated_at = ? WHERE recording_id = ?
+                """,
+                (
+                    decision,
+                    sanitize_text(reviewer),
+                    sanitize_text(notes or "") or None,
+                    now,
+                    recording_id,
+                ),
+            )
+            connection.commit()
+        return self.gold_recording(recording_id)
+
+    def cancel_gold_recording(self, recording_id: str) -> dict[str, object]:
+        now = _utc_now()
+        with self._connection() as connection:
+            result = connection.execute(
+                """
+                UPDATE navigation_gold_recordings SET status = 'cancelled', updated_at = ?
+                WHERE recording_id = ? AND status = 'recording'
+                """,
+                (now, recording_id),
+            )
+            if result.rowcount == 0:
+                existing = connection.execute(
+                    "SELECT status FROM navigation_gold_recordings WHERE recording_id = ?",
+                    (recording_id,),
+                ).fetchone()
+                if existing is None:
+                    raise KeyError(recording_id)
+                raise ValueError(f"Gold recording {recording_id} is already {existing['status']}.")
+            connection.commit()
+        return self.gold_recording(recording_id)
+
+    def gold_recording(self, recording_id: str) -> dict[str, object]:
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT recording.*,
+                  COUNT(step.step_id) AS step_count,
+                  SUM(CASE WHEN step.selected_action IS NOT NULL THEN 1 ELSE 0 END)
+                    AS selected_step_count
+                FROM navigation_gold_recordings recording
+                LEFT JOIN navigation_gold_steps step
+                  ON step.recording_id = recording.recording_id
+                WHERE recording.recording_id = ?
+                GROUP BY recording.recording_id
+                """,
+                (recording_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(recording_id)
+        return {
+            "recording_id": str(row["recording_id"]),
+            "status": str(row["status"]),
+            "app_package": str(row["app_package"]),
+            "app_version": str(row["app_version"]),
+            "locale": str(row["locale"]),
+            "goal_text": str(row["goal_text"]),
+            "target_function": str(row["target_function"]),
+            "step_count": int(row["step_count"] or 0),
+            "selected_step_count": int(row["selected_step_count"] or 0),
+            "destination_screen_fingerprint": row["destination_screen_fingerprint"],
+            "destination_correct": (
+                None if row["destination_correct"] is None else bool(row["destination_correct"])
+            ),
+            "safe_stop": None if row["safe_stop"] is None else bool(row["safe_stop"]),
+            "reviewer": row["reviewer"],
+            "review_notes": row["review_notes"],
+        }
+
     def record_recommendation(
         self,
         *,
@@ -1924,6 +2255,57 @@ class UniversalNavigationGraphRepository:
                   FOREIGN KEY(app_key) REFERENCES universal_apps(app_key) ON DELETE CASCADE
                 );
 
+                CREATE TABLE IF NOT EXISTS navigation_gold_recordings (
+                  recording_id TEXT PRIMARY KEY,
+                  app_key TEXT NOT NULL,
+                  app_package TEXT NOT NULL,
+                  app_version TEXT NOT NULL,
+                  locale TEXT NOT NULL,
+                  goal_key TEXT NOT NULL,
+                  goal_text TEXT NOT NULL,
+                  target_function TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  start_screen_fingerprint TEXT NOT NULL,
+                  destination_screen_fingerprint TEXT,
+                  destination_correct INTEGER,
+                  safe_stop INTEGER,
+                  reviewer TEXT,
+                  review_notes TEXT,
+                  started_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  completed_at TEXT,
+                  FOREIGN KEY(app_key) REFERENCES universal_apps(app_key) ON DELETE CASCADE,
+                  FOREIGN KEY(start_screen_fingerprint)
+                    REFERENCES universal_screens(screen_fingerprint) ON DELETE CASCADE,
+                  FOREIGN KEY(destination_screen_fingerprint)
+                    REFERENCES universal_screens(screen_fingerprint) ON DELETE SET NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS navigation_gold_steps (
+                  step_id TEXT PRIMARY KEY,
+                  recording_id TEXT NOT NULL,
+                  ordinal INTEGER NOT NULL,
+                  screen_fingerprint TEXT NOT NULL,
+                  screen_context_json TEXT NOT NULL,
+                  candidates_json TEXT NOT NULL,
+                  selected_element_id TEXT,
+                  selected_element_key TEXT,
+                  selected_label TEXT,
+                  selected_action TEXT,
+                  selected_risk_level TEXT,
+                  outcome TEXT,
+                  next_screen_fingerprint TEXT,
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  UNIQUE(recording_id, ordinal),
+                  FOREIGN KEY(recording_id)
+                    REFERENCES navigation_gold_recordings(recording_id) ON DELETE CASCADE,
+                  FOREIGN KEY(screen_fingerprint)
+                    REFERENCES universal_screens(screen_fingerprint) ON DELETE CASCADE,
+                  FOREIGN KEY(next_screen_fingerprint)
+                    REFERENCES universal_screens(screen_fingerprint) ON DELETE SET NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_universal_screens_app
                   ON universal_screens(app_key, last_seen_at);
                 CREATE INDEX IF NOT EXISTS idx_universal_actions_screen
@@ -1948,6 +2330,10 @@ class UniversalNavigationGraphRepository:
                   );
                 CREATE INDEX IF NOT EXISTS idx_app_function_routes_category
                   ON universal_app_function_routes(app_key, function_domain, target_function);
+                CREATE INDEX IF NOT EXISTS idx_navigation_gold_review
+                  ON navigation_gold_recordings(status, app_package, target_function, updated_at);
+                CREATE INDEX IF NOT EXISTS idx_navigation_gold_steps
+                  ON navigation_gold_steps(recording_id, ordinal);
                 """
             )
             # Legacy ``active`` routes were runtime-inferred and therefore do

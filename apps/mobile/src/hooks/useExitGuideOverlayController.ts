@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { AppState } from "react-native";
 
 import {
+  cancelNavigationGoldRecording,
+  completeNavigationGoldRecording,
+} from "../api/exitguideApi";
+import {
   canDrawExitGuideOverlay,
   clearExitGuideOverlayStatus,
   isExitGuideAccessibilityEnabled,
@@ -12,12 +16,20 @@ import {
   stopExitGuideOverlay,
 } from "../native/ExitGuideOverlay";
 import type { AiProviderSettings } from "../types";
+import {
+  clearGoldRecording,
+  loadGoldRecording,
+  saveGoldRecording,
+  type StoredGoldRecording,
+} from "../storage/goldRecordingStore";
 
 export function useExitGuideOverlayController() {
   const [hasPermission, setHasPermission] = useState(false);
   const [hasAccessibility, setHasAccessibility] = useState(false);
   const [startBusy, setStartBusy] = useState(false);
   const [stopBusy, setStopBusy] = useState(false);
+  const [goldBusy, setGoldBusy] = useState(false);
+  const [goldRecording, setGoldRecording] = useState<StoredGoldRecording | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const operationRef = useRef<"start" | "stop" | null>(null);
 
@@ -35,6 +47,7 @@ export function useExitGuideOverlayController() {
 
   useEffect(() => {
     void refreshPermission();
+    void loadGoldRecording().then(setGoldRecording);
     const subscription = AppState.addEventListener("change", (state) => {
       // A native command is already dispatched before ExitGuide can move to
       // the background. Do not keep controls locked while JS is suspended.
@@ -142,6 +155,97 @@ export function useExitGuideOverlayController() {
     }
   }
 
+  async function startGoldRecording(
+    apiBaseUrl: string,
+    purposeText: string,
+    providerSettings: AiProviderSettings,
+  ) {
+    if (goldBusy || operationRef.current !== null) {
+      return;
+    }
+    if (!purposeText.trim()) {
+      setMessage("Gold 기록 목적을 먼저 입력하세요.");
+      return;
+    }
+    setGoldBusy(true);
+    setMessage(null);
+    try {
+      const [overlayAllowed, accessibilityAllowed] = await Promise.all([
+        canDrawExitGuideOverlay(),
+        isExitGuideAccessibilityEnabled(),
+      ]);
+      setHasPermission(overlayAllowed);
+      setHasAccessibility(accessibilityAllowed);
+      if (!overlayAllowed) {
+        setMessage("화면 위 표시 권한을 켠 뒤 다시 누르세요.");
+        await openExitGuideOverlaySettings();
+        return;
+      }
+      if (!accessibilityAllowed) {
+        setMessage("접근성 설정에서 ExitGuide Navigation을 켠 뒤 다시 누르세요.");
+        await openExitGuideAccessibilitySettings();
+        return;
+      }
+      const recordingId = await startExitGuideOverlay(
+        apiBaseUrl,
+        purposeText.trim(),
+        providerSettings,
+        "record",
+      );
+      const stored = { apiBaseUrl, recordingId };
+      await saveGoldRecording(stored);
+      setGoldRecording(stored);
+      setMessage("대상 앱을 연 뒤 ▶ 아이콘을 누르고, 올바른 경로를 직접 수행하세요.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Gold 기록을 시작하지 못했습니다.");
+    } finally {
+      setGoldBusy(false);
+    }
+  }
+
+  async function completeGoldRecording() {
+    if (!goldRecording || goldBusy) {
+      return;
+    }
+    setGoldBusy(true);
+    setMessage(null);
+    try {
+      const result = await completeNavigationGoldRecording(
+        goldRecording.apiBaseUrl,
+        goldRecording.recordingId,
+      );
+      await stopExitGuideOverlay();
+      await clearGoldRecording();
+      setGoldRecording(null);
+      setMessage(
+        `Gold 기록이 검수 대기로 저장됐습니다. 화면 ${result.step_count}개, 선택 ${result.selected_step_count}개`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Gold 기록을 완료하지 못했습니다.");
+    } finally {
+      setGoldBusy(false);
+    }
+  }
+
+  async function cancelGoldRecording() {
+    if (!goldRecording || goldBusy) {
+      return;
+    }
+    setGoldBusy(true);
+    setMessage(null);
+    try {
+      await cancelNavigationGoldRecording(goldRecording.apiBaseUrl, goldRecording.recordingId);
+      await stopExitGuideOverlay();
+      await clearGoldRecording();
+      setGoldRecording(null);
+      setMessage("Gold 기록을 취소했습니다.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Gold 기록을 취소하지 못했습니다.");
+    } finally {
+      setGoldBusy(false);
+    }
+  }
+
   async function clearNavigation() {
     setMessage(null);
     try {
@@ -152,13 +256,18 @@ export function useExitGuideOverlayController() {
   }
 
   return {
+    cancelGoldRecording,
     clearNavigation,
+    completeGoldRecording,
+    goldBusy,
+    goldRecording,
     hasAccessibility,
     hasPermission,
     message,
     openAccessibilitySettings,
     openOverlaySettings,
     startBusy,
+    startGoldRecording,
     startNavigation,
     stopBusy,
     stopNavigation,

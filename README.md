@@ -113,6 +113,7 @@ exitguide-navigation/
 - [Navigation DB Gym](docs/NAVIGATION_DB_GYM.md)
 - [AndroidControl 연동](docs/ANDROID_CONTROL.md)
 - [API 계약](docs/API_CONTRACT.md)
+- [실기기 Human Gold 기록](docs/GOLD_RECORDING.md)
 - [휴대폰 테스트](docs/PHONE_TESTING.md)
 - [공개 APK 배포](docs/PUBLIC_APK_DEPLOYMENT.md)
 - [Navigation 시간 최적화](docs/NAVIGATION_TIME_OPTIMIZATION.md)
