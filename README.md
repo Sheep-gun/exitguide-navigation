@@ -1,112 +1,165 @@
 # ExitGuide Navigation
 
-ExitGuideLab의 목적 기반 UI 내비게이션 모듈이다. 사용자의 목적과 현재 Android 화면 구조를 받아, 앱을 대신 조작하지 않고 다음에 선택할 실제 UI 요소와 목적을 방해하는 선택지를 메시지형 플로팅 UI로 안내한다.
+ExitGuideLab의 목적 기반 Android UI Navigation Agent 저장소입니다. 사용자가 “구독을 해지하고 싶어”, “알림을 끄고 싶어”, “회원탈퇴 메뉴를 찾고 싶어”처럼 목적을 입력하면 현재 화면을 해석하고, 그 목적에 가장 적합한 다음 메뉴를 찾아 최종 목적지까지 안내합니다.
 
-## 담당 범위
+- 팀: ExitGuideLab
+- Navigation 담당: 양건
+- 통합 저장소: [`exitguide-ai/exitguide`](https://github.com/exitguide-ai/exitguide)
+- 이 저장소: Android 화면 인식, 동적 메뉴 탐색, 앱 기능 그래프, Gold 데이터, K-EXAONE 판단, EXAONE 4.5 VLM 연동
 
-- 담당: 양건
-- 이 저장소: 앱별 모범 경로 수집·검색, 현재 화면 매칭, 다음 행동 판단, AccessibilityService, 메시지형 플로팅 안내, 경로 이탈 복구
-- 김군협의 `exitguide` 저장소: 약관 데이터 수집·라벨링·검색·요약
-- 최종 통합: Navigation API와 Terms API를 최종 ExitGuide 앱 또는 통합 백엔드에서 조합
+## 개발 목표
 
-## 핵심 흐름
+핵심 목표는 앱별 좌표 경로를 암기하는 매크로가 아닙니다.
 
-```text
-사용자 목적 + 현재 Accessibility 화면 구조
-                    ↓
-       Upstage File Search에서 모범 경로 검색
-                    ↓
-     검색 결과 + 현재 화면을 K-EXAONE에 전달
-                    ↓
- 실제 화면의 다음 UI 요소·경고·확신도를 JSON으로 반환
-                    ↓
- 플로팅 UI가 “현재 화면에서 ○○을 누르세요”라고 안내
-                    ↓
- 사용자가 직접 선택하고 다음 화면을 Accessibility로 재검증
-                    ↓
- 경로 불일치 시 재정렬 또는 안전한 복귀 후 대체 후보 탐색
+> 처음 보는 Android 앱에서도 현재 화면의 선택지를 동적으로 분석하고, K-EXAONE이 사용자 목적에 맞는 다음 행동을 결정하며, 성공한 탐색 결과를 의미 기반 기능 그래프로 축적하는 범용 Navigation Agent를 만든다.
+
+Gold는 `좌표 A → 좌표 B` 재생 경로가 아니라 다음 내용을 담는 학습·검색 사례로 사용합니다.
+
+- 사용자 목적과 최종 기능
+- 현재 화면의 문맥
+- 화면에서 발견한 전체 후보
+- 올바르게 선택한 후보와 잘못된 후보
+- 행동 이후 도착한 화면
+- 성공, 실패, 무변화와 복구 결과
+- 앱 버전, locale, 검증 수준
+
+상세 설계와 두 개의 전체 워크플로우는 [Navigation Agent 학습 아키텍처](docs/NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)에 정리되어 있습니다.
+
+## 모델과 시스템의 역할
+
+| 구성 요소 | 역할 |
+| --- | --- |
+| AccessibilityService | 텍스트, 버튼 역할, 상태, 화면 계층과 좌표 수집 |
+| OCR | 접근성 정보에서 누락된 화면 문구 보충 |
+| EXAONE 4.5 VLM | 이름 없는 아이콘, 이미지 버튼, WebView, 팝업과 시각 상태 분석 |
+| K-EXAONE | 목적, 현재 후보와 검색 근거를 보고 다음 행동 결정 |
+| Gold·기능 그래프 | 실제로 성공·실패한 화면 선택 경험 제공 |
+| AndroidControl | 처음 보는 앱에서 탐색 방향을 잡는 범용 사전 사례 |
+| Android 실행기 | 안전 정책을 통과한 클릭, 스크롤과 뒤로가기 실행 |
+
+EXAONE 4.5는 눈, K-EXAONE은 판단하는 두뇌, Gold·AndroidControl·기능 그래프는 기억, Android 실행기는 손으로 사용합니다.
+
+## 런타임 워크플로우
+
+```mermaid
+flowchart TD
+    A["사용자 목적 입력"] --> B["대상 앱에서 탐색 시작"]
+    B --> C["AccessibilityService와 OCR로 현재 화면 관찰"]
+    C --> D{"후보 의미가 불명확한가?"}
+    D -- "예" --> E["EXAONE 4.5 VLM으로 아이콘·화면 분석"]
+    D -- "아니오" --> F["통합 후보 목록 생성"]
+    E --> F
+    F --> G["Gold·앱 그래프·기능 카탈로그·AndroidControl 검색"]
+    G --> H["K-EXAONE이 다음 행동 선택"]
+    H --> I{"안전 정책 통과?"}
+    I -- "예" --> J["저위험 중간 메뉴 실행"]
+    I -- "아니오" --> K["중단 또는 사용자 행동 요청"]
+    J --> L["새 화면 관찰 후 반복"]
+    L --> M{"최종 목적지인가?"}
+    M -- "아니오" --> C
+    M -- "예" --> N["탐색 종료 후 최종 버튼 안내"]
+    N --> O["상태 변경은 사용자가 직접 클릭"]
 ```
 
-K-EXAONE은 최종 판단 모델로 사용한다. Upstage의 `/responses`가 아니라 File Search의 `/vector_stores/{id}/search`를 호출해 검색 결과만 가져오고, 그 결과를 K-EXAONE에 전달한다.
+## 안전 원칙
 
-## 제품 원칙
+- 자동 탐색은 보이고 활성화된 저위험 중간 메뉴에만 허용합니다.
+- 결제, 탈퇴, 해지 확정, 환불, 동의, 권한 변경, 토글, 체크박스, 라디오 버튼과 텍스트 입력은 자동 실행하지 않습니다.
+- 최종 목적지에 도착하면 탐색을 자동 종료하고 최종 상태 변경은 사용자에게 맡깁니다.
+- 모델이 임의의 좌표를 만들어 클릭하지 않습니다. 현재 화면에서 관찰된 후보 ID를 Android 실행기가 다시 검증합니다.
+- 화면 또는 후보를 확실하게 식별할 수 없으면 추측 클릭 대신 복구하거나 중단합니다.
+- 민감 정보가 포함된 `.env`, 원본 스크린샷과 로컬 DB는 Git에 올리지 않습니다.
 
-- AccessibilityService는 현재 화면을 읽는 기본 센서다.
-- 스크린샷 비전 분석은 접근성 정보가 부족할 때만 사용한다.
-- ExitGuide는 버튼을 자동 클릭하지 않고 사용자가 직접 행동한다.
-- 모델은 현재 화면에 실제로 존재하는 요소 ID만 안내할 수 있다.
-- 예상하지 못한 화면에서는 먼저 다른 알려진 경로 단계와 재정렬한다.
-- 재정렬할 수 없을 때만 안전성이 검증된 `뒤로 가기` 또는 `닫기`를 요청한다.
-- 실패한 후보는 같은 세션에서 제외하고 검증된 대체 후보를 최대 1회 추가 시도한다.
-- 두 후보가 모두 실패하면 추측을 중단하고 경로 업데이트 대상으로 기록한다.
+## 현재 구현 범위
 
-## 데이터 저장 원칙
+- FastAPI 기반 Navigation API와 Hermes 도구 계약
+- Android AccessibilityService와 플로팅 오버레이
+- 목적 입력 후 대상 앱에서 시작하는 탐색 UX
+- 클릭, 화면 단위 스크롤, 뒤로가기와 탐색 종료
+- 이름 없는 후보를 보완하는 OCR 좌표 후보
+- 화면·행동·전이·경로를 저장하는 SQLite 기능 그래프
+- 앱·버전·기능별 `shadow`, `verified_candidate`, `stale` 경로 생명주기
+- 재방문, 무한 스크롤, 무변화와 잘못된 화면에 대한 복구·중단 규칙
+- 범용 기능 카탈로그와 목적 resolver
+- AndroidControl 변환·검색 파이프라인
+- 실기기·에뮬레이터 관찰 수집, 개인정보 제거, 오프라인 재생과 평가 도구
+- 유튜브·넷플릭스·배민 실기기 탐색과 일부 Human Gold 검증
+- Windows MVP 실행 파일과 시연 영상
 
-- 검수된 모범 경로 원본: `data/routes/*.md`
-- 변경 이력과 협업: Git/GitHub
-- 런타임 의미 검색: Upstage `egl-routes-prod` Vector Store
-- 개인 실험: Upstage `egl-sandbox-yanggeon` Vector Store
-- 고정 화면 좌표는 경로의 기준으로 사용하지 않는다.
-- 화면 텍스트, 접근성 View ID, 역할, 주변 문구와 예상 다음 화면을 의미 기반 선택자로 저장한다.
-- 각 단계에는 실패 시 복귀 방법, 복귀 안전성, 예상 이전 화면과 최대 재시도 횟수를 함께 저장한다.
+수치와 완료·미완료 항목은 [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)을 참고합니다. 세부 변경 이력은 [개발 로그](docs/DEVELOPMENT_LOG.md)에 있습니다.
 
 ## 저장소 구조
 
 ```text
 exitguide-navigation/
-├─ data/routes/                  # 검수된 모범 경로 Markdown 원본
-├─ docs/PRODUCT_SPEC.md          # 화면 인식·안내·복구 제품 규칙
-├─ docs/WORKFLOW.md              # 개발·수집·배포 작업 흐름
-├─ docs/INTEGRATION_CONTRACT.md  # 최종 앱과의 API 계약
-├─ .env.example                  # 환경변수 이름과 예시
-└─ .env                          # 로컬 자격정보, Git 제외
+├─ apps/
+│  ├─ api/                     # FastAPI, K-EXAONE, 기능 그래프와 탐색 정책
+│  └─ mobile/                  # Android 앱, AccessibilityService와 오버레이
+├─ contracts/                  # Navigation·Terms 통합 계약
+├─ deploy/                     # 서버와 공개 APK 배포 설정
+├─ fixtures/
+│  └─ navigation/              # 기능 카탈로그, 평가·회귀·오프라인 자료
+├─ scripts/                    # 빌드, 수집, 검증, 최적화와 배포 자동화
+├─ docs/                       # 아키텍처, 정책, 테스트와 연구 기록
+├─ dist/                       # MVP 실행 파일
+└─ MVP.mp4                     # MVP 시연 영상
 ```
 
-구현이 시작되면 다음 디렉터리를 추가한다.
+## 주요 문서
 
-```text
-apps/api/       # Python FastAPI navigation backend
-apps/mobile/    # Android AccessibilityService와 플로팅 UI
-scripts/        # Upstage 업로드·재색인·검증 자동화
-tests/          # 경로 검색과 안전 규칙 테스트
+- [Navigation Agent 학습 아키텍처](docs/NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)
+- [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)
+- [범용 Navigation Agent](docs/UNIVERSAL_NAVIGATION_AGENT.md)
+- [Navigation DB Gym](docs/NAVIGATION_DB_GYM.md)
+- [AndroidControl 연동](docs/ANDROID_CONTROL.md)
+- [API 계약](docs/API_CONTRACT.md)
+- [휴대폰 테스트](docs/PHONE_TESTING.md)
+- [공개 APK 배포](docs/PUBLIC_APK_DEPLOYMENT.md)
+- [Navigation 시간 최적화](docs/NAVIGATION_TIME_OPTIMIZATION.md)
+- [개발 로그](docs/DEVELOPMENT_LOG.md)
+
+## 빠른 시작
+
+로컬 `.env`는 [`.env.example`](.env.example)을 복사해 사용합니다. 실제 API 키와 Endpoint ID가 들어 있는 `.env`는 Git에 포함하지 않습니다.
+
+백엔드:
+
+```powershell
+cd apps\api
+python -m venv .venv
+.\.venv\Scripts\pip.exe install -r requirements.txt
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8010
 ```
 
-## 환경 설정
+모바일 앱:
 
-`.env.example`을 기준으로 로컬 `.env`를 사용한다.
-
-```dotenv
-EXAONE_API_KEY=
-EXAONE_BASE_URL=https://api.friendli.ai/dedicated/v1
-EXAONE_MODEL=
-
-UPSTAGE_API_KEY=
-UPSTAGE_BASE_URL=https://api.upstage.ai/v2
-UPSTAGE_ROUTE_VECTOR_STORE_ID=
-UPSTAGE_ROUTE_SANDBOX_VECTOR_STORE_ID=
+```powershell
+cd apps\mobile
+npm ci
+npm run typecheck
 ```
 
-실제 키가 들어 있는 `.env`는 Git에 포함하지 않는다.
+Android 로컬 빌드와 설치:
 
-## MVP 시연
+```powershell
+.\scripts\Build-AndroidLocal.ps1
+```
+
+빠른 API 회귀 검사:
+
+```powershell
+.\scripts\Test-ApiUnit.ps1
+```
+
+기능 DB 검증:
+
+```powershell
+.\scripts\Test-NavigationDbGym.ps1 -Mode fast
+```
+
+## MVP
 
 - [Navigation·다크패턴 통합 MVP 시연 영상](MVP.mp4)
-- Windows 실행 파일: `dist/EGL-Navigation-MVP.exe`
+- Windows 실행 파일: [`dist/EGL-Navigation-MVP.exe`](dist/EGL-Navigation-MVP.exe)
 
-## 현재 상태
-
-- [x] navigation 전용 Git 저장소 분리
-- [x] K-EXAONE Dedicated Endpoint 로컬 설정 이전
-- [x] 모범 경로 문서 형식과 팀 통합 계약 정의
-- [x] 화면 인식형 메시지 내비게이션과 경로 복구 원칙 정의
-- [x] Upstage API 키 등록, Solar Pro 3 및 Vector Store 검색 권한 확인
-- [x] `egl-routes-prod`, `egl-sandbox-yanggeon` Vector Store 생성
-- [x] Navigation·다크패턴 통합 MVP 실행 파일 및 시연 영상 추가
-- [ ] Upstage Agent Files 업로드 프로젝트 권한 확인
-- [ ] 모범 경로 업로드·검색 스크립트 구현
-- [ ] FastAPI Navigation API 구현
-- [ ] AccessibilityService 기반 경로 수집 모드 구현
-- [ ] 플로팅 안내와 실기기 검증
-- [ ] 군협의 Terms API와 통합
-
-제품 동작은 [docs/PRODUCT_SPEC.md](docs/PRODUCT_SPEC.md), 구현 순서는 [docs/WORKFLOW.md](docs/WORKFLOW.md)를 따른다.
+이 저장소는 Navigation 모듈의 개인 작업·실험·백업 공간입니다. 검증이 끝난 통합 변경은 `exitguide-ai/exitguide`와 계약을 맞춰 반영합니다.

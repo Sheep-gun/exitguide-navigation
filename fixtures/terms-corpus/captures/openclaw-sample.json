@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "captures": [
+    {
+      "capture_id": "sample_openclaw_membership_terms",
+      "source_tool": "openclaw",
+      "service_name": "Seed Membership",
+      "provider_name": "Synthetic Provider",
+      "document_type": "subscription_terms",
+      "locale": "ko-KR",
+      "source_url": "https://example.invalid/openclaw/membership-terms",
+      "retrieved_at": "2026-07-07T00:10:00+09:00",
+      "collection_method": "openclaw",
+      "retrieval_status": "captured",
+      "license_notes": "Synthetic OpenClaw-format sample. Not copied from a real service.",
+      "tags": ["subscription", "renewal", "cancellation"],
+      "raw_text": "제1조 구독 결제\n월간 멤버십은 사용자가 해지하기 전까지 자동 갱신될 수 있습니다. 다음 결제일과 결제 금액은 결제 화면 또는 계정 관리 화면에서 확인할 수 있어야 합니다.\n\n제2조 해지 및 환불\n사용자는 계정 설정에서 구독 해지를 요청할 수 있습니다. 해지 완료 후에는 다음 결제일부터 과금되지 않으며, 이미 결제된 이용 기간의 환불 가능 여부는 고지된 환불 기준에 따릅니다."
+    }
+  ]
+}

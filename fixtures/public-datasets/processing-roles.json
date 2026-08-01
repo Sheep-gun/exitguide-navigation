@@ -1,0 +1,227 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-07-15",
+  "source_kinds": [
+    "full_document",
+    "clause_or_segment",
+    "guidance_case",
+    "question_answer",
+    "metadata_index",
+    "auxiliary_data"
+  ],
+  "processing_roles": [
+    "corpus_candidate",
+    "annotation_source",
+    "supporting_evidence",
+    "evaluation_only",
+    "crawl_seed",
+    "source_metadata",
+    "excluded_from_rag"
+  ],
+  "sectioning_strategies": [
+    "korean_legal_articles",
+    "existing_segments",
+    "generic_document",
+    "none"
+  ],
+  "rag_policies": [
+    "review_required",
+    "separate_index",
+    "not_eligible",
+    "deferred"
+  ],
+  "sources": [
+    {
+      "source_id": "ftc_standard_terms",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["corpus_candidate"],
+      "sectioning_strategy": "korean_legal_articles",
+      "rag_policy": "review_required",
+      "reason": "Korean standard-terms full text is a primary clause-search candidate."
+    },
+    {
+      "source_id": "data_go_kr_kca_standard_answers",
+      "source_kinds": ["guidance_case"],
+      "processing_roles": ["supporting_evidence"],
+      "sectioning_strategy": "none",
+      "rag_policy": "separate_index",
+      "reason": "Consumer consultation answers are guidance, not contractual terms."
+    },
+    {
+      "source_id": "data_go_kr_ftc_consumer_model_cases",
+      "source_kinds": ["guidance_case"],
+      "processing_roles": ["supporting_evidence"],
+      "sectioning_strategy": "none",
+      "rag_policy": "separate_index",
+      "reason": "Complaint model cases are supporting guidance and require a separate evidence index."
+    },
+    {
+      "source_id": "usableprivacy_opp_115",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "The corpus combines privacy-policy text with research annotations."
+    },
+    {
+      "source_id": "usableprivacy_mapp",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "Mobile privacy policies and annotations can support later policy retrieval."
+    },
+    {
+      "source_id": "usableprivacy_fsdk",
+      "source_kinds": ["auxiliary_data"],
+      "processing_roles": ["excluded_from_rag"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "SDK telemetry is not policy or terms text."
+    },
+    {
+      "source_id": "usableprivacy_opp115_gdpr",
+      "source_kinds": ["auxiliary_data"],
+      "processing_roles": ["annotation_source", "excluded_from_rag"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "GDPR mappings annotate another corpus and are not standalone evidence text."
+    },
+    {
+      "source_id": "usableprivacy_optoutchoice_2020",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "existing_segments",
+      "rag_policy": "review_required",
+      "reason": "The source contains policy documents and labeled opt-out segments."
+    },
+    {
+      "source_id": "usableprivacy_app_350",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "existing_segments",
+      "rag_policy": "review_required",
+      "reason": "The source contains Android privacy policies and YAML annotations."
+    },
+    {
+      "source_id": "usableprivacy_maps_policies",
+      "source_kinds": ["metadata_index"],
+      "processing_roles": ["crawl_seed"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "MAPS is a policy URL/source index rather than policy full text."
+    },
+    {
+      "source_id": "usableprivacy_optoutchoice_2017",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "The source contains privacy policies used by opt-out research."
+    },
+    {
+      "source_id": "usableprivacy_acl_coling_2014",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "The research corpus contains privacy-policy text and structural annotation."
+    },
+    {
+      "source_id": "privacyqa_emnlp",
+      "source_kinds": ["question_answer"],
+      "processing_roles": ["evaluation_only"],
+      "sectioning_strategy": "existing_segments",
+      "rag_policy": "not_eligible",
+      "reason": "Question-policy relevance rows are evaluation data, not a production evidence corpus."
+    },
+    {
+      "source_id": "tosdr_terms_corpus_github",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["corpus_candidate"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "The mirror contains complete terms and privacy-policy documents."
+    },
+    {
+      "source_id": "tosdr_api_index",
+      "source_kinds": ["metadata_index"],
+      "processing_roles": ["source_metadata"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "Developer documentation describes APIs and dataset structure only."
+    },
+    {
+      "source_id": "tosdr_zenodo_raw_2023",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "Policy documents are linked to ToS;DR point and case annotations."
+    },
+    {
+      "source_id": "hf_online_terms_of_service",
+      "source_kinds": ["clause_or_segment"],
+      "processing_roles": ["annotation_source", "evaluation_only"],
+      "sectioning_strategy": "existing_segments",
+      "rag_policy": "not_eligible",
+      "reason": "The dataset contains pre-segmented unfair-clause examples rather than complete source documents."
+    },
+    {
+      "source_id": "opentermsarchive_datasets_page",
+      "source_kinds": ["metadata_index"],
+      "processing_roles": ["source_metadata", "crawl_seed"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "The directory identifies collections but is not itself a terms corpus."
+    },
+    {
+      "source_id": "princeton_leuven_privacy_policies",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["corpus_candidate"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "Longitudinal privacy-policy text is a corpus candidate after rights and quality review."
+    },
+    {
+      "source_id": "claudette_corpora_page",
+      "source_kinds": ["metadata_index"],
+      "processing_roles": ["source_metadata"],
+      "sectioning_strategy": "none",
+      "rag_policy": "not_eligible",
+      "reason": "The page is a corpus directory; the mirrored clause dataset is classified separately."
+    },
+    {
+      "source_id": "aihub_legal_regulation_terms",
+      "source_kinds": ["full_document", "clause_or_segment"],
+      "processing_roles": ["corpus_candidate", "annotation_source"],
+      "sectioning_strategy": "korean_legal_articles",
+      "rag_policy": "review_required",
+      "reason": "Korean full documents are paired with advantageous or disadvantageous clause annotations."
+    },
+    {
+      "source_id": "kaggle_tosdr_terms_corpus",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["source_metadata"],
+      "sectioning_strategy": "none",
+      "rag_policy": "deferred",
+      "reason": "The account-gated copy is absent and a public GitHub mirror is already normalized."
+    },
+    {
+      "source_id": "common_crawl_wayback_privacy_terms",
+      "source_kinds": ["metadata_index"],
+      "processing_roles": ["crawl_seed"],
+      "sectioning_strategy": "none",
+      "rag_policy": "deferred",
+      "reason": "Web archives require an explicit domain and date scope before collection."
+    },
+    {
+      "source_id": "open_terms_archive_contrib",
+      "source_kinds": ["full_document"],
+      "processing_roles": ["corpus_candidate", "crawl_seed"],
+      "sectioning_strategy": "generic_document",
+      "rag_policy": "review_required",
+      "reason": "The manually downloaded collection contains versioned full terms and policy documents."
+    }
+  ]
+}

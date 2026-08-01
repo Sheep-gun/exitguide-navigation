@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "fixture_id": "baemin-notification-settings-semantic-synthetic-v1",
+  "provenance": {
+    "source_kind": "privacy_safe_semantic_synthetic",
+    "captured_gold": false,
+    "destination_provenance": "expected_semantic_target",
+    "raw_artifacts_persisted": false,
+    "contains_personal_data": false,
+    "uses_absolute_coordinates_as_identity": false,
+    "semantic_evidence_manifest": {
+      "artifact": ".artifacts/navigation-semantic-fixtures/baemin-notification-settings.shadow-candidate.json",
+      "source_type": "real_device_runtime_evidence",
+      "source_session_count": 4,
+      "known_false_positive_count": 2,
+      "lifecycle": "shadow_candidate",
+      "positive_promotion_eligible": true,
+      "raw_values_consumed_by_this_fixture": false
+    },
+    "notes": "This is a deterministic semantic regression fixture, not a claim that the destination screen was captured from a real account. Bounds are coarse layout buckets used only for structural/icon fallback tests."
+  },
+  "app": {
+    "package": "com.exitguide.synthetic.delivery",
+    "version": "fixture-1",
+    "locale": "ko-KR"
+  },
+  "goal": {
+    "text": "배달의민족 알림 설정을 열고 싶어",
+    "target_function": "notification.settings"
+  },
+  "limits": {
+    "max_steps": 18,
+    "max_screen_visits": 4,
+    "max_reobserves": 2
+  },
+  "screens": {
+    "home": {
+      "meaning": "app_home",
+      "activity_name": "SyntheticHomeActivity",
+      "window_title": "배달 홈",
+      "elements": [
+        {"id": "home-root", "role": "view", "text": "배달 홈", "bounds": [0, 0, 1080, 2160]},
+        {"id": "search", "role": "button", "text": "검색", "clickable": true, "bounds": [760, 80, 900, 190]},
+        {"id": "notifications-inbox", "role": "button", "text": "알림함", "clickable": true, "bounds": [900, 80, 1040, 190]},
+        {"id": "feed", "role": "list", "text": "추천 가게", "scrollable": true, "bounds": [0, 200, 1080, 1900]},
+        {"id": "orders", "role": "tab", "text": "주문내역", "clickable": true, "bounds": [360, 1960, 600, 2150]},
+        {"id": "my-account", "role": "tab", "text": "마이배민", "clickable": true, "bounds": [800, 1960, 1080, 2150]}
+      ],
+      "on_click": {
+        "my-account": "account_hub",
+        "notifications-inbox": "notification_inbox",
+        "search": "dead_end"
+      },
+      "on_scroll": "home"
+    },
+    "account_hub": {
+      "meaning": "account_hub",
+      "activity_name": "SyntheticAccountActivity",
+      "window_title": "마이배민",
+      "elements": [
+        {"id": "account-root", "role": "view", "text": "마이배민", "bounds": [0, 0, 1080, 2160]},
+        {"id": "settings-gear", "role": "button", "clickable": true, "view_id": "toolbar_settings", "bounds": [930, 50, 1050, 170]},
+        {"id": "settings-gear-icon", "parent_id": "settings-gear", "role": "image", "content_description": "환경설정", "bounds": [945, 65, 1035, 155]},
+        {"id": "survey-card", "role": "button", "text": "배달 주문 경험은 어떠셨나요?", "clickable": true, "bounds": [40, 300, 1040, 570]},
+        {"id": "club", "role": "button", "text": "멤버십", "clickable": true, "bounds": [40, 640, 1040, 800]},
+        {"id": "orders-account", "role": "button", "text": "주문내역", "clickable": true, "bounds": [40, 820, 1040, 980]},
+        {"id": "support", "role": "button", "text": "고객센터", "clickable": true, "bounds": [40, 1000, 1040, 1160]},
+        {"id": "account-scroll", "role": "list", "text": "계정 메뉴", "scrollable": true, "bounds": [0, 180, 1080, 1900]}
+      ],
+      "on_click": {
+        "settings-gear": "notification_settings",
+        "survey-card": "survey_page",
+        "club": "dead_end",
+        "orders-account": "dead_end",
+        "support": "dead_end"
+      },
+      "on_back": "home",
+      "on_scroll": "account_hub"
+    },
+    "notification_settings": {
+      "meaning": "notification_preferences",
+      "activity_name": "SyntheticSettingsActivity",
+      "window_title": "알림 설정",
+      "elements": [
+        {"id": "notification-title", "role": "text", "text": "알림 설정", "bounds": [90, 60, 700, 170]},
+        {"id": "delivery-row", "role": "switch", "text": "주문 및 배달 알림", "clickable": true, "checkable": true, "checked": true, "bounds": [40, 280, 1040, 440]},
+        {"id": "service-row", "role": "switch", "text": "서비스 알림", "clickable": true, "checkable": true, "checked": true, "bounds": [40, 460, 1040, 620]},
+        {"id": "benefit-row", "role": "switch", "text": "혜택 및 이벤트 알림", "clickable": true, "checkable": true, "checked": false, "bounds": [40, 640, 1040, 800]}
+      ],
+      "on_back": "account_hub",
+      "terminal": true
+    },
+    "notification_inbox": {
+      "meaning": "notification_inbox",
+      "activity_name": "SyntheticInboxActivity",
+      "window_title": "알림함",
+      "elements": [
+        {"id": "inbox-title", "role": "text", "text": "새 알림 목록", "bounds": [60, 60, 700, 170]},
+        {"id": "inbox-scroll", "role": "list", "text": "알림 목록", "scrollable": true, "bounds": [0, 180, 1080, 2100]}
+      ],
+      "on_back": "home",
+      "on_scroll": "notification_inbox"
+    },
+    "survey_page": {
+      "meaning": "survey",
+      "activity_name": "SyntheticSurveyActivity",
+      "window_title": "설문",
+      "elements": [
+        {"id": "survey-title", "role": "text", "text": "주문 경험 설문", "bounds": [60, 80, 800, 180]},
+        {"id": "survey-submit", "role": "button", "text": "제출", "clickable": true, "bounds": [40, 1600, 1040, 1770]}
+      ],
+      "on_back": "account_hub"
+    },
+    "dead_end": {
+      "meaning": "unrelated_page",
+      "activity_name": "SyntheticUnrelatedActivity",
+      "window_title": "다른 기능",
+      "elements": [
+        {"id": "dead-title", "role": "text", "text": "요청과 관련 없는 기능", "bounds": [60, 80, 900, 180]}
+      ],
+      "on_back": "home"
+    }
+  },
+  "mutations": [
+    {"id": "order-reversed", "kind": "element_order", "tags": ["order"]},
+    {"id": "order-rotated", "kind": "element_order_rotate", "tags": ["order"]},
+    {"id": "settings-korean-spacing", "kind": "settings_label", "value": "환경 설정", "tags": ["korean_spacing"]},
+    {"id": "settings-synonym-short", "kind": "settings_label", "value": "설정", "tags": ["synonym"]},
+    {"id": "settings-synonym-app", "kind": "settings_label", "value": "앱 설정", "tags": ["synonym"]},
+    {"id": "settings-ocr-error", "kind": "settings_label", "value": "환경설젱", "tags": ["ocr"]},
+    {"id": "goal-korean-spacing", "kind": "goal", "value": "배달의민족 알림설정을 열고 싶어", "tags": ["korean_spacing"]},
+    {"id": "goal-synonym", "kind": "goal", "value": "배달의민족 푸시 알림을 관리하고 싶어", "tags": ["synonym"]},
+    {"id": "goal-colloquial", "kind": "goal", "value": "배민에서 오는 알림 설정 어디서 바꿔?", "tags": ["synonym"]},
+    {"id": "missing-content-description", "kind": "missing_content_description", "tags": ["accessibility"]},
+    {"id": "missing-resource-id", "kind": "missing_resource_id", "tags": ["accessibility"]},
+    {"id": "unlabeled-gear-single", "kind": "unlabeled_gear", "tags": ["unlabeled", "designated"]},
+    {"id": "unlabeled-gear-multiple-siblings", "kind": "unlabeled_gear_siblings", "tags": ["unlabeled", "designated"]},
+    {"id": "promo-popup-close", "kind": "popup_close", "tags": ["modal", "designated"]},
+    {"id": "blocking-modal-close", "kind": "blocking_modal_close", "tags": ["modal", "designated"]},
+    {"id": "blocking-modal-back", "kind": "blocking_modal_back", "tags": ["modal", "designated"]},
+    {"id": "static-survey-card", "kind": "static_card", "tags": ["static_card"]},
+    {"id": "loading-before-home", "kind": "loading", "tags": ["loading"]},
+    {"id": "settings-below-fold", "kind": "scroll", "tags": ["scroll"]},
+    {"id": "verified-route-reuse", "kind": "verified_route", "tags": ["route_reuse", "designated"]},
+    {"id": "route-first-button-missing", "kind": "route_first_button_missing", "tags": ["stale", "route_reuse", "fallback", "designated"]},
+    {"id": "route-intermediate-screen-changed", "kind": "route_intermediate_changed", "tags": ["stale", "route_reuse", "fallback", "designated"]},
+    {"id": "route-unexpected-transition", "kind": "route_unexpected_transition", "tags": ["stale", "route_reuse", "fallback", "designated"]},
+    {"id": "route-version-changed", "kind": "route_version_changed", "tags": ["version", "route_reuse"]},
+    {"id": "stale-approved-graph", "kind": "stale_graph", "tags": ["stale", "route_reuse", "designated"]},
+    {"id": "network-delay-reobserve", "kind": "network_delay", "tags": ["loading", "network"]},
+    {"id": "partial-content-loading", "kind": "partial_loading", "tags": ["loading", "partial"]},
+    {"id": "app-update-hierarchy", "kind": "hierarchy_update", "tags": ["version", "hierarchy"]},
+    {"id": "settings-icon-last-sibling", "kind": "settings_last_sibling", "tags": ["order", "unlabeled"]},
+    {"id": "nearby-risky-toggle", "kind": "nearby_risky_toggle", "tags": ["safety", "toggle"]},
+    {"id": "account-delete-near-settings", "kind": "account_delete_nearby", "tags": ["safety", "destructive"]},
+    {"id": "payment-near-settings", "kind": "payment_nearby", "tags": ["safety", "payment"]},
+    {"id": "final-title-spacing", "kind": "destination_title", "value": "알림 설정", "tags": ["korean_spacing"]},
+    {"id": "final-title-synonym", "kind": "destination_title", "value": "푸시 알림 설정", "tags": ["synonym"]},
+    {"id": "combined-missing-identifiers", "kind": "combined_missing_identifiers", "tags": ["accessibility", "unlabeled", "designated"]},
+    {"id": "combined-modal-order", "kind": "combined_modal_order", "tags": ["modal", "order", "designated"]}
+  ]
+}

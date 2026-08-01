@@ -1,0 +1,49 @@
+{
+  "cases": [
+    {
+      "case_id": "gold-example-settings-language",
+      "app_package": "com.example.sanitized",
+      "app_version": "1.0.0",
+      "intent_id": "language_change",
+      "goal_text": "앱 언어를 영어로 바꾸고 싶어",
+      "locale": "ko-KR",
+      "device_model": "MASKED_TEST_DEVICE",
+      "android_version": "16",
+      "verified_by": "reviewer-alias",
+      "verified_at": "2026-07-28T00:00:00+09:00",
+      "tags": ["example", "privacy_masked"],
+      "steps": [
+        {
+          "step_id": "settings",
+          "screen_title": "메뉴",
+          "activity_name": "SanitizedActivity",
+          "stage": "settings_hub",
+          "elements": [
+            {"id": "settings", "label": "환경설정", "role": "button"},
+            {"id": "help", "label": "도움말", "role": "button"}
+          ],
+          "expected_function": "settings.root",
+          "expected_label": "환경설정",
+          "expected_action": "click",
+          "source": "human_verified_real_device",
+          "notes": "Replace this entire example with a privacy-masked capture."
+        },
+        {
+          "step_id": "destination",
+          "screen_title": "환경설정",
+          "activity_name": "SanitizedActivity",
+          "stage": "destination",
+          "elements": [
+            {"id": "language", "label": "언어 및 지역", "role": "button"},
+            {"id": "theme", "label": "테마", "role": "button"}
+          ],
+          "expected_function": "settings.language",
+          "expected_label": "언어 및 지역",
+          "expected_action": "stop",
+          "source": "human_verified_real_device",
+          "notes": "The final state-changing choice remains a user action."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,600 @@
+{
+  "description": "Solar Pro 3 generated ExitGuide demo workflows based on Korean Consumer Agency standard consultation cases.",
+  "metadata": {
+    "dataset_schema_version": "1.0",
+    "dataset_version": "2026-07-08.1",
+    "source_dataset": "data_go_kr_kca_standard_answers",
+    "model_provider": "upstage",
+    "model_name": "solar-pro3",
+    "model_id": "solar-pro3-260323",
+    "prompt_version": "solar_demo_workflow.v1",
+    "generated_at": "2026-07-08T21:12:06+09:00",
+    "legal_advice_policy": "not_legal_advice"
+  },
+  "workflows": [
+    {
+      "id": "solar_kca_873_ott_refund_cycle",
+      "case_number": "873",
+      "title": "약관_OTT구독서비스의 1개월 이내 계약해지 불가",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "인터넷정보이용서비스",
+        "category": "약관_OTT구독서비스의 1개월 이내 계약해지 불가",
+        "public_case_number": "873"
+      },
+      "demo_input": {
+        "user_goal": "Cancel an OTT subscription now and avoid an unfair no-refund stop screen.",
+        "screen_context": "Subscription cancellation screen says the current billing cycle cannot be refunded.",
+        "visible_screen_text": [
+          "Membership cancellation",
+          "No refund is available within the current billing cycle.",
+          "Cancellation applies from the next billing date.",
+          "Keep membership",
+          "Continue cancellation"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "medium",
+        "confidence": "medium",
+        "screen_summary": "The cancellation screen states that no refund is available within the current billing cycle and that cancellation applies from the next billing date.",
+        "goal_conflicts": [
+          {
+            "screen_text": "No refund is available within the current billing cycle.",
+            "risk_signal": "refund_limit",
+            "why_it_matters": "This conflicts with the user's goal to cancel now and avoid an unfair no-refund stop screen. The screen suggests refunds are impossible during the current cycle, which may be misleading under consumer protection laws."
+          },
+          {
+            "screen_text": "Cancellation applies from the next billing date.",
+            "risk_signal": "cooling_off_block",
+            "why_it_matters": "This could block immediate cancellation, which the user wants to achieve now. The reference case indicates that refunds may be possible within 7 days after the billing date."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "OTT subscription is considered a 'continuous transaction' under Korean consumer protection law, allowing cancellation at any time during the contract period, and refund may be required if the consumer did not use the service.",
+          "safe_user_facing_summary": "You may be able to cancel now and request a refund, especially if you haven't used the service. The screen's statement about no refunds may not be legally binding.",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Proceed with cancellation and request refund details, noting that refunds may be possible within 7 days of the billing date if no service was used.",
+          "avoid": "Stopping only because the screen says refund unavailable.",
+          "next_evidence_to_collect": [
+            "Confirmation of service usage during this billing cycle",
+            "Exact billing date and days elapsed",
+            "Provider's refund policy details"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User taps 'Continue cancellation' on the screen."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "App sends cancellation request to backend API."
+          },
+          {
+            "step": 3,
+            "actor": "api",
+            "output": "API processes cancellation request and returns confirmation with refund policy details."
+          },
+          {
+            "step": 4,
+            "actor": "retrieval",
+            "output": "System retrieves relevant consumer reference case (873) for comparison."
+          },
+          {
+            "step": 5,
+            "actor": "agent",
+            "output": "Agent compares screen text with reference case and identifies potential refund rights, then advises user to proceed with cancellation and request refund details."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "No refund is available within the current billing cycle."
+          },
+          {
+            "source": "screen",
+            "quote": "Cancellation applies from the next billing date."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "‘계속거래’는 계약기간 중 언제든지 해지할 수 있고, 사업자가 약관을 사유로 중도해지를 거부하는 경우 무효로 볼 수 있어 환급을 요구할 수 있습니다."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "계약이 적법하게 해지되었고 고객이 서비스를 이용하지 않은 경우 매 결제일 이후 7일 이내(구독기간 1개월 기준)에 해지하면 자동 납부한 금액 환급을 요구할 수 있습니다."
+          }
+        ]
+      }
+    },
+    {
+      "id": "solar_kca_863_excessive_penalty",
+      "case_number": "863",
+      "title": "계약해지?해제_중도해지 시 과도한 위약금 청구",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "인터넷정보이용서비스",
+        "category": "계약해지?해제_중도해지 시 과도한 위약금 청구",
+        "public_case_number": "863"
+      },
+      "demo_input": {
+        "user_goal": "Cancel an annual online video subscription and avoid an excessive penalty.",
+        "screen_context": "Cancellation screen says 50 percent of the remaining commitment will be charged.",
+        "visible_screen_text": [
+          "Annual plan cancellation",
+          "50 percent of the remaining commitment will be charged as a penalty.",
+          "Benefits end immediately after cancellation.",
+          "Keep plan",
+          "Accept penalty and cancel"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "medium",
+        "confidence": "medium",
+        "screen_summary": "Annual plan cancellation screen states that 50% of remaining commitment will be charged as a penalty, benefits end immediately, and offers two options: keep plan or accept penalty and cancel.",
+        "goal_conflicts": [
+          {
+            "screen_text": "50 percent of the remaining commitment will be charged as a penalty.",
+            "risk_signal": "excessive_penalty",
+            "why_it_matters": "The screen presents a 50% penalty which may be considered excessive under consumer protection standards, potentially conflicting with the user's goal to avoid excessive charges."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "The reference case states that a 50% refund clause can be considered invalid as an excessively burdensome penalty clause, and consumers can cancel by paying only 10% of the remaining period's usage fee according to the Consumer Dispute Resolution Standards.",
+          "safe_user_facing_summary": "You may be able to cancel by paying only 10% of the remaining period's usage fee instead of the 50% penalty shown on screen.",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Request confirmation from the service provider about the actual cancellation terms, as the screen's 50% penalty may not be legally enforceable.",
+          "avoid": "Accepting the 50% penalty without first confirming if a lower amount (e.g., 10%) is legally required.",
+          "next_evidence_to_collect": [
+            "Provider's official cancellation policy document",
+            "Terms of service regarding cancellation penalties"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User sees the cancellation screen showing 50% penalty and decides to seek clarification before proceeding."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "App displays the cancellation screen with the 50% penalty notice and the two action buttons."
+          },
+          {
+            "step": 3,
+            "actor": "api",
+            "output": "API retrieves the cancellation policy from the backend service provider."
+          },
+          {
+            "step": 4,
+            "actor": "retrieval",
+            "output": "System retrieves the relevant consumer reference case (Case 863) from the knowledge base."
+          },
+          {
+            "step": 5,
+            "actor": "agent",
+            "output": "Agent analyzes the screen text against the reference case and determines that the 50% penalty may be excessive, recommending further confirmation."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "50 percent of the remaining commitment will be charged as a penalty."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "잔여 약정 의무액의 50%만 환불하는 조항은 고객에게 부당하게 과중한 손해배상 의무를 부담시키는 약관조항일 뿐만 아니라... 무효에 해당하므로... 잔여기간 이용요금의 10%을 지급한 후 계약을 해지할 수 있다고 판단됩니다."
+          }
+        ]
+      }
+    },
+    {
+      "id": "solar_kca_846_online_lecture_refund",
+      "case_number": "846",
+      "title": "계약해제·해지_중도해지_소비자 귀책",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "인터넷교육서비스",
+        "category": "계약해제·해지_중도해지_소비자 귀책",
+        "public_case_number": "846"
+      },
+      "demo_input": {
+        "user_goal": "Cancel an online lecture contract and request a refund for the unused period.",
+        "screen_context": "Online lecture service says cancellation is allowed only after three or fewer lessons.",
+        "visible_screen_text": [
+          "Course cancellation request",
+          "Mid-term cancellation is allowed only when three or fewer lessons were taken.",
+          "You have taken four lessons and are not eligible for a refund.",
+          "Contact support",
+          "Cancel request"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "medium",
+        "confidence": "medium",
+        "screen_summary": "The screen states that mid-term cancellation is only allowed when three or fewer lessons have been taken, and the user has taken four lessons, making them ineligible for a refund according to the displayed policy.",
+        "goal_conflicts": [
+          {
+            "screen_text": "Mid-term cancellation is allowed only when three or fewer lessons were taken.",
+            "risk_signal": "cooling_off_block",
+            "why_it_matters": "The screen blocks the user's goal of canceling after four lessons, claiming they are not eligible for a refund, which may conflict with consumer protection laws that allow cancellation within a cooling-off period or under certain conditions."
+          },
+          {
+            "screen_text": "You have taken four lessons and are not eligible for a refund.",
+            "risk_signal": "refund_limit",
+            "why_it_matters": "The screen explicitly states the user is ineligible for a refund, which may be misleading if consumer protection laws provide for partial refunds or other remedies."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "The consumer reference case indicates that for a 12-month internet lecture contract, cancellation is allowed even after 4 lessons, with refund calculated as days used plus 10% of remaining period, or full refund within 7 days of contract.",
+          "safe_user_facing_summary": "You may still be eligible for a partial refund even after taking four lessons, depending on the contract terms and applicable consumer protection laws. Contact support to discuss your options.",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Contact support to request a refund for the unused period, citing the consumer reference case and relevant consumer protection laws.",
+          "avoid": "Do not stop only because the screen says refund unavailable; seek further clarification or escalate the request.",
+          "next_evidence_to_collect": [
+            "Contract terms and conditions",
+            "Proof of lesson completion dates",
+            "Any written confirmation of cancellation policy"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User reads the cancellation screen and sees they are ineligible for refund after 4 lessons."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "User taps 'Contact support' button to initiate refund request."
+          },
+          {
+            "step": 3,
+            "actor": "api",
+            "output": "Support ticket is created with user's cancellation request and lesson count."
+          },
+          {
+            "step": 4,
+            "actor": "retrieval",
+            "output": "System retrieves relevant consumer protection guidelines and contract terms for reference."
+          },
+          {
+            "step": 5,
+            "actor": "agent",
+            "output": "Agent reviews the case and prepares a response citing the consumer reference case and applicable laws."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "Mid-term cancellation is allowed only when three or fewer lessons were taken."
+          },
+          {
+            "source": "screen",
+            "quote": "You have taken four lessons and are not eligible for a refund."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "4강까지 수강하였더라도 사업자에게 중도해지 및 환급을 요구할 수 있습니다."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "해지일까지의 이용 일수에 해당하는 금액과 잔여기간 이용금액의 10%를 공제한 후 환급하도록 규정하고 있습니다."
+          }
+        ]
+      }
+    },
+    {
+      "id": "solar_kca_435_mobile_app_subscription",
+      "case_number": "435",
+      "title": "계약해지_모바일앱_중도해지 불가",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "모바일정보이용서비스",
+        "category": "계약해지_모바일앱_중도해지 불가",
+        "public_case_number": "435"
+      },
+      "demo_input": {
+        "user_goal": "Cancel a one-year mobile app subscription and request a refund for the unused period.",
+        "screen_context": "Mobile app subscription screen says only cancellations within 48 hours receive a full refund.",
+        "visible_screen_text": [
+          "Premium plan cancellation",
+          "Full refund is available only within 48 hours after payment.",
+          "No refund is provided for the remaining period.",
+          "Keep benefits",
+          "Request cancellation"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "high",
+        "confidence": "high",
+        "screen_summary": "The mobile app subscription screen states that only cancellations within 48 hours after payment receive a full refund, and no refund is provided for the remaining period.",
+        "goal_conflicts": [
+          {
+            "screen_text": "Full refund is available only within 48 hours after payment.",
+            "risk_signal": "refund_limit",
+            "why_it_matters": "This screen text directly contradicts the user's goal of receiving a refund for the unused period after the 48-hour window, creating a potential barrier to achieving the desired outcome."
+          },
+          {
+            "screen_text": "No refund is provided for the remaining period.",
+            "risk_signal": "refund_limit",
+            "why_it_matters": "This statement suggests that refunds for unused periods are categorically unavailable, which conflicts with the user's expectation of prorated refund based on unused time."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "The consumer reference case confirms that mid-term refund clauses are invalid under Korean consumer protection laws, and consumers can request refunds after deducting 10% of the remaining period fee.",
+          "safe_user_facing_summary": "You may request a refund for the unused period after deducting 10% of the remaining fee, regardless of the 48-hour window stated on the screen.",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Request cancellation and ask for a prorated refund (deducting 10% of remaining period fee) even though it's past 48 hours.",
+          "avoid": "Accepting the screen's statement that no refund is available for the remaining period.",
+          "next_evidence_to_collect": [
+            "Cancellation confirmation email",
+            "Payment receipt showing subscription start date",
+            "Terms of service regarding refund policy"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User taps 'Request cancellation' on the mobile app screen."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "App shows cancellation confirmation screen with refund policy text."
+          },
+          {
+            "step": 3,
+            "actor": "user",
+            "output": "User reads the refund policy and notes the 48-hour limitation."
+          },
+          {
+            "step": 4,
+            "actor": "api",
+            "output": "API retrieves consumer reference case 435 regarding mobile app mid-term refund rights."
+          },
+          {
+            "step": 5,
+            "actor": "retrieval",
+            "output": "System extracts key legal guidance: 10% deduction allowed, 48-hour clause invalid."
+          },
+          {
+            "step": 6,
+            "actor": "agent",
+            "output": "Agent informs user that they may request a prorated refund despite the screen's statement."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "Full refund is available only within 48 hours after payment."
+          },
+          {
+            "source": "screen",
+            "quote": "No refund is provided for the remaining period."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "해지일까지의 이용일수에 해당하는 금액과 잔여기간 이용요금의 10% 공제 후 나머지 금액에 대해 환급을 요구할 수 있습니다."
+          }
+        ]
+      }
+    },
+    {
+      "id": "solar_kca_970_door_to_door_rental",
+      "case_number": "970",
+      "title": "계약해제·해지_방문판매",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "정수기대여",
+        "category": "계약해제·해지_방문판매",
+        "public_case_number": "970"
+      },
+      "demo_input": {
+        "user_goal": "Cancel a water purifier rental contract made through door-to-door sales shortly after installation.",
+        "screen_context": "Rental contract screen says cancellation is unavailable after installation.",
+        "visible_screen_text": [
+          "Rental contract cancellation",
+          "Installed products cannot be cancelled.",
+          "Keeping the contract preserves promotional benefits.",
+          "Keep contract",
+          "Ask about cancellation"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "needs_check",
+        "confidence": "medium",
+        "screen_summary": "The rental contract screen states that cancellation is unavailable after installation and encourages keeping the contract to preserve promotional benefits.",
+        "goal_conflicts": [
+          {
+            "screen_text": "Installed products cannot be cancelled.",
+            "risk_signal": "cooling_off_block",
+            "why_it_matters": "The screen claims cancellation is impossible after installation, which contradicts the consumer's right to cancel within 14 days of door-to-door sales under Korean consumer protection laws."
+          },
+          {
+            "screen_text": "Keeping the contract preserves promotional benefits.",
+            "risk_signal": "misleading_retention",
+            "why_it_matters": "This phrasing suggests promotional benefits are tied to keeping the contract, potentially misleading consumers about their cancellation rights."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "Applicable law allows cancellation within 14 days of door-to-door sales regardless of installation status.",
+          "safe_user_facing_summary": "You may request cancellation within 14 days of signing the door-to-door rental contract. The screen's statement that cancellation is unavailable after installation may not reflect your legal rights.",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Ask about cancellation using a method that provides proof (e.g., email or written request).",
+          "avoid": "Stopping only because the screen says refund unavailable.",
+          "next_evidence_to_collect": [
+            "Contract signing date",
+            "Installation date",
+            "Written cancellation request evidence"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User sees the screen stating cancellation is unavailable after installation and considers their goal to cancel shortly after installation."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "App presents the screen text and offers an option to 'Ask about cancellation' which routes to customer service."
+          },
+          {
+            "step": 3,
+            "actor": "api",
+            "output": "API retrieves the consumer reference case (970) about door-to-door water purifier rental cancellation rights."
+          },
+          {
+            "step": 4,
+            "actor": "retrieval",
+            "output": "System extracts key legal points: 14-day cooling-off period applies even after installation for door-to-door sales."
+          },
+          {
+            "step": 5,
+            "actor": "agent",
+            "output": "Agent informs user that while the screen says cancellation is unavailable, Korean law may allow cancellation within 14 days, and they should request cancellation with proof."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "Installed products cannot be cancelled."
+          },
+          {
+            "source": "screen",
+            "quote": "Keeping the contract preserves promotional benefits."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "방문판매원을 통해 계약을 체결하였다면 「방문판매 등에 관한 법률」 제8조(청약철회등)에 따라 정수기를 설치한 날로부터 14일 이내에 서면으로 계약의 해제 또는 청약의 철회를 요구할 수 있습니다."
+          }
+        ]
+      }
+    },
+    {
+      "id": "solar_kca_865_phone_solicitation_digital_service",
+      "case_number": "865",
+      "title": "청약철회_전화권유판매로 계약한 주식자동매매 정보서비스의 청약철회",
+      "source_reference": {
+        "dataset": "data_go_kr_kca_standard_answers",
+        "product": "인터넷정보이용서비스",
+        "category": "청약철회_전화권유판매로 계약한 주식자동매매 정보서비스의 청약철회",
+        "public_case_number": "865"
+      },
+      "demo_input": {
+        "user_goal": "Withdraw from a stock auto-trading information service sold by phone solicitation and request a refund.",
+        "screen_context": "Information service screen says refund is unavailable because the product includes intellectual property.",
+        "visible_screen_text": [
+          "Service withdrawal",
+          "This digital content includes intellectual property and is non-refundable.",
+          "Provided information cannot be recovered.",
+          "Continue service",
+          "Request withdrawal"
+        ]
+      },
+      "model_result": {
+        "model_provider": "upstage",
+        "model_id": "solar-pro3-260323",
+        "prompt_version": "solar_demo_workflow.v1",
+        "risk_level": "needs_check",
+        "confidence": "medium",
+        "screen_summary": "The screen states that withdrawal is possible but the service is non-refundable due to intellectual property, and that provided information cannot be recovered.",
+        "goal_conflicts": [
+          {
+            "screen_text": "This digital content includes intellectual property and is non-refundable.",
+            "risk_signal": "refund_limit",
+            "why_it_matters": "The screen explicitly claims refunds are unavailable, which conflicts with the user's goal of obtaining a refund."
+          },
+          {
+            "screen_text": "Provided information cannot be recovered.",
+            "risk_signal": "cooling_off_block",
+            "why_it_matters": "This suggests the service cannot be returned, potentially blocking the user's ability to withdraw and get a refund."
+          }
+        ],
+        "reference_guidance": {
+          "matched_point": "The reference case confirms that for phone-solicited stock auto-trading information services, withdrawal is possible within 14 days, and refund refusal based solely on intellectual property is not valid unless proper measures were taken to prevent withdrawal.",
+          "safe_user_facing_summary": "You may request a refund within the withdrawal period, but the business might refuse if they took steps to prevent withdrawal (like showing non-refundable notices or providing trial content).",
+          "not_legal_advice": true
+        },
+        "recommended_action": {
+          "primary": "Request withdrawal and ask for refund despite the screen's claim.",
+          "avoid": "Stopping the process only because the screen says refund unavailable.",
+          "next_evidence_to_collect": [
+            "Confirmation of whether the business displayed non-refundable notices or provided trial content",
+            "Proof of when you received the contract and when the service started"
+          ]
+        },
+        "demo_workflow_steps": [
+          {
+            "step": 1,
+            "actor": "user",
+            "output": "User sees the screen stating non-refundable due to intellectual property and decides to proceed with withdrawal request."
+          },
+          {
+            "step": 2,
+            "actor": "mobile_app",
+            "output": "App presents the withdrawal request form and notes the refund limitation."
+          },
+          {
+            "step": 3,
+            "actor": "api",
+            "output": "API sends withdrawal request to backend with user's intent to request refund."
+          },
+          {
+            "step": 4,
+            "actor": "retrieval",
+            "output": "System retrieves relevant consumer protection law and reference case information."
+          },
+          {
+            "step": 5,
+            "actor": "agent",
+            "output": "Agent informs user that while the screen says non-refundable, they may still request a refund within the withdrawal period, and advises to proceed with the request."
+          }
+        ],
+        "evidence_quotes": [
+          {
+            "source": "screen",
+            "quote": "This digital content includes intellectual property and is non-refundable."
+          },
+          {
+            "source": "screen",
+            "quote": "Provided information cannot be recovered."
+          },
+          {
+            "source": "consumer_reference_case",
+            "quote": "청약철회 기간 이내이면 환급 요구가 가능하나 청약철회 등이 불가능하다는 사실의 표시와 함께 시험사용 상품을 제공하는 등의 방법으로 청약철회 등의 권리행사가 방해받지 않도록 조치를 했다면 청약철회가 제한될 수 있습니다."
+          }
+        ]
+      }
+    }
+  ]
+}

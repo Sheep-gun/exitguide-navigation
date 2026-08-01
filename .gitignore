@@ -1,31 +1,27 @@
-# Local credentials
-.env
-.env.local
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-.mypy_cache/
-
-# Node / Android
+# Dependencies
 node_modules/
 .expo/
+.expo-shared/
+__pycache__/
+.venv/
+.tools/
+.logs/
+.artifacts/
+
+# Build outputs
+dist/
+build/
 android/
 ios/
 *.apk
 *.aab
 
-# Generated and local runtime data
-.logs/
-.artifacts/
-.cache/
-dist/
-build/
+# Local config
+.env
+.env.local
 
-# Editors and OS
-.vscode/
-.idea/
+# OS/editor
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/

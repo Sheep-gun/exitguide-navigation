@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EGL Navigation MVP</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17211d;
+        --muted: #63706a;
+        --line: #d8dfda;
+        --paper: #f3f6f3;
+        --card: #ffffff;
+        --green: #0c6b4f;
+        --green-soft: #e2f2eb;
+        --amber: #9b5d00;
+        --amber-soft: #fff1d6;
+        --red: #a83d32;
+        font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      body { background: var(--paper); color: var(--ink); margin: 0; }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+
+      main {
+        margin: 0 auto;
+        max-width: 1120px;
+        padding: 28px 20px 56px;
+      }
+
+      header {
+        align-items: end;
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        margin-bottom: 24px;
+      }
+
+      h1, h2, p { margin: 0; }
+      h1 { font-size: clamp(28px, 4vw, 48px); line-height: 1.05; margin-top: 8px; }
+      h2 { font-size: 18px; }
+      p { color: var(--muted); line-height: 1.55; }
+      a { color: var(--green); font-weight: 800; }
+
+      .eyebrow { color: var(--green); font-size: 13px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+      .layout { display: grid; gap: 22px; grid-template-columns: minmax(320px, 0.8fr) minmax(400px, 1.2fr); }
+      .panel { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 18px; }
+      .stack { display: grid; gap: 14px; }
+
+      label { color: var(--muted); display: grid; font-size: 12px; font-weight: 900; gap: 7px; text-transform: uppercase; }
+      input { border: 1px solid var(--line); border-radius: 6px; color: var(--ink); padding: 12px; width: 100%; }
+      input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid #87cdb6; outline-offset: 2px; }
+
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+      .toolbar button, .link-button {
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--ink);
+        font-weight: 800;
+        padding: 10px 12px;
+      }
+      .toolbar button:hover { border-color: var(--green); }
+      .toolbar .primary { background: var(--green); border-color: var(--green); color: white; }
+
+      .facts { display: grid; gap: 8px; grid-template-columns: repeat(2, 1fr); }
+      .fact { border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+      .fact strong { display: block; font-size: 18px; }
+      .fact span { color: var(--muted); font-size: 11px; }
+
+      .phone-shell { background: #202823; border: 8px solid #202823; border-radius: 34px; margin: 0 auto; max-width: 400px; min-height: 700px; overflow: hidden; position: relative; }
+      .phone-bar { align-items: center; background: #f8faf8; display: flex; font-size: 12px; font-weight: 800; justify-content: space-between; padding: 12px 18px 9px; }
+      .app-screen { background: #fbfcfb; min-height: 647px; padding: 24px 18px 250px; }
+      .app-title { font-size: 25px; margin-bottom: 7px; }
+      .screen-note { font-size: 13px; margin-bottom: 20px; }
+      .screen-elements { display: grid; gap: 10px; }
+      .screen-element { background: white; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); padding: 14px; text-align: left; width: 100%; }
+      .screen-element[disabled] { cursor: default; opacity: 1; }
+      .screen-element.clickable:hover { border-color: var(--green); transform: translateY(-1px); }
+      .screen-element small { color: var(--muted); display: block; margin-top: 5px; }
+      .target { border-color: var(--green); box-shadow: inset 4px 0 var(--green); }
+      .risk-high { border-color: #c95a4d; box-shadow: inset 4px 0 #c13d30; }
+      .risk-medium { border-color: #dfad58; box-shadow: inset 4px 0 #c78218; }
+
+      .floating-guide {
+        background: #ffffff;
+        border: 1px solid #b9c8c0;
+        border-radius: 12px 12px 20px 20px;
+        bottom: 0;
+        box-shadow: 0 -12px 34px rgb(26 45 36 / 0.16);
+        display: grid;
+        gap: 10px;
+        left: 0;
+        padding: 16px;
+        position: absolute;
+        right: 0;
+      }
+      .guide-head { align-items: center; display: flex; justify-content: space-between; }
+      .badge-row { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+      .badge { background: var(--green-soft); border-radius: 999px; color: var(--green); font-size: 11px; font-weight: 900; padding: 5px 8px; }
+      .badge.high { background: #fbe5e2; color: #a93429; }
+      .badge.medium { background: var(--amber-soft); color: var(--amber); }
+      .badge.low { background: var(--green-soft); color: var(--green); }
+      .instruction { color: var(--ink); font-size: 16px; font-weight: 900; line-height: 1.45; }
+      .warning { background: var(--amber-soft); border-left: 3px solid var(--amber); color: #6c4308; font-size: 13px; padding: 9px 10px; }
+      .terms { background: #edf2ff; border-left: 3px solid #4c68b4; color: #273864; font-size: 12px; max-height: 88px; overflow: auto; padding: 9px 10px; }
+
+      .event-log { border-top: 1px solid var(--line); display: grid; gap: 8px; max-height: 225px; overflow: auto; padding-top: 12px; }
+      .event { color: var(--muted); font-size: 12px; }
+      .event strong { color: var(--ink); }
+      .footnote { font-size: 12px; }
+      .error { color: var(--red); font-weight: 800; }
+
+      @media (max-width: 850px) {
+        header { align-items: start; flex-direction: column; }
+        .layout { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">ExitGuideLab · Vertical slice</div>
+          <h1>목적 기반 UI 내비게이션 MVP</h1>
+          <p>가상 스트리밍 앱의 구독 해지 경로를 사용자가 직접 누르며, 화면 재인식·이탈 복구·약관 근거 결합을 확인합니다.</p>
+        </div>
+        <a href="./dark-pattern.html">다크패턴 MVP 단독 체험</a>
+      </header>
+
+      <section class="layout">
+        <aside class="panel stack">
+          <h2>실행 설정</h2>
+          <label>
+            API Base URL
+            <input id="apiBaseUrl" type="url" value="http://127.0.0.1:8010" spellcheck="false" />
+          </label>
+          <label>
+            사용자 목적
+            <input id="goalText" value="자동결제를 해제하고 싶어" />
+          </label>
+          <div class="toolbar">
+            <button id="start" class="primary" type="button">처음부터 실행</button>
+            <button id="variant" type="button">UI 문구 변형</button>
+            <button id="detour" type="button">경로 이탈 테스트</button>
+          </div>
+          <div class="facts">
+            <div class="fact"><strong id="stepFact">1/6</strong><span>현재 단계</span></div>
+            <div class="fact"><strong id="confidenceFact">-</strong><span>매칭 확신도</span></div>
+            <div class="fact"><strong id="stateFact">대기</strong><span>경로 상태</span></div>
+            <div class="fact"><strong id="riskFact">-</strong><span>다크패턴 위험</span></div>
+          </div>
+          <p class="footnote">이 데모의 앱과 경로는 합성 데이터입니다. 실제 앱 경로는 사람이 검수한 경로 파일로 교체합니다.</p>
+          <div>
+            <h2>동작 로그</h2>
+          </div>
+          <div id="eventLog" class="event-log" aria-live="polite"></div>
+        </aside>
+
+        <section class="panel">
+          <div class="phone-shell" aria-label="가상 Android 앱 화면">
+            <div class="phone-bar"><span>12:30</span><span>EGL Stream</span><span>5G · 92%</span></div>
+            <div class="app-screen">
+              <h2 id="screenTitle" class="app-title"></h2>
+              <p id="screenNote" class="screen-note"></p>
+              <div id="screenElements" class="screen-elements"></div>
+            </div>
+            <div id="floatingGuide" class="floating-guide" aria-live="polite">
+              <div class="guide-head"><strong>EGL Navigation</strong><span class="badge">연결 중</span></div>
+              <p class="instruction">API에서 현재 화면을 확인하고 있습니다.</p>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const screens = [
+        {
+          stateId: "profile_home",
+          title: "계정",
+          note: "설정과 멤버십 메뉴가 함께 있는 계정 화면",
+          elements: [
+            { id: "profile", text: "프로필", clickable: false, role: "text" },
+            { id: "membership-catalog", text: "구매 항목 및 멤버십", variant: "멤버십 및 구매", clickable: true, role: "button", prominence: 2 },
+            { id: "privacy", text: "개인정보", clickable: true, role: "button" },
+            { id: "notifications", text: "알림", clickable: true, role: "button" },
+          ],
+        },
+        {
+          stateId: "membership_home",
+          title: "구매 항목 및 멤버십",
+          note: "현재 이용 중인 상품과 결제 내역",
+          elements: [
+            { id: "premium", text: "Premium 멤버십", clickable: true, role: "button", note: "다음 결제일 8월 10일", prominence: 2 },
+            { id: "history", text: "결제 내역", clickable: true, role: "button" },
+            { id: "gift", text: "선물 코드", clickable: true, role: "button" },
+          ],
+        },
+        {
+          stateId: "membership_management",
+          title: "멤버십 관리",
+          note: "Premium · 다음 결제일 8월 10일",
+          elements: [
+            { id: "payment", text: "결제 수단 변경", clickable: true, role: "button", prominence: 2 },
+            { id: "deactivate", text: "비활성화", variant: "멤버십 해지", clickable: true, role: "button", prominence: 1 },
+          ],
+        },
+        {
+          stateId: "retention_offer",
+          title: "혜택을 잠시 멈출까요?",
+          note: "해지 대신 일시중지를 제안하는 화면",
+          elements: [
+            { id: "pause", text: "일시중지", clickable: true, role: "button", note: "다음 달 다시 시작", prominence: 3 },
+            { id: "continue", text: "계속 해지", variant: "해지 계속", clickable: true, role: "button", prominence: 1 },
+          ],
+        },
+        {
+          stateId: "cancel_confirmation",
+          title: "해지 확인",
+          note: "이용 종료일 8월 10일 · 다음 결제 없음",
+          elements: [
+            { id: "confirm", text: "Premium 해지", variant: "해지 확인", clickable: true, role: "button", prominence: 2 },
+            { id: "return", text: "돌아가기", clickable: true, role: "button" },
+          ],
+        },
+        {
+          stateId: "cancel_complete",
+          title: "해지 완료",
+          note: "Premium 멤버십 종료 · 다음 결제 없음",
+          elements: [
+            { id: "done", text: "구독 해지가 완료되었습니다", clickable: false, role: "status" },
+          ],
+        },
+      ];
+
+      const offRouteScreen = {
+        stateId: null,
+        title: "고객센터",
+        note: "검증된 구독 해지 경로에 없는 화면",
+        elements: [
+          { id: "faq", text: "자주 묻는 질문", clickable: true, role: "button" },
+          { id: "safe-back", text: "이전 화면으로 돌아가기", clickable: true, role: "button", back: true },
+        ],
+      };
+
+      let screenIndex = 0;
+      let offRoute = false;
+      let previousIndex = 0;
+      let variantMode = false;
+      let lastConfirmedStateId = null;
+      let failedElementIds = [];
+      let retryCount = 0;
+      let currentGuide = null;
+
+      const apiBaseUrl = document.querySelector("#apiBaseUrl");
+      const goalText = document.querySelector("#goalText");
+      const screenTitle = document.querySelector("#screenTitle");
+      const screenNote = document.querySelector("#screenNote");
+      const screenElements = document.querySelector("#screenElements");
+      const floatingGuide = document.querySelector("#floatingGuide");
+      const eventLog = document.querySelector("#eventLog");
+
+      const apiOverride = new URLSearchParams(window.location.search).get("api");
+      if (apiOverride) {
+        apiBaseUrl.value = apiOverride;
+      } else if (window.location.protocol.startsWith("http") && window.location.port !== "8020") {
+        apiBaseUrl.value = window.location.origin;
+      }
+
+      document.querySelector("#start").addEventListener("click", resetDemo);
+      document.querySelector("#variant").addEventListener("click", () => {
+        variantMode = !variantMode;
+        log("UI 변형", variantMode ? "대체 문구를 사용합니다." : "기본 문구를 사용합니다.");
+        renderScreen();
+        requestGuide();
+      });
+      document.querySelector("#detour").addEventListener("click", enterDetour);
+      goalText.addEventListener("change", requestGuide);
+
+      resetDemo();
+
+      function resetDemo() {
+        screenIndex = 0;
+        offRoute = false;
+        previousIndex = 0;
+        lastConfirmedStateId = null;
+        failedElementIds = [];
+        retryCount = 0;
+        currentGuide = null;
+        eventLog.innerHTML = "";
+        log("세션 시작", "사용자 목적을 화면 경로로 변환합니다.");
+        renderScreen();
+        requestGuide();
+      }
+
+      function activeScreen() {
+        return offRoute ? offRouteScreen : screens[screenIndex];
+      }
+
+      function renderScreen() {
+        const screen = activeScreen();
+        screenTitle.textContent = screen.title;
+        screenNote.textContent = screen.note;
+        screenElements.innerHTML = "";
+        screen.elements.forEach((element) => {
+          const label = variantMode && element.variant ? element.variant : element.text;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `screen-element ${element.clickable ? "clickable" : ""}`;
+          button.disabled = !element.clickable;
+          button.dataset.elementId = element.id;
+          button.innerHTML = `${escapeHtml(label)}${element.note ? `<small>${escapeHtml(element.note)}</small>` : ""}`;
+          const analyzedElement = currentGuide?.dark_pattern?.elements?.find((item) => item.id === element.id);
+          if (analyzedElement?.risk_level === "high") button.classList.add("risk-high");
+          if (analyzedElement?.risk_level === "medium") button.classList.add("risk-medium");
+          if (currentGuide?.target_element_id === element.id) button.classList.add("target");
+          if (element.clickable) button.addEventListener("click", () => handleElementClick(element));
+          screenElements.append(button);
+        });
+        document.querySelector("#stepFact").textContent = offRoute ? "이탈" : `${screenIndex + 1}/6`;
+      }
+
+      function handleElementClick(element) {
+        if (element.back) {
+          offRoute = false;
+          screenIndex = previousIndex;
+          log("복구", "사용자가 뒤로 가기를 눌러 마지막 확인 화면으로 돌아왔습니다.");
+          renderScreen();
+          requestGuide();
+          return;
+        }
+        if (currentGuide?.target_element_id === element.id) {
+          const confirmed = screens[screenIndex].stateId;
+          lastConfirmedStateId = confirmed;
+          retryCount = 0;
+          failedElementIds = [];
+          log("사용자 클릭", `'${element.text}' 선택 · 자동 클릭하지 않음`);
+          if (screenIndex < screens.length - 1) screenIndex += 1;
+          offRoute = false;
+          renderScreen();
+          requestGuide();
+          return;
+        }
+        failedElementIds.push(element.id);
+        retryCount += 1;
+        enterDetour(`'${element.text}'은 현재 추천 대상이 아닙니다.`);
+      }
+
+      function enterDetour(reason = "사용자가 확인 경로 밖의 메뉴로 이동했습니다.") {
+        if (!offRoute) previousIndex = screenIndex;
+        lastConfirmedStateId = screens[previousIndex].stateId;
+        offRoute = true;
+        log("경로 이탈", reason);
+        renderScreen();
+        requestGuide();
+      }
+
+      async function requestGuide() {
+        const screen = activeScreen();
+        renderLoading();
+        try {
+          const response = await fetch(`${apiBaseUrl.value.trim().replace(/\/$/, "")}/v1/navigation/guide`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              request_id: `web_${Date.now()}`,
+              app_package: "lab.exitguide.stream.demo",
+              app_version: "1.0.0",
+              platform: "android",
+              locale: "ko-KR",
+              goal_text: goalText.value.trim(),
+              session: {
+                last_confirmed_state_id: lastConfirmedStateId,
+                failed_element_ids: failedElementIds,
+                failed_candidate_meanings: [],
+                retry_count: retryCount,
+              },
+              screen_elements: [
+                {
+                  id: "screen-title",
+                  text: screen.title,
+                  content_description: null,
+                  view_id: "lab.exitguide.stream.demo:id/screen-title",
+                  role: "heading",
+                  clickable: false,
+                  bounds: [24, 44, 980, 96],
+                  prominence: 1,
+                  default_selected: false,
+                  optional: false,
+                  monetary_impact: false,
+                },
+                {
+                  id: "screen-note",
+                  text: screen.note,
+                  content_description: null,
+                  view_id: "lab.exitguide.stream.demo:id/screen-note",
+                  role: "text",
+                  clickable: false,
+                  bounds: [24, 98, 980, 132],
+                  prominence: 1,
+                  default_selected: false,
+                  optional: false,
+                  monetary_impact: false,
+                },
+                ...screen.elements.map((element, index) => ({
+                  id: element.id,
+                  text: variantMode && element.variant ? element.variant : element.text,
+                  content_description: null,
+                  view_id: `lab.exitguide.stream.demo:id/${element.id}`,
+                  role: element.role,
+                  clickable: element.clickable,
+                  bounds: [24, 140 + index * 72, 980, 196 + index * 72],
+                  prominence: element.prominence ?? 1,
+                  default_selected: element.defaultSelected ?? false,
+                  optional: element.optional ?? false,
+                  monetary_impact: element.monetaryImpact ?? false,
+                })),
+              ],
+            }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          currentGuide = await response.json();
+          renderGuide(currentGuide);
+          renderScreen();
+          log("화면 판독", `${currentGuide.navigation_state} · ${Math.round(currentGuide.confidence * 100)}%`);
+          log("다크패턴 판독", `${currentGuide.dark_pattern.overall_risk.toUpperCase()} · ${currentGuide.dark_pattern.findings.length}개 감지`);
+        } catch (error) {
+          currentGuide = null;
+          floatingGuide.innerHTML = `<div class="guide-head"><strong>EGL Navigation</strong><span class="badge">오류</span></div><p class="error">${escapeHtml(error instanceof Error ? error.message : "API 연결 실패")}</p>`;
+          document.querySelector("#stateFact").textContent = "오류";
+          document.querySelector("#riskFact").textContent = "오류";
+        }
+      }
+
+      function renderLoading() {
+        floatingGuide.innerHTML = '<div class="guide-head"><strong>EGL Navigation</strong><span class="badge">분석 중</span></div><p class="instruction">현재 화면의 텍스트와 버튼 역할을 확인하고 있습니다.</p>';
+      }
+
+      function renderGuide(guide) {
+        const stateLabel = {
+          on_route: "정상 경로",
+          reanchored: "경로 재탐색",
+          recovery_required: "복구 필요",
+          needs_review: "검수 필요",
+          completed: "목표 완료",
+          route_not_found: "경로 없음",
+        }[guide.navigation_state] ?? guide.navigation_state;
+        const darkPattern = guide.dark_pattern;
+        floatingGuide.innerHTML = `
+          <div class="guide-head">
+            <strong>EGL 통합 안내</strong>
+            <div class="badge-row">
+              <span class="badge">${escapeHtml(stateLabel)}</span>
+              <span class="badge ${escapeHtml(darkPattern.overall_risk)}">다크패턴 ${escapeHtml(darkPattern.overall_risk.toUpperCase())}</span>
+            </div>
+          </div>
+          <p class="instruction">${escapeHtml(guide.instruction)}</p>
+          ${(darkPattern.findings || []).slice(0, 2).map((finding) => `<div class="warning"><strong>${escapeHtml(finding.label)}</strong><br />${escapeHtml(finding.explanation)}</div>`).join("")}
+          ${guide.warning && !(darkPattern.findings || []).length ? `<div class="warning">${escapeHtml(guide.warning)}</div>` : ""}
+          ${guide.requires_user_confirmation ? '<div class="warning">이 단계는 사용자가 직접 확인하고 눌러야 합니다.</div>' : ""}
+          ${guide.terms_hint ? `<div class="terms"><strong>약관 근거</strong><br />${escapeHtml(guide.terms_hint.summary)}</div>` : ""}
+        `;
+        document.querySelector("#confidenceFact").textContent = `${Math.round(guide.confidence * 100)}%`;
+        document.querySelector("#stateFact").textContent = stateLabel;
+        document.querySelector("#riskFact").textContent = darkPattern.overall_risk.toUpperCase();
+      }
+
+      function log(title, detail) {
+        const item = document.createElement("div");
+        item.className = "event";
+        item.innerHTML = `<strong>${escapeHtml(title)}</strong> · ${escapeHtml(detail)}`;
+        eventLog.prepend(item);
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
+        })[character]);
+      }
+    </script>
+  </body>
+</html>

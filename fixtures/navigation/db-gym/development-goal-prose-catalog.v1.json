@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "fixture_version": "development-goal-prose-catalog.v1",
+  "split": "development",
+  "frozen": false,
+  "catalog_derived": true,
+  "tuning_allowed": true,
+  "independent_accuracy_evidence": false,
+  "source_kind": "catalog_derived_template_generator",
+  "description": "Deterministic development-only prose transformations generated from canonical catalog fields. Results are tuning diagnostics, never independent accuracy evidence.",
+  "cases_per_category": 40,
+  "templates": {
+    "long_prose": "There may be several nearby menus and unrelated details on this screen. The outcome I need at this point is {target}. Please guide me to that destination and leave the final action to me.",
+    "role": "I am working in the role of {role}. For the current workflow, my actual goal is {target}. Please take me only to the relevant destination.",
+    "asset": "The current asset belongs to the {asset} area. The immediate task for that asset is {target}. Other surrounding controls are only context.",
+    "lifecycle_state": "This item is currently at the {state} lifecycle or state. What I actually need now is {target}. Stop when the relevant destination is reached.",
+    "negation": "Do not take me to {decoy}. That is not the requested operation. My actual goal is {target}.",
+    "decoy_clause": "For context, I previously looked at {decoy}, and nearby text may still mention it. That is only background; my actual goal is {target}."
+  }
+}

@@ -1,0 +1,1137 @@
+{
+  "schema_version": 1,
+  "manifest_id": "exitguide-real-device-observation-apps-v1",
+  "dataset_role": "real_device_observation_candidate",
+  "provenance": "real_device_observation_candidate",
+  "review_status": "unreviewed_candidate",
+  "route_lifecycle": "shadow",
+  "canonical_catalog_mutation": false,
+  "canonical_catalog": {
+    "version": "15.0.0",
+    "sha256": "e0eeef03195a48ec8172421926d08c30823bc678c72ea72082bb513dbec36e24",
+    "equivalence_sha256": "197aa0253c0353e439a6679a3597efed25297c44c554a15c0402a30f077ab2e8",
+    "domain_count": 179,
+    "function_count": 2866,
+    "terminal_function_count": 2660,
+    "intent_count": 2660
+  },
+  "collection_policy": {
+    "device_type": "physical_android",
+    "installed_apps_only": true,
+    "missing_app_status": "skipped_missing",
+    "allowed_observation_statuses": [
+      "installed_not_selected",
+      "installed_observed",
+      "skipped_missing"
+    ],
+    "raw_xml_persisted": false,
+    "raw_screenshot_persisted": false,
+    "evidence_policy": "redacted_or_metadata_only",
+    "never_execute_unsafe_action": true,
+    "never_execute_final_action": true,
+    "stop_at_authentication_boundary": true,
+    "gold_promotion_allowed": false
+  },
+  "goal_applicability_policy": {
+    "mapping_field": "goal_family_mapping",
+    "collector_compatibility_field": "priority_goals",
+    "irrelevant_goals_forbidden": true,
+    "final_action_owner": "user",
+    "goal_text_rule": "목적지 또는 최종 실행 직전 화면까지만 찾고 최종 실행은 사용자가 수행한다."
+  },
+  "required_goal_families": [
+    {
+      "family_id": "signup",
+      "label_ko": "회원가입",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "login",
+      "label_ko": "로그인",
+      "terminal_policy": "user_boundary"
+    },
+    {
+      "family_id": "logout",
+      "label_ko": "로그아웃",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "account_deletion",
+      "label_ko": "회원탈퇴·계정 삭제",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "subscription_manage",
+      "label_ko": "구독 관리",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "subscription_change",
+      "label_ko": "구독 변경",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "subscription_cancel",
+      "label_ko": "구독 해지",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "free_trial_cancel",
+      "label_ko": "무료체험 취소",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "autopay_off",
+      "label_ko": "자동결제 해제",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "payment_methods",
+      "label_ko": "결제수단 관리",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "order_cancel_refund",
+      "label_ko": "주문 취소·환불",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "marketing_notifications_off",
+      "label_ko": "마케팅 알림 끄기",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "optional_consent_withdrawal",
+      "label_ko": "선택 동의 철회",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "privacy_settings",
+      "label_ko": "개인정보 설정",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "data_download_delete",
+      "label_ko": "데이터 다운로드·삭제",
+      "terminal_policy": "mixed_user_owned"
+    },
+    {
+      "family_id": "customer_support",
+      "label_ko": "고객센터",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "security_settings",
+      "label_ko": "보안 설정",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "insurance_contract_lookup",
+      "label_ko": "보험 계약 조회",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "insurance_contract_change",
+      "label_ko": "보험 계약 변경",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "insurance_contract_cancel",
+      "label_ko": "보험 계약 해지",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "insurance_claim",
+      "label_ko": "보험금 청구",
+      "terminal_policy": "user_final_action"
+    },
+    {
+      "family_id": "flight_booking_lookup",
+      "label_ko": "항공권 예약 조회",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "flight_booking_cancel",
+      "label_ko": "항공권 예약 취소",
+      "terminal_policy": "user_final_action"
+    }
+  ],
+  "supplemental_goal_families": [
+    {
+      "family_id": "public_document_issuance",
+      "label_ko": "공공·민원 서류 발급",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "insurance_premium_lookup",
+      "label_ko": "보험료 조회",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "insurance_refund_lookup",
+      "label_ko": "보험 환급금 조회",
+      "terminal_policy": "navigation_only"
+    },
+    {
+      "family_id": "telecom_billing_lookup",
+      "label_ko": "통신요금 조회",
+      "terminal_policy": "navigation_only"
+    }
+  ],
+  "apps": [
+    {
+      "app_name": "YouTube",
+      "app_package": "com.google.android.youtube",
+      "category": "video_subscription",
+      "priority_goals": [
+        "YouTube Premium 구독 관리 화면 찾기",
+        "YouTube Premium 해지 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "YouTube Premium 요금제 변경 확인 직전 화면 찾기",
+        "YouTube Premium 무료체험 취소 직전 화면 찾기",
+        "YouTube Premium 자동결제 해제 안내 화면 찾기",
+        "YouTube 결제수단 관리 화면 찾기",
+        "YouTube 마케팅 알림 끄기 화면 찾기",
+        "YouTube 데이터 다운로드 화면 찾기",
+        "YouTube 시청 기록 삭제 직전 화면 찾기",
+        "YouTube 고객센터 화면 찾기",
+        "YouTube 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "YouTube Premium 구독 관리 화면 찾기"
+        ],
+        "subscription_change": [
+          "YouTube Premium 요금제 변경 확인 직전 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "YouTube Premium 해지 직전 화면 찾기"
+        ],
+        "free_trial_cancel": [
+          "YouTube Premium 무료체험 취소 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "YouTube Premium 자동결제 해제 안내 화면 찾기"
+        ],
+        "payment_methods": [
+          "YouTube 결제수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "YouTube 마케팅 알림 끄기 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "YouTube 데이터 다운로드 화면 찾기",
+          "YouTube 시청 기록 삭제 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "YouTube 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "YouTube 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "Netflix",
+      "app_package": "com.netflix.mediaclient",
+      "category": "video_subscription",
+      "priority_goals": [
+        "회원가입 시작 화면 찾기",
+        "계정 관리 화면 찾기",
+        "멤버십 해지 직전 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "Netflix 계정 삭제 안내 화면 찾기",
+        "멤버십 요금제 변경 확인 직전 화면 찾기",
+        "결제수단 관리 화면 찾기",
+        "마케팅 이메일 수신 끄기 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "Netflix 데이터 다운로드 화면 찾기",
+        "Netflix 데이터 삭제 요청 직전 화면 찾기",
+        "Netflix 고객센터 화면 찾기",
+        "Netflix 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "Netflix 계정 삭제 안내 화면 찾기"
+        ],
+        "subscription_manage": [
+          "계정 관리 화면 찾기"
+        ],
+        "subscription_change": [
+          "멤버십 요금제 변경 확인 직전 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "멤버십 해지 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "결제수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 이메일 수신 끄기 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "Netflix 데이터 다운로드 화면 찾기",
+          "Netflix 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "Netflix 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "Netflix 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "배민",
+      "app_package": "com.sampleapp",
+      "category": "delivery",
+      "priority_goals": [
+        "배민클럽 구독 관리 화면 찾기",
+        "배민클럽 해지 직전 화면 찾기",
+        "결제수단 관리 화면 찾기",
+        "회원가입 시작 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "배민 회원탈퇴 직전 화면 찾기",
+        "배민클럽 무료체험 취소 직전 화면 찾기",
+        "배민클럽 자동결제 해제 직전 화면 찾기",
+        "주문 취소·환불 신청 직전 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "개인정보 열람·다운로드 화면 찾기",
+        "배민 데이터 삭제 요청 직전 화면 찾기",
+        "배민 고객센터 화면 찾기",
+        "배민 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "배민 회원탈퇴 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "배민클럽 구독 관리 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "배민클럽 해지 직전 화면 찾기"
+        ],
+        "free_trial_cancel": [
+          "배민클럽 무료체험 취소 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "배민클럽 자동결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "결제수단 관리 화면 찾기"
+        ],
+        "order_cancel_refund": [
+          "주문 취소·환불 신청 직전 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "개인정보 열람·다운로드 화면 찾기",
+          "배민 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "배민 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "배민 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "Coupang",
+      "app_package": "com.coupang.mobile",
+      "category": "commerce",
+      "priority_goals": [
+        "회원가입 화면 찾기",
+        "와우 멤버십 관리 화면 찾기",
+        "와우 멤버십 해지 직전 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "쿠팡 회원탈퇴 직전 화면 찾기",
+        "와우 멤버십 무료체험 취소 직전 화면 찾기",
+        "와우 멤버십 자동결제 해제 직전 화면 찾기",
+        "결제수단 관리 화면 찾기",
+        "주문 취소·반품·환불 신청 직전 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "쿠팡 개인정보 다운로드 화면 찾기",
+        "쿠팡 데이터 삭제 요청 직전 화면 찾기",
+        "쿠팡 고객센터 화면 찾기",
+        "쿠팡 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "쿠팡 회원탈퇴 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "와우 멤버십 관리 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "와우 멤버십 해지 직전 화면 찾기"
+        ],
+        "free_trial_cancel": [
+          "와우 멤버십 무료체험 취소 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "와우 멤버십 자동결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "결제수단 관리 화면 찾기"
+        ],
+        "order_cancel_refund": [
+          "주문 취소·반품·환불 신청 직전 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "쿠팡 개인정보 다운로드 화면 찾기",
+          "쿠팡 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "쿠팡 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "쿠팡 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "제주항공",
+      "app_package": "com.parksmt.jejuair.android16",
+      "category": "air_travel",
+      "priority_goals": [
+        "회원가입 화면 찾기",
+        "예약 조회 화면 찾기",
+        "예약 취소 안내 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "제주항공 회원탈퇴 직전 화면 찾기",
+        "항공권 결제수단 관리 화면 찾기",
+        "항공권 취소·환불 신청 직전 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "제주항공 개인정보 다운로드 화면 찾기",
+        "제주항공 데이터 삭제 요청 직전 화면 찾기",
+        "제주항공 고객센터 화면 찾기",
+        "제주항공 계정 보안 설정 화면 찾기",
+        "항공권 예약 취소 직전 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "제주항공 회원탈퇴 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "항공권 결제수단 관리 화면 찾기"
+        ],
+        "order_cancel_refund": [
+          "항공권 취소·환불 신청 직전 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "제주항공 개인정보 다운로드 화면 찾기",
+          "제주항공 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "제주항공 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "제주항공 계정 보안 설정 화면 찾기"
+        ],
+        "flight_booking_lookup": [
+          "예약 조회 화면 찾기"
+        ],
+        "flight_booking_cancel": [
+          "예약 취소 안내 화면 찾기",
+          "항공권 예약 취소 직전 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "X",
+      "app_package": "com.twitter.android",
+      "category": "social",
+      "priority_goals": [
+        "회원가입 화면 찾기",
+        "계정 비활성화 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "X Premium 구독 관리 화면 찾기",
+        "X Premium 요금제 변경 확인 직전 화면 찾기",
+        "X Premium 구독 해지 직전 화면 찾기",
+        "X Premium 자동결제 해제 직전 화면 찾기",
+        "X 결제수단 관리 화면 찾기",
+        "마케팅 이메일·알림 끄기 화면 찾기",
+        "맞춤 광고 선택 동의 철회 직전 화면 찾기",
+        "X 데이터 다운로드 화면 찾기",
+        "X 데이터 삭제 요청 직전 화면 찾기",
+        "X 고객센터 화면 찾기",
+        "X 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "계정 비활성화 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "X Premium 구독 관리 화면 찾기"
+        ],
+        "subscription_change": [
+          "X Premium 요금제 변경 확인 직전 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "X Premium 구독 해지 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "X Premium 자동결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "X 결제수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 이메일·알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "맞춤 광고 선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "X 데이터 다운로드 화면 찾기",
+          "X 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "X 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "X 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "Toss",
+      "app_package": "viva.republica.toss",
+      "category": "finance",
+      "priority_goals": [
+        "로그인 또는 본인인증 경계 화면 찾기",
+        "보안 설정 화면 찾기",
+        "고객센터 화면 찾기",
+        "토스 서비스 가입 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "토스 회원탈퇴 직전 화면 찾기",
+        "자동이체·정기결제 해제 직전 화면 찾기",
+        "결제수단 관리 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "토스 개인정보 다운로드 화면 찾기",
+        "토스 데이터 삭제 요청 직전 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "토스 서비스 가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 또는 본인인증 경계 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "토스 회원탈퇴 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "자동이체·정기결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "결제수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "토스 개인정보 다운로드 화면 찾기",
+          "토스 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "NH손보",
+      "app_package": "ni.mh.android.launcher",
+      "category": "insurance",
+      "priority_goals": [
+        "보험 계약 조회 화면 찾기",
+        "보험금 청구 시작 화면 찾기",
+        "보험 계약 해지 안내 화면 찾기",
+        "회원가입 시작 화면 찾기",
+        "로그인 또는 본인인증 경계 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "NH손보 회원탈퇴 직전 화면 찾기",
+        "보험료 자동이체 해제 직전 화면 찾기",
+        "보험료 납부수단 관리 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "보험 개인정보 다운로드 화면 찾기",
+        "보험 개인정보 삭제 요청 직전 화면 찾기",
+        "NH손보 고객센터 화면 찾기",
+        "NH손보 계정 보안 설정 화면 찾기",
+        "보험 계약 변경 확인 직전 화면 찾기",
+        "보험 계약 해지 직전 화면 찾기",
+        "보험금 청구 제출 직전 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 또는 본인인증 경계 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "NH손보 회원탈퇴 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "보험료 자동이체 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "보험료 납부수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "보험 개인정보 다운로드 화면 찾기",
+          "보험 개인정보 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "NH손보 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "NH손보 계정 보안 설정 화면 찾기"
+        ],
+        "insurance_contract_lookup": [
+          "보험 계약 조회 화면 찾기"
+        ],
+        "insurance_contract_change": [
+          "보험 계약 변경 확인 직전 화면 찾기"
+        ],
+        "insurance_contract_cancel": [
+          "보험 계약 해지 안내 화면 찾기",
+          "보험 계약 해지 직전 화면 찾기"
+        ],
+        "insurance_claim": [
+          "보험금 청구 시작 화면 찾기",
+          "보험금 청구 제출 직전 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "정부24",
+      "app_package": "kr.go.minwon.m",
+      "category": "public_service",
+      "priority_goals": [
+        "로그인 또는 본인인증 경계 화면 찾기",
+        "주민등록등본 발급 서비스 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "정부24 회원가입 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "정부24 회원탈퇴 직전 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "정부24 개인정보 다운로드 화면 찾기",
+        "정부24 데이터 삭제 요청 직전 화면 찾기",
+        "정부24 고객센터 화면 찾기",
+        "정부24 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "정부24 회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 또는 본인인증 경계 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "정부24 회원탈퇴 직전 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "정부24 개인정보 다운로드 화면 찾기",
+          "정부24 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "정부24 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "정부24 계정 보안 설정 화면 찾기"
+        ],
+        "public_document_issuance": [
+          "주민등록등본 발급 서비스 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "The건강보험",
+      "app_package": "kr.or.nhic",
+      "category": "public_insurance",
+      "priority_goals": [
+        "보험료 조회 화면 찾기",
+        "환급금 조회 화면 찾기",
+        "민원 서류 발급 화면 찾기",
+        "The건강보험 회원가입 시작 화면 찾기",
+        "로그인 또는 본인인증 경계 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "The건강보험 회원탈퇴 직전 화면 찾기",
+        "보험료 자동이체 해제 직전 화면 찾기",
+        "보험료 납부수단 관리 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "건강보험 개인정보 다운로드 화면 찾기",
+        "건강보험 데이터 삭제 요청 직전 화면 찾기",
+        "The건강보험 고객센터 화면 찾기",
+        "The건강보험 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "The건강보험 회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 또는 본인인증 경계 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "The건강보험 회원탈퇴 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "보험료 자동이체 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "보험료 납부수단 관리 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "건강보험 개인정보 다운로드 화면 찾기",
+          "건강보험 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "The건강보험 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "The건강보험 계정 보안 설정 화면 찾기"
+        ],
+        "public_document_issuance": [
+          "민원 서류 발급 화면 찾기"
+        ],
+        "insurance_premium_lookup": [
+          "보험료 조회 화면 찾기"
+        ],
+        "insurance_refund_lookup": [
+          "환급금 조회 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "MyKT",
+      "app_package": "com.ktshow.cs",
+      "category": "telecom",
+      "priority_goals": [
+        "요금 조회 화면 찾기",
+        "부가서비스 해지 직전 화면 찾기",
+        "마케팅 알림 설정 화면 찾기",
+        "MyKT 회원가입 시작 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "MyKT 회원탈퇴 직전 화면 찾기",
+        "요금제·부가서비스 관리 화면 찾기",
+        "요금제 변경 확인 직전 화면 찾기",
+        "통신요금 자동결제 해제 직전 화면 찾기",
+        "통신요금 납부수단 관리 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "MyKT 개인정보 다운로드 화면 찾기",
+        "MyKT 데이터 삭제 요청 직전 화면 찾기",
+        "MyKT 고객센터 화면 찾기",
+        "MyKT 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "MyKT 회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "MyKT 회원탈퇴 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "요금제·부가서비스 관리 화면 찾기"
+        ],
+        "subscription_change": [
+          "요금제 변경 확인 직전 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "부가서비스 해지 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "통신요금 자동결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "통신요금 납부수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 설정 화면 찾기",
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "MyKT 개인정보 다운로드 화면 찾기",
+          "MyKT 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "MyKT 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "MyKT 계정 보안 설정 화면 찾기"
+        ],
+        "telecom_billing_lookup": [
+          "요금 조회 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "Naver",
+      "app_package": "com.nhn.android.search",
+      "category": "productivity_portal",
+      "priority_goals": [
+        "멤버십 관리 화면 찾기",
+        "검색 기록 삭제 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "네이버 회원가입 시작 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "네이버 회원탈퇴 직전 화면 찾기",
+        "네이버플러스 멤버십 요금제 변경 확인 직전 화면 찾기",
+        "네이버플러스 멤버십 해지 직전 화면 찾기",
+        "네이버플러스 무료체험 취소 직전 화면 찾기",
+        "네이버플러스 자동결제 해제 직전 화면 찾기",
+        "네이버페이 결제수단 관리 화면 찾기",
+        "네이버 쇼핑 주문 취소·환불 신청 직전 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "네이버 데이터 다운로드 화면 찾기",
+        "네이버 데이터 삭제 요청 직전 화면 찾기",
+        "네이버 고객센터 화면 찾기",
+        "네이버 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "네이버 회원가입 시작 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "네이버 회원탈퇴 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "멤버십 관리 화면 찾기"
+        ],
+        "subscription_change": [
+          "네이버플러스 멤버십 요금제 변경 확인 직전 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "네이버플러스 멤버십 해지 직전 화면 찾기"
+        ],
+        "free_trial_cancel": [
+          "네이버플러스 무료체험 취소 직전 화면 찾기"
+        ],
+        "autopay_off": [
+          "네이버플러스 자동결제 해제 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "네이버페이 결제수단 관리 화면 찾기"
+        ],
+        "order_cancel_refund": [
+          "네이버 쇼핑 주문 취소·환불 신청 직전 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "검색 기록 삭제 화면 찾기",
+          "네이버 데이터 다운로드 화면 찾기",
+          "네이버 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "네이버 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "네이버 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "당근",
+      "app_package": "com.towneers.www",
+      "category": "local_community",
+      "priority_goals": [
+        "회원가입 화면 찾기",
+        "알림 설정 화면 찾기",
+        "계정 탈퇴 직전 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "당근페이 결제수단 관리 화면 찾기",
+        "거래 주문 취소·환불 신청 직전 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "당근 데이터 다운로드 화면 찾기",
+        "당근 데이터 삭제 요청 직전 화면 찾기",
+        "당근 고객센터 화면 찾기",
+        "당근 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "계정 탈퇴 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "당근페이 결제수단 관리 화면 찾기"
+        ],
+        "order_cancel_refund": [
+          "거래 주문 취소·환불 신청 직전 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "알림 설정 화면 찾기",
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "당근 데이터 다운로드 화면 찾기",
+          "당근 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "당근 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "당근 계정 보안 설정 화면 찾기"
+        ]
+      }
+    },
+    {
+      "app_name": "Instagram",
+      "app_package": "com.instagram.android",
+      "category": "social",
+      "priority_goals": [
+        "회원가입 화면 찾기",
+        "계정 비활성화 직전 화면 찾기",
+        "데이터 다운로드 화면 찾기",
+        "로그인 시작 화면 찾기",
+        "로그아웃 직전 화면 찾기",
+        "Instagram 구독 관리 화면 찾기",
+        "Instagram 구독 해지 직전 화면 찾기",
+        "Meta 결제수단 관리 화면 찾기",
+        "마케팅 알림 끄기 화면 찾기",
+        "맞춤 광고 선택 동의 철회 직전 화면 찾기",
+        "개인정보 설정 화면 찾기",
+        "Instagram 데이터 삭제 요청 직전 화면 찾기",
+        "Instagram 고객센터 화면 찾기",
+        "Instagram 계정 보안 설정 화면 찾기"
+      ],
+      "goal_family_mapping": {
+        "signup": [
+          "회원가입 화면 찾기"
+        ],
+        "login": [
+          "로그인 시작 화면 찾기"
+        ],
+        "logout": [
+          "로그아웃 직전 화면 찾기"
+        ],
+        "account_deletion": [
+          "계정 비활성화 직전 화면 찾기"
+        ],
+        "subscription_manage": [
+          "Instagram 구독 관리 화면 찾기"
+        ],
+        "subscription_cancel": [
+          "Instagram 구독 해지 직전 화면 찾기"
+        ],
+        "payment_methods": [
+          "Meta 결제수단 관리 화면 찾기"
+        ],
+        "marketing_notifications_off": [
+          "마케팅 알림 끄기 화면 찾기"
+        ],
+        "optional_consent_withdrawal": [
+          "맞춤 광고 선택 동의 철회 직전 화면 찾기"
+        ],
+        "privacy_settings": [
+          "개인정보 설정 화면 찾기"
+        ],
+        "data_download_delete": [
+          "데이터 다운로드 화면 찾기",
+          "Instagram 데이터 삭제 요청 직전 화면 찾기"
+        ],
+        "customer_support": [
+          "Instagram 고객센터 화면 찾기"
+        ],
+        "security_settings": [
+          "Instagram 계정 보안 설정 화면 찾기"
+        ]
+      }
+    }
+  ]
+}

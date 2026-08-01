@@ -1,0 +1,540 @@
+{
+  "audit_counts": {
+    "equivalence_alias_count": 10,
+    "equivalence_class_count": 10,
+    "logical_default_terminal_count": 2648,
+    "logical_function_count": 2856,
+    "logical_intent_count": 2650,
+    "physical_default_terminal_count": 2658,
+    "physical_function_count": 2866,
+    "physical_intent_count": 2660,
+    "v13_added_function_count": 252,
+    "v14_added_function_count": 252,
+    "v15_added_function_count": 252
+  },
+  "classes": [
+    {
+      "alias_function_ids": [
+        "shopping.cart"
+      ],
+      "canonical_function_id": "commerce.cart",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "safe_navigation",
+        "preserved_constraints": [
+          "navigation_only"
+        ],
+        "risk_level": "low",
+        "state_changing": false,
+        "stop_policy": "on_destination_screen",
+        "user_owned_boundary": {
+          "confirmation_required": false,
+          "owner": "user",
+          "stop_policy": "on_destination_screen",
+          "type": "destination_screen"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "commerce.cart",
+            "intent_id": "shopping_cart",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "shopping.cart",
+            "intent_id": "v4_shopping_cart",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "The English and Korean names match and the overlapping aliases identify the same shopping-cart screen.",
+        "terminal_outcome": "Open the shopping cart destination."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Namespace and generation differ, but both IDs represent the same read-only shopping-cart destination."
+    },
+    {
+      "alias_function_ids": [
+        "messaging.mute"
+      ],
+      "canonical_function_id": "communication.conversation.mute",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press"
+        ],
+        "risk_level": "medium",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "communication.conversation.mute",
+            "intent_id": "mute_conversation",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "messaging.mute",
+            "intent_id": "v4_messaging_mute",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "Mute conversation and 대화 알림 끄기 describe the same conversation-notification effect.",
+        "terminal_outcome": "Mute notifications for the selected conversation."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Both intents reach the same mute action and require confirmation before the action; the newer member supplies the stricter state and stop metadata."
+    },
+    {
+      "alias_function_ids": [
+        "messaging.archive"
+      ],
+      "canonical_function_id": "communication.conversation.archive",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press"
+        ],
+        "risk_level": "medium",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "communication.conversation.archive",
+            "intent_id": "archive_conversation",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "messaging.archive",
+            "intent_id": "v4_messaging_archive",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "Archive, hide, and move-to-archive expressions identify the same operation on a conversation.",
+        "terminal_outcome": "Move the selected conversation out of the inbox and into the archive."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Both IDs produce the same archived-conversation result and share a user-confirmed execution boundary."
+    },
+    {
+      "alias_function_ids": [
+        "messaging.delete"
+      ],
+      "canonical_function_id": "communication.conversation.delete",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press",
+          "destructive_consequence"
+        ],
+        "risk_level": "high",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "communication.conversation.delete",
+            "intent_id": "delete_conversation",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "messaging.delete",
+            "intent_id": "v4_messaging_delete",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "English and Korean names, deletion scope, and irreversible-consequence context align.",
+        "terminal_outcome": "Delete the selected conversation."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "The two IDs name the same destructive conversation-delete action and expose the same confirmation boundary."
+    },
+    {
+      "alias_function_ids": [
+        "android_safety.emergency_contacts"
+      ],
+      "canonical_function_id": "contacts.emergency",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "sensitive_information_disclosure"
+        ],
+        "risk_level": "high",
+        "state_changing": false,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "sensitive_destination"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "contacts.emergency",
+            "intent_id": "v3_contacts_emergency",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "android_safety.emergency_contacts",
+            "intent_id": "v4_android_safety_emergency_contacts",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "English and Korean names match and the overlapping expressions all identify emergency contacts.",
+        "terminal_outcome": "Open the emergency contacts destination."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Both IDs expose the same sensitive, read-only emergency-contact destination."
+    },
+    {
+      "alias_function_ids": [
+        "government_digital.office_appointment"
+      ],
+      "canonical_function_id": "government.appointment",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press",
+          "route_provenance",
+          "agency_service_case_and_date_fields"
+        ],
+        "risk_level": "high",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "government.appointment",
+            "intent_id": "v3_government_appointment",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "government_digital.office_appointment",
+            "intent_id": "v5_government_digital_office_appointment",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "The English name and management aliases align on booking an in-person government-office visit.",
+        "terminal_outcome": "Book an in-person appointment with a government office."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "The destination-level result is equivalent, while agency, service type, case number, date, and generation-specific route provenance remain member evidence rather than interchangeable inputs."
+    },
+    {
+      "alias_function_ids": [
+        "android_safety.sos"
+      ],
+      "canonical_function_id": "safety.sos",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press"
+        ],
+        "risk_level": "high",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "safety.sos",
+            "intent_id": "v3_safety_sos",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "android_safety.sos",
+            "intent_id": "v4_android_safety_sos",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "English and Korean names, user-owned action semantics, and stop boundary align on Emergency SOS.",
+        "terminal_outcome": "Initiate the Emergency SOS help request after the user-owned final action."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Both IDs represent the same SOS outcome; the composite retains the canonical member's higher risk rating."
+    },
+    {
+      "alias_function_ids": [
+        "digital_health.lab_results"
+      ],
+      "canonical_function_id": "health.lab_results",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "sensitive_information_disclosure"
+        ],
+        "risk_level": "high",
+        "state_changing": false,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "sensitive_destination"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "health.lab_results",
+            "intent_id": "v3_health_lab_results",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "digital_health.lab_results",
+            "intent_id": "v4_digital_health_lab_results",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "Both definitions open the same test-date, value, reference-range, and clinician-interpretation result.",
+        "terminal_outcome": "Open sensitive laboratory results."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "The namespace differs, but both IDs expose the same sensitive, read-only lab-results destination."
+    },
+    {
+      "alias_function_ids": [
+        "android_safety.safety_check"
+      ],
+      "canonical_function_id": "safety.check_in",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "final_action_press",
+          "recipient_and_location_disclosure"
+        ],
+        "risk_level": "high",
+        "state_changing": true,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "final_action"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "safety.check_in",
+            "intent_id": "v3_safety_check_in",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "android_safety.safety_check",
+            "intent_id": "v4_android_safety_safety_check",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "The Korean name and the no-response-by-deadline location-notification effect align.",
+        "terminal_outcome": "Schedule a safety check that can notify selected people with location if the user does not respond."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "Both IDs represent the same scheduled safety check-in and its user-owned, location-sharing action boundary."
+    },
+    {
+      "alias_function_ids": [
+        "android_safety.emergency_info"
+      ],
+      "canonical_function_id": "health.emergency_profile",
+      "classification": "true_equivalent",
+      "composite_safety": {
+        "automation_policy": "never_auto",
+        "preserved_constraints": [
+          "user_confirmation_required",
+          "sensitive_information_disclosure"
+        ],
+        "risk_level": "high",
+        "state_changing": false,
+        "stop_policy": "before_action",
+        "user_owned_boundary": {
+          "confirmation_required": true,
+          "owner": "user",
+          "stop_policy": "before_action",
+          "type": "sensitive_destination"
+        }
+      },
+      "evidence": {
+        "member_consumption": [
+          {
+            "function_id": "health.emergency_profile",
+            "intent_id": "v3_health_emergency_profile",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          },
+          {
+            "function_id": "android_safety.emergency_info",
+            "intent_id": "v4_android_safety_emergency_info",
+            "uses": [
+              "default_terminal",
+              "route_endpoint"
+            ]
+          }
+        ],
+        "semantic_basis": "Both definitions expose lock-screen emergency medical information such as blood type, allergies, and emergency contacts.",
+        "terminal_outcome": "Open the sensitive emergency medical profile."
+      },
+      "provenance": {
+        "canonical_choice": "Earlier-generation, general namespace retained as the stable output ID.",
+        "member_generation": "pre_v13"
+      },
+      "rationale": "The labels differ slightly, but both IDs expose the same read-only emergency medical-information destination."
+    }
+  ],
+  "equivalence_kind": "true_equivalent",
+  "equivalence_version": "1.1.0",
+  "integrity": {
+    "canonical_sha256": "646dc0433041236d9bd41ab8ca3025af20a61c61eda99e8f9706ebdb7f2c501b",
+    "hash_algorithm": "sha256",
+    "hash_scope": "document_without_integrity.canonical_sha256",
+    "serialization": "UTF-8 JSON; keys sorted lexicographically; arrays preserved; separators ',' and ':'; ensure_ascii=false"
+  },
+  "provenance": {
+    "audit_document": "docs/NAVIGATION_FUNCTION_EQUIVALENCE_AUDIT.md",
+    "catalog_path": "fixtures/navigation/function-catalog.v1.json",
+    "catalog_version": "15.0.0",
+    "canonical_choice_policy": "Prefer the earlier-generation, more general namespace; compute safety independently from every member.",
+    "scope": "The ten audited true-equivalent classes only; the v13, v14, and v15 append-only packs introduce no new equivalence member, and rejected context-distinct, parent-child, and unsafe-to-merge candidates are intentionally absent.",
+    "v13_added_marker": "v13_governed_operations",
+    "v14_added_marker": "v14_role_governed_operations",
+    "v15_added_marker": "v15_role_governed_operations",
+    "v15_coverage_document": "docs/NAVIGATION_COVERAGE_GAPS_V15.md"
+  },
+  "schema_version": "1.0.0"
+}

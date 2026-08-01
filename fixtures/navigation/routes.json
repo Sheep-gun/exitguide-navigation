@@ -1,0 +1,139 @@
+{
+  "description": "Runtime route graph for the ExitGuide Navigation vertical-slice MVP.",
+  "dataset_schema_version": "1.0",
+  "routes": [
+    {
+      "route_id": "egl_stream_android_cancel_subscription_ko_v1",
+      "service_name": "EGL Stream (synthetic)",
+      "app_package": "lab.exitguide.stream.demo",
+      "platform": "android",
+      "locale": "ko-KR",
+      "goal_id": "cancel_subscription",
+      "route_version": 1,
+      "status": "demo_verified",
+      "source_file": "egl_stream_android_cancel_subscription_ko_v1.md",
+      "states": [
+        {
+          "state_id": "profile_home",
+          "step": 1,
+          "screen_name": "계정 메뉴",
+          "anchors": ["계정", "프로필", "설정"],
+          "target_meaning": "open_membership_catalog",
+          "target_labels": ["구매 항목 및 멤버십", "멤버십 및 구매", "멤버십"],
+          "instruction": "현재 화면에서 '{target}' 버튼을 누르세요.",
+          "warning": null,
+          "requires_user_confirmation": false,
+          "next_state_id": "membership_home",
+          "terminal": false,
+          "terms_query": null,
+          "recovery": {
+            "type": "back",
+            "safe": true,
+            "expected_previous_state_id": null,
+            "retry_after_recovery": true
+          }
+        },
+        {
+          "state_id": "membership_home",
+          "step": 2,
+          "screen_name": "구매 항목 및 멤버십",
+          "anchors": ["구매 항목 및 멤버십", "결제 내역", "멤버십"],
+          "target_meaning": "open_active_membership",
+          "target_labels": ["Premium 멤버십", "멤버십 관리", "구독 관리"],
+          "instruction": "현재 화면에서 '{target}' 버튼을 누르세요.",
+          "warning": null,
+          "requires_user_confirmation": false,
+          "next_state_id": "membership_management",
+          "terminal": false,
+          "terms_query": null,
+          "recovery": {
+            "type": "back",
+            "safe": true,
+            "expected_previous_state_id": "profile_home",
+            "retry_after_recovery": true
+          }
+        },
+        {
+          "state_id": "membership_management",
+          "step": 3,
+          "screen_name": "멤버십 관리",
+          "anchors": ["멤버십 관리", "다음 결제일", "결제 수단"],
+          "target_meaning": "start_cancellation",
+          "target_labels": ["비활성화", "멤버십 해지", "구독 해지"],
+          "instruction": "현재 화면에서 '{target}' 버튼을 누르세요.",
+          "warning": "결제 수단 변경은 구독 해지가 아닙니다.",
+          "requires_user_confirmation": false,
+          "next_state_id": "retention_offer",
+          "terminal": false,
+          "terms_query": null,
+          "recovery": {
+            "type": "back",
+            "safe": true,
+            "expected_previous_state_id": "membership_home",
+            "retry_after_recovery": true
+          }
+        },
+        {
+          "state_id": "retention_offer",
+          "step": 4,
+          "screen_name": "일시중지 제안",
+          "anchors": ["일시중지", "혜택", "해지"],
+          "target_meaning": "continue_cancellation",
+          "target_labels": ["계속 해지", "해지 계속", "해지 진행"],
+          "instruction": "일시중지 제안을 건너뛰고 '{target}' 버튼을 누르세요.",
+          "warning": "'일시중지'는 구독 해지가 아니며 다음 결제가 다시 시작될 수 있습니다.",
+          "requires_user_confirmation": false,
+          "next_state_id": "cancel_confirmation",
+          "terminal": false,
+          "terms_query": null,
+          "recovery": {
+            "type": "back",
+            "safe": true,
+            "expected_previous_state_id": "membership_management",
+            "retry_after_recovery": true
+          }
+        },
+        {
+          "state_id": "cancel_confirmation",
+          "step": 5,
+          "screen_name": "해지 최종 확인",
+          "anchors": ["해지 확인", "이용 종료일", "다음 결제"],
+          "target_meaning": "confirm_cancellation",
+          "target_labels": ["Premium 해지", "해지 확인", "구독 해지"],
+          "instruction": "종료일과 다음 결제 여부를 확인한 뒤 '{target}' 버튼을 직접 누르세요.",
+          "warning": "최종 해지는 사용자가 직접 확인해야 합니다.",
+          "requires_user_confirmation": true,
+          "next_state_id": "cancel_complete",
+          "terminal": false,
+          "terms_query": "구독 해지 자동 갱신 다음 결제",
+          "recovery": {
+            "type": "back",
+            "safe": true,
+            "expected_previous_state_id": "retention_offer",
+            "retry_after_recovery": true
+          }
+        },
+        {
+          "state_id": "cancel_complete",
+          "step": 6,
+          "screen_name": "해지 완료",
+          "anchors": ["해지 완료", "다음 결제 없음", "멤버십 종료"],
+          "target_meaning": null,
+          "target_labels": [],
+          "instruction": "구독 해지가 완료되었고 다음 결제가 없음을 확인했습니다.",
+          "warning": null,
+          "requires_user_confirmation": false,
+          "next_state_id": null,
+          "terminal": true,
+          "terms_query": "구독 해지 완료 다음 결제 없음",
+          "recovery": {
+            "type": "stop",
+            "safe": true,
+            "expected_previous_state_id": "cancel_confirmation",
+            "retry_after_recovery": false
+          }
+        }
+      ]
+    }
+  ]
+}

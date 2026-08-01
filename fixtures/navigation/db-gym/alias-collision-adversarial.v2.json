@@ -1,0 +1,921 @@
+{
+  "dataset_version": "2.0",
+  "split": "alias_collision_adversarial",
+  "frozen": true,
+  "provenance": "human_curated_synthetic",
+  "catalog_derived": false,
+  "review_policy": "Frozen independent benchmark. Expected intent, function, action, label, context, and decoys require two-person human review and a dataset version bump. Catalog generation, model proposals, and benchmark failures must never rewrite this fixture automatically.",
+  "metadata": {
+    "split": "alias_collision_adversarial",
+    "frozen": true,
+    "provenance": "human_curated_synthetic",
+    "catalog_derived": false,
+    "purpose": "Disambiguate normalized exact-alias collisions and semantically adjacent Android and in-app functions under natural goals and stronger visual decoys.",
+    "review_policy": "Dual human approval required; no catalog-derived or model-generated mutation is permitted."
+  },
+  "cases": [
+    {
+      "case_id": "collision_inapp_notification_preferences",
+      "intent_id": "notification_control",
+      "goal_text": "이 서비스 안에서 어떤 소식을 받을지만 골라 두고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["alias_collision", "in_app_vs_android", "notification", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "settings", "screen_title": "서비스 환경설정", "stage": "destination", "elements": [{"label": "알림", "role": "tab", "selected": true, "decoy_kind": "visual"}, {"label": "앱 알림", "decoy_kind": "android_system"}, {"label": "소식 수신 설정"}, {"label": "혜택", "role": "tab"}], "expected": {"action": "stop", "label": "소식 수신 설정", "function_id": "notification.settings"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_one_app_notifications",
+      "intent_id": "android_app_notifications",
+      "goal_text": "I want Android itself to silence pop-ups from this one app.",
+      "locale": "en-US",
+      "user_state": "android_app_info",
+      "tags": ["alias_collision", "in_app_vs_android", "notification"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "app-info", "screen_title": "PhotoBox system details", "stage": "destination", "elements": [{"label": "Notification delivery controls"}, {"label": "News preferences", "decoy_kind": "in_app"}, {"label": "Permissions"}, {"label": "Storage & cache"}], "expected": {"action": "stop", "label": "Notification delivery controls", "function_id": "android.app.notifications"}}
+      ]
+    },
+    {
+      "case_id": "collision_inapp_storage_downloads",
+      "intent_id": "storage_management",
+      "goal_text": "앱에서 내려받아 둔 것들이 차지하는 용량을 정리하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "in_app_settings",
+      "tags": ["alias_collision", "in_app_vs_android", "storage", "short_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "storage", "screen_title": "다운로드 환경", "stage": "destination", "elements": [{"label": "저장공간", "role": "button"}, {"label": "앱 저장공간", "role": "button", "decoy_kind": "android_system"}, {"label": "오프라인 콘텐츠 용량 관리"}, {"label": "삭제", "dangerous": true, "decoy_kind": "unsafe"}], "expected": {"action": "stop", "label": "오프라인 콘텐츠 용량 관리", "function_id": "settings.storage"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_storage_cache_page",
+      "intent_id": "android_storage_cache",
+      "goal_text": "이 프로그램이 폰에서 얼마나 공간을 쓰는지 시스템 화면으로 확인할래",
+      "locale": "ko-KR",
+      "user_state": "android_app_info",
+      "tags": ["alias_collision", "in_app_vs_android", "storage"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "app-info", "screen_title": "Tune 앱 정보", "stage": "destination", "elements": [{"label": "저장공간 및 캐시"}, {"label": "다운로드 관리", "decoy_kind": "in_app"}, {"label": "데이터 사용량"}, {"label": "앱 크기 214MB", "clickable": false}], "expected": {"action": "stop", "label": "저장공간 및 캐시", "function_id": "android.app.storage_cache"}}
+      ]
+    },
+    {
+      "case_id": "collision_inapp_data_saver",
+      "intent_id": "data_usage_settings",
+      "goal_text": "영상 볼 때 앱 자체에서 통신량을 덜 쓰게 맞추고 싶어",
+      "locale": "ko-KR",
+      "user_state": "in_app_settings",
+      "tags": ["alias_collision", "in_app_vs_android", "data_usage"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "playback", "screen_title": "재생 및 다운로드", "stage": "destination", "elements": [{"label": "모바일 데이터", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "네트워크 사용", "decoy_kind": "android_system"}, {"label": "데이터 절약 모드"}, {"label": "고화질 자동 재생"}], "expected": {"action": "stop", "label": "데이터 절약 모드", "function_id": "settings.data_usage"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_mobile_data_control",
+      "intent_id": "android_app_data_usage",
+      "goal_text": "운영체제에서 이 앱만 셀룰러 통신을 못 쓰게 하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "android_app_info",
+      "tags": ["alias_collision", "in_app_vs_android", "data_usage", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "app-info", "screen_title": "StreamNow 앱 정보", "stage": "destination", "elements": [{"label": "모바일 데이터 및 Wi-Fi"}, {"label": "앱 데이터 절약", "decoy_kind": "in_app"}, {"label": "백그라운드 데이터", "role": "switch", "checkable": true, "dangerous": true}, {"label": "배터리"}], "expected": {"action": "stop", "label": "모바일 데이터 및 Wi-Fi", "function_id": "android.app.data_usage"}}
+      ]
+    },
+    {
+      "case_id": "collision_inapp_personal_data_erasure",
+      "intent_id": "data_deletion",
+      "goal_text": "서비스 회사가 보관한 내 활동 흔적을 지우는 곳까지 가고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["alias_collision", "in_app_vs_android", "delete", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "privacy", "screen_title": "내 정보와 개인정보", "stage": "destination", "elements": [{"label": "데이터 삭제"}, {"label": "앱 데이터 지우기", "dangerous": true, "decoy_kind": "android_system"}, {"label": "검색 및 이용 활동 삭제"}, {"label": "계정 삭제", "dangerous": true, "decoy_kind": "irreversible"}], "expected": {"action": "stop", "label": "검색 및 이용 활동 삭제", "function_id": "privacy.delete_data"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_clear_storage_confirmation",
+      "intent_id": "android_clear_app_storage",
+      "goal_text": "휴대전화에 남은 이 앱의 로컬 자료를 초기 상태로 비우려 해",
+      "locale": "ko-KR",
+      "user_state": "android_storage_settings",
+      "tags": ["alias_collision", "in_app_vs_android", "delete", "unsafe_final", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "clear-confirm", "screen_title": "앱 저장공간 삭제 확인", "stage": "destination", "elements": [{"label": "저장공간 삭제", "dangerous": true}, {"label": "계정 데이터 삭제 안내", "decoy_kind": "in_app"}, {"label": "취소"}], "expected": {"action": "no_click", "label": null, "function_id": "android.app.clear_storage"}}
+      ]
+    },
+    {
+      "case_id": "collision_inapp_about_product",
+      "intent_id": "app_information",
+      "goal_text": "이 서비스의 버전과 만든 곳을 앱 안에서 확인하려고 해",
+      "locale": "ko-KR",
+      "user_state": "in_app_settings",
+      "tags": ["exact_alias_collision", "in_app_vs_android", "app_info"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "about", "screen_title": "일반", "stage": "destination", "elements": [{"label": "앱 정보"}, {"label": "애플리케이션 정보", "decoy_kind": "android_system"}, {"label": "버전 8.4.1", "clickable": false}, {"label": "오픈소스 라이선스"}], "expected": {"action": "stop", "label": "앱 정보", "function_id": "system.app_info"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_app_info_permissions",
+      "intent_id": "android_app_info",
+      "goal_text": "설치된 프로그램의 권한과 배터리 사용을 보는 운영체제 상세 페이지가 필요해",
+      "locale": "ko-KR",
+      "user_state": "android_apps_list",
+      "tags": ["exact_alias_collision", "in_app_vs_android", "app_info"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "apps", "screen_title": "설치된 애플리케이션", "stage": "destination", "elements": [{"label": "WeatherGo 앱 정보"}, {"label": "WeatherGo 정보", "decoy_kind": "in_app"}, {"label": "열기", "role": "button", "decoy_kind": "visual"}, {"label": "제거", "dangerous": true}], "expected": {"action": "stop", "label": "WeatherGo 앱 정보", "function_id": "android.app.info"}}
+      ]
+    },
+    {
+      "case_id": "collision_signup_permission_setup",
+      "intent_id": "onboarding_permission_setup",
+      "goal_text": "처음 시작할 때 필요한 기능 접근만 차례대로 확인하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "onboarding",
+      "tags": ["exact_alias_collision", "in_app_vs_android", "permission", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "onboarding", "screen_title": "앱 사용 준비", "stage": "destination", "elements": [{"label": "권한", "role": "button", "decoy_kind": "short"}, {"label": "앱 권한", "decoy_kind": "android_system"}, {"label": "기능 접근 설정 시작"}, {"label": "모두 허용", "dangerous": true}], "expected": {"action": "stop", "label": "기능 접근 설정 시작", "function_id": "onboarding.permissions"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_permission_page",
+      "intent_id": "android_app_permissions",
+      "goal_text": "이 앱이 카메라나 연락처에 접근 가능한지 폰 설정에서 검토할래",
+      "locale": "ko-KR",
+      "user_state": "android_app_info",
+      "tags": ["exact_alias_collision", "in_app_vs_android", "permission"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "app-info", "screen_title": "Talky 앱 정보", "stage": "destination", "elements": [{"label": "권한"}, {"label": "초기 권한 안내", "decoy_kind": "in_app"}, {"label": "카메라 · 마이크 허용됨", "clickable": false}, {"label": "알림"}], "expected": {"action": "stop", "label": "권한", "function_id": "android.permission.manage"}}
+      ]
+    },
+    {
+      "case_id": "collision_content_feed_not_paid_membership",
+      "intent_id": "subscription_management",
+      "goal_text": "돈 내는 상품 말고 내가 챙겨 보는 채널의 새 영상 모음으로 가고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "content_vs_paid_subscription", "selected_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "home", "screen_title": "동영상 홈", "stage": "content_gateway", "elements": [{"label": "멤버십", "role": "tab", "selected": true, "decoy_kind": "paid_product"}, {"label": "구독", "role": "tab"}, {"label": "구매 항목", "decoy_kind": "billing"}, {"label": "Shorts"}], "expected": {"action": "click", "label": "구독", "function_id": "content.subscriptions"}},
+        {"step_id": "feed", "screen_title": "팔로우한 채널의 새 콘텐츠", "stage": "destination", "elements": [{"label": "최신순"}, {"label": "모든 채널"}, {"label": "구독 관리", "decoy_kind": "paid_product"}], "expected": {"action": "stop", "label": "모든 채널", "function_id": "content.subscriptions"}}
+      ]
+    },
+    {
+      "case_id": "collision_paid_subscription_not_content_tab",
+      "intent_id": "subscription_management",
+      "goal_text": "Show me which paid plan keeps charging this account each month.",
+      "locale": "en-US",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "content_vs_paid_subscription", "short_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "account", "screen_title": "Your account", "stage": "destination", "elements": [{"label": "Subscriptions", "role": "tab", "selected": true, "decoy_kind": "content_feed"}, {"label": "Recurring plan and billing"}, {"label": "Following"}, {"label": "Featured offers", "decoy_kind": "advertisement"}], "expected": {"action": "stop", "label": "Recurring plan and billing", "function_id": "subscription.manage"}}
+      ]
+    },
+    {
+      "case_id": "collision_subscription_cancel_safe_entry",
+      "intent_id": "subscription_cancellation",
+      "goal_text": "다음 달부터 요금이 더 빠져나가지 않도록 절차가 시작되는 곳을 알려줘",
+      "locale": "ko-KR",
+      "user_state": "active_subscription",
+      "tags": ["semantic_collision", "content_vs_paid_subscription", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "membership", "screen_title": "현재 이용 중인 플랜", "stage": "destination", "elements": [{"label": "구독 채널", "role": "tab", "selected": true, "decoy_kind": "content_feed"}, {"label": "다음 결제 예정"}, {"label": "종료 절차 보기"}, {"label": "즉시 해지", "dangerous": true}], "expected": {"action": "stop", "label": "종료 절차 보기", "function_id": "subscription.cancel.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_subscription_renewal_not_autopay",
+      "intent_id": "automatic_renewal_control",
+      "goal_text": "이 멤버십이 기간 끝나고 저절로 이어지는지 보고 싶어",
+      "locale": "ko-KR",
+      "user_state": "active_subscription",
+      "tags": ["exact_alias_collision", "subscription_vs_billing", "automatic_renewal"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "membership", "screen_title": "멤버십 상세", "stage": "destination", "elements": [{"label": "자동 결제", "role": "button", "decoy_kind": "billing"}, {"label": "다음 기간 자동 연장"}, {"label": "정기 결제", "decoy_kind": "billing"}, {"label": "갱신 끄기", "dangerous": true}], "expected": {"action": "stop", "label": "다음 기간 자동 연장", "function_id": "subscription.renewal"}}
+      ]
+    },
+    {
+      "case_id": "collision_autopay_not_subscription_renewal",
+      "intent_id": "automatic_payment_management",
+      "goal_text": "서비스 종류와 무관하게 등록된 반복 출금을 한곳에서 확인할래",
+      "locale": "ko-KR",
+      "user_state": "billing_settings",
+      "tags": ["exact_alias_collision", "subscription_vs_billing", "recurring_payment"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "billing", "screen_title": "결제 설정", "stage": "destination", "elements": [{"label": "자동 갱신", "role": "tab", "selected": true, "decoy_kind": "subscription"}, {"label": "반복 출금 관리"}, {"label": "구독", "decoy_kind": "content_feed"}, {"label": "모두 해제", "dangerous": true}], "expected": {"action": "stop", "label": "반복 출금 관리", "function_id": "billing.autopay"}}
+      ]
+    },
+    {
+      "case_id": "collision_refund_request_not_status",
+      "intent_id": "refund",
+      "goal_text": "이미 받은 물건 값을 돌려받는 신청을 새로 시작하려고 해",
+      "locale": "ko-KR",
+      "user_state": "delivered_order",
+      "tags": ["semantic_collision", "refund_request_vs_status", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "order", "screen_title": "주문 후 도움", "stage": "destination", "elements": [{"label": "환불 내역", "role": "tab", "selected": true, "decoy_kind": "status"}, {"label": "반환 절차 시작"}, {"label": "배송 전 주문 취소", "decoy_kind": "order_cancel"}, {"label": "환불 확정", "dangerous": true}], "expected": {"action": "stop", "label": "반환 절차 시작", "function_id": "refund.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_refund_status_not_new_request",
+      "intent_id": "refund_status",
+      "goal_text": "I already asked for my money back and only want to track where it is now.",
+      "locale": "en-US",
+      "user_state": "refund_pending",
+      "tags": ["semantic_collision", "refund_request_vs_status", "short_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "help", "screen_title": "After-payment help", "stage": "destination", "elements": [{"label": "Refund", "role": "button", "decoy_kind": "short"}, {"label": "Track money return"}, {"label": "Submit again", "dangerous": true}, {"label": "Cancel order"}], "expected": {"action": "stop", "label": "Track money return", "function_id": "billing.refund_status"}}
+      ]
+    },
+    {
+      "case_id": "collision_order_cancel_before_shipping",
+      "intent_id": "order_cancellation",
+      "goal_text": "아직 발송되지 않은 주문 자체를 없애려는 거야",
+      "locale": "ko-KR",
+      "user_state": "paid_not_shipped",
+      "tags": ["exact_alias_collision", "order_cancel_vs_refund", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "order", "screen_title": "상품 준비 중", "stage": "destination", "elements": [{"label": "환불 신청", "decoy_kind": "post_delivery"}, {"label": "발송 전 주문 철회"}, {"label": "구매 취소", "role": "button", "decoy_kind": "ambiguous"}, {"label": "취소 확정", "dangerous": true}], "expected": {"action": "stop", "label": "발송 전 주문 철회", "function_id": "order.cancel.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_insurance_surrender_value_not_refund",
+      "intent_id": "insurance_surrender_value",
+      "goal_text": "보험을 지금 끝낸다고 가정했을 때 돌려받을 예상 금액만 조회할래",
+      "locale": "ko-KR",
+      "user_state": "policy_active",
+      "tags": ["semantic_collision", "insurance", "refund_homonym"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "policy", "screen_title": "보험계약 금액 조회", "stage": "destination", "elements": [{"label": "환불 신청", "decoy_kind": "commerce"}, {"label": "계약 종료 시 예상 반환금"}, {"label": "건강보험 환급금", "decoy_kind": "public_insurance"}, {"label": "해지 실행", "dangerous": true}], "expected": {"action": "stop", "label": "계약 종료 시 예상 반환금", "function_id": "insurance.surrender_value"}}
+      ]
+    },
+    {
+      "case_id": "collision_change_account_email",
+      "intent_id": "change_email",
+      "goal_text": "앞으로 이 계정에 붙어 있을 주소를 다른 메일로 교체할래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "email_identity_vs_signup_vs_notification"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "personal", "screen_title": "로그인 정보", "stage": "destination", "elements": [{"label": "메일 수신 설정", "role": "tab", "selected": true, "decoy_kind": "notification"}, {"label": "이메일로 새 계정 만들기", "decoy_kind": "signup"}, {"label": "계정에 연결된 메일 교체"}, {"label": "저장", "dangerous": true}], "expected": {"action": "stop", "label": "계정에 연결된 메일 교체", "function_id": "account.email.change"}}
+      ]
+    },
+    {
+      "case_id": "collision_signup_with_email",
+      "intent_id": "email_registration",
+      "goal_text": "새 계정을 만들 건데 소셜 로그인 대신 메일 주소로 시작할래",
+      "locale": "ko-KR",
+      "user_state": "signed_out",
+      "tags": ["semantic_collision", "email_identity_vs_signup_vs_notification"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "method", "screen_title": "가입 수단 고르기", "stage": "destination", "elements": [{"label": "이메일 변경", "decoy_kind": "account_identity"}, {"label": "메일로 새로 시작"}, {"label": "이메일 알림", "decoy_kind": "notification"}, {"label": "계속", "role": "button", "dangerous": true}], "expected": {"action": "stop", "label": "메일로 새로 시작", "function_id": "auth.signup.email"}}
+      ]
+    },
+    {
+      "case_id": "collision_email_notifications",
+      "intent_id": "email_notification_control",
+      "goal_text": "계정 주소는 그대로 두고 서비스 안내가 메일로 오는지만 조절할래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "email_identity_vs_signup_vs_notification", "toggle_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "notifications", "screen_title": "수신 채널", "stage": "destination", "elements": [{"label": "이메일 주소", "role": "button", "decoy_kind": "account_identity"}, {"label": "메일로 받는 알림"}, {"label": "새 이메일 등록", "decoy_kind": "signup"}, {"label": "이메일 모두 끄기", "role": "switch", "checkable": true, "dangerous": true}], "expected": {"action": "stop", "label": "메일로 받는 알림", "function_id": "notification.email"}}
+      ]
+    },
+    {
+      "case_id": "collision_email_change_confirmation",
+      "intent_id": "change_email",
+      "goal_text": "입력해 둔 새 메일을 계정 식별 주소로 확정하는 마지막 화면이야",
+      "locale": "ko-KR",
+      "user_state": "email_change_confirmation",
+      "tags": ["semantic_collision", "email_identity", "unsafe_final"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "confirm", "screen_title": "주소 변경 확인", "stage": "destination", "elements": [{"label": "새 이메일로 변경", "dangerous": true}, {"label": "인증 메일 다시 보내기"}, {"label": "취소"}], "expected": {"action": "no_click", "label": null, "function_id": "account.email.change"}}
+      ]
+    },
+    {
+      "case_id": "collision_change_account_phone",
+      "intent_id": "change_phone_number",
+      "goal_text": "로그인 확인에 쓰는 기존 휴대폰 연락처를 새 번호로 바꾸고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "phone_identity_vs_signup_vs_sms"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "identity", "screen_title": "계정 연락처", "stage": "destination", "elements": [{"label": "문자 알림", "role": "tab", "selected": true, "decoy_kind": "notification"}, {"label": "전화번호로 가입", "decoy_kind": "signup"}, {"label": "본인 확인 번호 교체"}, {"label": "저장", "dangerous": true}], "expected": {"action": "stop", "label": "본인 확인 번호 교체", "function_id": "account.phone.change"}}
+      ]
+    },
+    {
+      "case_id": "collision_signup_with_phone",
+      "intent_id": "phone_registration",
+      "goal_text": "처음 계정을 만들 때 휴대폰 인증 방식으로 진행하려고 해",
+      "locale": "ko-KR",
+      "user_state": "signed_out",
+      "tags": ["semantic_collision", "phone_identity_vs_signup_vs_sms"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "method", "screen_title": "새 사용자 시작", "stage": "destination", "elements": [{"label": "연락처 수정", "decoy_kind": "account_identity"}, {"label": "휴대폰 인증으로 계정 만들기"}, {"label": "SMS 수신", "decoy_kind": "notification"}, {"label": "가입 완료", "dangerous": true}], "expected": {"action": "stop", "label": "휴대폰 인증으로 계정 만들기", "function_id": "auth.signup.phone"}}
+      ]
+    },
+    {
+      "case_id": "collision_sms_notifications",
+      "intent_id": "sms_notification_control",
+      "goal_text": "등록 번호나 계정은 건드리지 않고 안내 문자가 오는 것만 설정할래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "phone_identity_vs_signup_vs_sms", "toggle_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "channels", "screen_title": "알림 받는 방법", "stage": "destination", "elements": [{"label": "휴대폰 번호 변경", "decoy_kind": "account_identity"}, {"label": "문자로 받는 안내"}, {"label": "번호로 회원가입", "decoy_kind": "signup"}, {"label": "모든 문자 차단", "role": "switch", "checkable": true, "dangerous": true}], "expected": {"action": "stop", "label": "문자로 받는 안내", "function_id": "notification.sms"}}
+      ]
+    },
+    {
+      "case_id": "collision_change_known_password",
+      "intent_id": "password_change",
+      "goal_text": "현재 암호를 알고 있고 보안을 위해 다른 것으로 교체하려고 해",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "password_change_vs_reset_vs_create"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "security", "screen_title": "로그인 보안", "stage": "destination", "elements": [{"label": "비밀번호 재설정", "role": "button", "decoy_kind": "recovery"}, {"label": "기존 암호로 교체"}, {"label": "가입 비밀번호 만들기", "decoy_kind": "signup"}, {"label": "변경 완료", "dangerous": true}], "expected": {"action": "stop", "label": "기존 암호로 교체", "function_id": "security.password"}}
+      ]
+    },
+    {
+      "case_id": "collision_forgotten_password_recovery",
+      "intent_id": "password_reset",
+      "goal_text": "기억나지 않는 로그인 암호를 인증 절차로 다시 만들고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_out",
+      "tags": ["exact_alias_collision", "password_change_vs_reset_vs_create"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "login", "screen_title": "로그인 문제 해결", "stage": "destination", "elements": [{"label": "암호 변경", "decoy_kind": "known_password"}, {"label": "접속 암호 복구"}, {"label": "새 계정 비밀번호", "decoy_kind": "signup"}, {"label": "로그인", "role": "button", "dangerous": true}], "expected": {"action": "stop", "label": "접속 암호 복구", "function_id": "security.password.reset"}}
+      ]
+    },
+    {
+      "case_id": "collision_signup_password_creation",
+      "intent_id": "account_registration",
+      "goal_text": "신규 계정 절차 중 처음 사용할 암호를 정하는 단계로 가고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signup_in_progress",
+      "tags": ["semantic_collision", "password_change_vs_reset_vs_create", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "signup-security", "screen_title": "계정 보호 준비", "stage": "destination", "elements": [{"label": "비밀번호 변경", "decoy_kind": "signed_in"}, {"label": "비밀번호 찾기", "decoy_kind": "recovery"}, {"label": "가입용 암호 정하기"}, {"label": "계정 생성", "dangerous": true}], "expected": {"action": "stop", "label": "가입용 암호 정하기", "function_id": "auth.password.create"}}
+      ]
+    },
+    {
+      "case_id": "collision_share_cloud_file",
+      "intent_id": "share_file",
+      "goal_text": "Let a coworker view one document in my cloud drive without publishing a post.",
+      "locale": "en-US",
+      "user_state": "file_selected",
+      "tags": ["semantic_collision", "file_vs_content_vs_location_share", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "file-actions", "screen_title": "Quarterly-plan.xlsx", "stage": "destination", "elements": [{"label": "Share", "role": "button", "decoy_kind": "short"}, {"label": "Send as a post", "decoy_kind": "content"}, {"label": "People and document access"}, {"label": "Publish link to everyone", "dangerous": true}], "expected": {"action": "stop", "label": "People and document access", "function_id": "files.share"}}
+      ]
+    },
+    {
+      "case_id": "collision_share_social_post",
+      "intent_id": "share_content",
+      "goal_text": "지금 보고 있는 게시물을 친구에게 링크로 보내고 싶어",
+      "locale": "ko-KR",
+      "user_state": "content_open",
+      "tags": ["semantic_collision", "file_vs_content_vs_location_share"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "post", "screen_title": "게시물 상세", "stage": "destination", "elements": [{"label": "파일 공유", "role": "button", "decoy_kind": "file"}, {"label": "내 위치 보내기", "decoy_kind": "location"}, {"label": "게시물 링크 전달"}, {"label": "공개 게시", "dangerous": true}], "expected": {"action": "stop", "label": "게시물 링크 전달", "function_id": "content.share"}}
+      ]
+    },
+    {
+      "case_id": "collision_share_live_location",
+      "intent_id": "location_sharing_control",
+      "goal_text": "대화 상대에게 일정 시간 동안 움직이는 위치를 보여주려 해",
+      "locale": "ko-KR",
+      "user_state": "conversation_open",
+      "tags": ["semantic_collision", "file_vs_content_vs_location_share", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "share-sheet", "screen_title": "대화에 첨부", "stage": "destination", "elements": [{"label": "공유", "role": "button", "decoy_kind": "short"}, {"label": "문서", "decoy_kind": "file"}, {"label": "실시간 위치 공개 범위"}, {"label": "지금 바로 전송", "dangerous": true}], "expected": {"action": "stop", "label": "실시간 위치 공개 범위", "function_id": "privacy.location_sharing"}}
+      ]
+    },
+    {
+      "case_id": "collision_file_share_confirmation",
+      "intent_id": "share_file",
+      "goal_text": "초대할 사람까지 정했고 실제 접근 권한 부여는 내가 누를게",
+      "locale": "ko-KR",
+      "user_state": "share_confirmation",
+      "tags": ["semantic_collision", "file_share", "unsafe_final"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "confirm", "screen_title": "2명에게 문서 공유", "stage": "destination", "elements": [{"label": "접근 권한 보내기", "dangerous": true}, {"label": "링크 설정"}, {"label": "취소"}], "expected": {"action": "no_click", "label": null, "function_id": "files.share"}}
+      ]
+    },
+    {
+      "case_id": "collision_travel_booking_list",
+      "intent_id": "travel_bookings",
+      "goal_text": "앞으로 탈 비행편의 예약번호와 일정을 모아 보고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "reservation_travel_vs_medical_vs_transfer"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "services", "screen_title": "내 일정", "stage": "destination", "elements": [{"label": "예약", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "진료 일정", "decoy_kind": "medical"}, {"label": "항공 여정 모아보기"}, {"label": "예약 이체", "decoy_kind": "finance"}], "expected": {"action": "stop", "label": "항공 여정 모아보기", "function_id": "travel.bookings"}}
+      ]
+    },
+    {
+      "case_id": "collision_medical_appointment",
+      "intent_id": "medical_appointments",
+      "goal_text": "병원에 방문할 날짜를 새로 잡거나 기존 시간을 확인할래",
+      "locale": "ko-KR",
+      "user_state": "patient_verified",
+      "tags": ["semantic_collision", "reservation_travel_vs_medical_vs_transfer"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "health", "screen_title": "건강 서비스", "stage": "destination", "elements": [{"label": "예약", "role": "button", "decoy_kind": "short"}, {"label": "항공권 일정", "decoy_kind": "travel"}, {"label": "의료진 방문 일정"}, {"label": "자동 이체 예약", "decoy_kind": "finance"}], "expected": {"action": "stop", "label": "의료진 방문 일정", "function_id": "health.appointments"}}
+      ]
+    },
+    {
+      "case_id": "collision_recurring_transfer_schedule",
+      "intent_id": "recurring_transfer_management",
+      "goal_text": "매달 같은 날 계좌에서 나가도록 걸어 둔 송금 일정을 관리하려고 해",
+      "locale": "ko-KR",
+      "user_state": "bank_authenticated",
+      "tags": ["semantic_collision", "reservation_travel_vs_medical_vs_transfer", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "transfer", "screen_title": "이체 서비스", "stage": "destination", "elements": [{"label": "예약", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "여행 예약", "decoy_kind": "travel"}, {"label": "반복 송금 일정 관리"}, {"label": "즉시 이체", "dangerous": true}], "expected": {"action": "stop", "label": "반복 송금 일정 관리", "function_id": "finance.recurring_transfer"}}
+      ]
+    },
+    {
+      "case_id": "collision_travel_cancel_not_medical",
+      "intent_id": "travel_booking_cancellation",
+      "goal_text": "병원 일정이 아니라 예매해 둔 항공 여정을 취소하는 절차를 찾는 중이야",
+      "locale": "ko-KR",
+      "user_state": "trip_booked",
+      "tags": ["semantic_collision", "reservation_travel_vs_medical", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "trip", "screen_title": "제주행 예약 상세", "stage": "destination", "elements": [{"label": "진료 예약 취소", "role": "button", "decoy_kind": "medical"}, {"label": "항공 여정 취소 조건"}, {"label": "환불 현황", "decoy_kind": "refund_status"}, {"label": "예약 취소 확정", "dangerous": true}], "expected": {"action": "stop", "label": "항공 여정 취소 조건", "function_id": "travel.booking.cancel.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_viewing_history",
+      "intent_id": "activity_history",
+      "goal_text": "예전에 재생했던 영상 목록을 다시 훑어보고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "history_family", "selected_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "library", "screen_title": "내 보관함", "stage": "destination", "elements": [{"label": "기록", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "접속 기록", "decoy_kind": "security"}, {"label": "이전에 본 콘텐츠"}, {"label": "거래 내역", "decoy_kind": "finance"}], "expected": {"action": "stop", "label": "이전에 본 콘텐츠", "function_id": "content.history"}}
+      ]
+    },
+    {
+      "case_id": "collision_login_security_history",
+      "intent_id": "login_history",
+      "goal_text": "내 아이디로 언제 어느 기기에서 접속했는지 확인하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "history_family", "security"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "security", "screen_title": "보안 활동", "stage": "destination", "elements": [{"label": "로그인 활동"}, {"label": "현재 접속 기기", "decoy_kind": "sessions"}, {"label": "시청 활동", "decoy_kind": "content"}, {"label": "전체 로그아웃", "dangerous": true}], "expected": {"action": "stop", "label": "로그인 활동", "function_id": "security.login_history"}}
+      ]
+    },
+    {
+      "case_id": "collision_finance_transaction_history",
+      "intent_id": "transaction_history",
+      "goal_text": "계좌로 들어오고 나간 돈의 흐름을 날짜별로 보고 싶어",
+      "locale": "ko-KR",
+      "user_state": "bank_authenticated",
+      "tags": ["exact_alias_collision", "history_family", "finance"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "account", "screen_title": "입출금 계좌", "stage": "destination", "elements": [{"label": "거래 내역"}, {"label": "구매 내역", "role": "tab", "selected": true, "decoy_kind": "commerce"}, {"label": "로그인 기록", "decoy_kind": "security"}, {"label": "이체", "dangerous": true}], "expected": {"action": "stop", "label": "거래 내역", "function_id": "finance.transactions"}}
+      ]
+    },
+    {
+      "case_id": "collision_purchase_history",
+      "intent_id": "purchase_history",
+      "goal_text": "이 쇼핑 서비스에서 결제했던 물건과 영수증을 찾아볼래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "history_family", "commerce"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "orders", "screen_title": "쇼핑 활동", "stage": "destination", "elements": [{"label": "거래 내역", "role": "tab", "selected": true, "decoy_kind": "finance"}, {"label": "결제한 상품 기록"}, {"label": "건강 기록", "decoy_kind": "health"}, {"label": "다시 구매", "dangerous": true}], "expected": {"action": "stop", "label": "결제한 상품 기록", "function_id": "billing.purchase_history"}}
+      ]
+    },
+    {
+      "case_id": "collision_health_records",
+      "intent_id": "health_records",
+      "goal_text": "병원에서 받은 검사 결과와 과거 진료 내용을 모아서 볼래",
+      "locale": "ko-KR",
+      "user_state": "patient_verified",
+      "tags": ["semantic_collision", "history_family", "health"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "health", "screen_title": "나의 건강", "stage": "destination", "elements": [{"label": "기록", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "시청 기록", "decoy_kind": "content"}, {"label": "검사와 진료 이력"}, {"label": "구매 내역", "decoy_kind": "commerce"}], "expected": {"action": "stop", "label": "검사와 진료 이력", "function_id": "health.records"}}
+      ]
+    },
+    {
+      "case_id": "collision_active_sessions_not_login_history",
+      "intent_id": "active_sessions",
+      "goal_text": "과거 기록 말고 지금 내 계정이 열려 있는 기기만 확인하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "history_family", "sessions_vs_history"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "devices", "screen_title": "계정 접속 보안", "stage": "destination", "elements": [{"label": "접속 기록", "role": "button", "decoy_kind": "history"}, {"label": "현재 열린 로그인"}, {"label": "시청 기록", "decoy_kind": "content"}, {"label": "모두 종료", "dangerous": true}], "expected": {"action": "stop", "label": "현재 열린 로그인", "function_id": "account.sessions"}}
+      ]
+    },
+    {
+      "case_id": "collision_media_subtitles",
+      "intent_id": "caption_settings",
+      "goal_text": "지금 재생하는 영상에 표시될 번역 글의 언어를 고르고 싶어",
+      "locale": "ko-KR",
+      "user_state": "video_player",
+      "tags": ["exact_alias_collision", "captions_media_vs_accessibility"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "player", "screen_title": "재생 옵션", "stage": "destination", "elements": [{"label": "자막", "role": "button"}, {"label": "실시간 자막", "decoy_kind": "accessibility"}, {"label": "청각 지원", "decoy_kind": "system"}, {"label": "댓글", "decoy_kind": "content"}], "expected": {"action": "stop", "label": "자막", "function_id": "media.captions"}}
+      ]
+    },
+    {
+      "case_id": "collision_accessibility_live_caption",
+      "intent_id": "accessibility_captions",
+      "goal_text": "Turn speech from anything playing on the device into text, not subtitles for one video.",
+      "locale": "en-US",
+      "user_state": "accessibility_settings",
+      "tags": ["exact_alias_collision", "captions_media_vs_accessibility", "toggle_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "hearing", "screen_title": "Hearing assistance", "stage": "destination", "elements": [{"label": "Captions", "role": "tab", "selected": true, "decoy_kind": "media"}, {"label": "Live transcription for all audio"}, {"label": "Video subtitle language", "decoy_kind": "media"}, {"label": "Enable now", "role": "switch", "checkable": true, "dangerous": true}], "expected": {"action": "stop", "label": "Live transcription for all audio", "function_id": "accessibility.captions"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_clear_cache_boundary",
+      "intent_id": "android_clear_app_cache",
+      "goal_text": "로그인 정보는 남기고 이 앱의 임시 파일만 운영체제에서 비우려 해",
+      "locale": "ko-KR",
+      "user_state": "android_storage_settings",
+      "tags": ["exact_alias_collision", "delete_family", "cache_vs_storage", "unsafe_final"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "storage", "screen_title": "앱 저장공간", "stage": "destination", "elements": [{"label": "캐시 지우기", "dangerous": true}, {"label": "모든 데이터 삭제", "dangerous": true, "decoy_kind": "storage"}, {"label": "계정 삭제", "dangerous": true, "decoy_kind": "account"}, {"label": "취소"}], "expected": {"action": "no_click", "label": null, "function_id": "android.app.clear_cache"}}
+      ]
+    },
+    {
+      "case_id": "collision_delete_service_activity",
+      "intent_id": "data_deletion",
+      "goal_text": "앱은 그대로 쓰되 회사 서버에 쌓인 검색 활동만 없애고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "delete_family", "data_vs_cache_vs_account"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "privacy", "screen_title": "내 데이터 제어", "stage": "destination", "elements": [{"label": "데이터 삭제"}, {"label": "캐시 삭제", "role": "button", "decoy_kind": "device"}, {"label": "회원 탈퇴", "dangerous": true, "decoy_kind": "account"}, {"label": "게시물 삭제", "dangerous": true, "decoy_kind": "content"}], "expected": {"action": "stop", "label": "데이터 삭제", "function_id": "privacy.delete_data"}}
+      ]
+    },
+    {
+      "case_id": "collision_delete_account_entry",
+      "intent_id": "account_deletion",
+      "goal_text": "작성물 하나가 아니라 이 서비스의 내 회원 자격 전체를 끝내려 해",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "delete_family", "account_vs_content", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "account", "screen_title": "계정 관리", "stage": "destination", "elements": [{"label": "삭제", "role": "button", "decoy_kind": "short"}, {"label": "게시물 삭제", "dangerous": true, "decoy_kind": "content"}, {"label": "서비스 이용 종료 절차"}, {"label": "계정 영구 삭제", "dangerous": true}], "expected": {"action": "stop", "label": "서비스 이용 종료 절차", "function_id": "account.delete.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_delete_post_not_account",
+      "intent_id": "delete_content",
+      "goal_text": "내 프로필은 유지하고 지금 열어 둔 게시글 한 건만 없앨래",
+      "locale": "ko-KR",
+      "user_state": "content_open",
+      "tags": ["semantic_collision", "delete_family", "content_vs_account", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "post-menu", "screen_title": "게시물 옵션", "stage": "destination", "elements": [{"label": "삭제", "role": "button", "decoy_kind": "short"}, {"label": "계정 삭제", "dangerous": true, "decoy_kind": "account"}, {"label": "이 게시물 제거 절차"}, {"label": "지금 삭제", "dangerous": true}], "expected": {"action": "stop", "label": "이 게시물 제거 절차", "function_id": "content.delete.entry"}}
+      ]
+    },
+    {
+      "case_id": "collision_delete_conversation_not_message",
+      "intent_id": "delete_conversation",
+      "goal_text": "상대를 차단하거나 계정을 지우는 게 아니라 이 채팅 내역만 치울래",
+      "locale": "ko-KR",
+      "user_state": "conversation_open",
+      "tags": ["semantic_collision", "delete_family", "conversation_vs_account", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "chat-menu", "screen_title": "대화방 옵션", "stage": "destination", "elements": [{"label": "삭제", "role": "button", "decoy_kind": "short"}, {"label": "사용자 차단", "dangerous": true, "decoy_kind": "account"}, {"label": "채팅 내역 정리"}, {"label": "대화 영구 삭제", "dangerous": true}], "expected": {"action": "stop", "label": "채팅 내역 정리", "function_id": "communication.conversation.delete"}}
+      ]
+    },
+    {
+      "case_id": "collision_delete_file_to_trash",
+      "intent_id": "browse_files",
+      "goal_text": "계정이나 대화를 건드리지 말고 선택한 문서만 휴지통으로 옮길래",
+      "locale": "ko-KR",
+      "user_state": "file_selected",
+      "tags": ["semantic_collision", "delete_family", "file_vs_content", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "file-menu", "screen_title": "보고서.pdf 작업", "stage": "destination", "elements": [{"label": "삭제", "role": "button", "decoy_kind": "short"}, {"label": "게시물 삭제", "dangerous": true, "decoy_kind": "content"}, {"label": "휴지통으로 이동"}, {"label": "영구 삭제", "dangerous": true}], "expected": {"action": "stop", "label": "휴지통으로 이동", "function_id": "files.trash"}}
+      ]
+    },
+    {
+      "case_id": "collision_finance_card_controls",
+      "intent_id": "card_management",
+      "goal_text": "I need the bank card controls for limits and loss reporting, not a checkout card.",
+      "locale": "en-US",
+      "user_state": "bank_authenticated",
+      "tags": ["exact_alias_collision", "card_finance_vs_payment_vs_membership"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "cards", "screen_title": "Financial products", "stage": "destination", "elements": [{"label": "Cards", "role": "tab", "selected": true, "decoy_kind": "short"}, {"label": "Payment methods", "decoy_kind": "billing"}, {"label": "Issued card security controls"}, {"label": "Membership card", "decoy_kind": "loyalty"}], "expected": {"action": "stop", "label": "Issued card security controls", "function_id": "finance.cards"}}
+      ]
+    },
+    {
+      "case_id": "collision_payment_method_card",
+      "intent_id": "payment_method_change",
+      "goal_text": "이 서비스에서 다음 결제 때 사용할 카드만 다른 것으로 지정할래",
+      "locale": "ko-KR",
+      "user_state": "billing_settings",
+      "tags": ["exact_alias_collision", "card_finance_vs_payment_vs_membership", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "billing", "screen_title": "결제 설정", "stage": "destination", "elements": [{"label": "카드 관리", "role": "button", "decoy_kind": "finance"}, {"label": "멤버십 카드", "decoy_kind": "loyalty"}, {"label": "청구에 사용할 수단"}, {"label": "기본 카드로 저장", "dangerous": true}], "expected": {"action": "stop", "label": "청구에 사용할 수단", "function_id": "billing.payment_method"}}
+      ]
+    },
+    {
+      "case_id": "collision_membership_not_finance_card",
+      "intent_id": "subscription_management",
+      "goal_text": "신용카드 설정이 아니라 가입해 둔 유료 멤버십 혜택 화면을 찾고 있어",
+      "locale": "ko-KR",
+      "user_state": "active_subscription",
+      "tags": ["semantic_collision", "card_finance_vs_payment_vs_membership", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "wallet", "screen_title": "지갑", "stage": "destination", "elements": [{"label": "카드", "role": "tab", "selected": true, "decoy_kind": "finance"}, {"label": "결제 카드", "decoy_kind": "billing"}, {"label": "가입 멤버십과 혜택"}, {"label": "멤버십 추가", "dangerous": true}], "expected": {"action": "stop", "label": "가입 멤버십과 혜택", "function_id": "subscription.manage"}}
+      ]
+    },
+    {
+      "case_id": "collision_card_freeze_not_default_payment",
+      "intent_id": "freeze_card",
+      "goal_text": "잃어버린 건 아니지만 은행 카드를 잠시 결제 불가 상태로 두려 해",
+      "locale": "ko-KR",
+      "user_state": "bank_authenticated",
+      "tags": ["semantic_collision", "card_finance_vs_payment", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "card", "screen_title": "1234 카드 보안", "stage": "destination", "elements": [{"label": "기본 결제 카드", "role": "button", "decoy_kind": "billing"}, {"label": "멤버십 혜택", "decoy_kind": "loyalty"}, {"label": "카드 사용 잠금 안내"}, {"label": "지금 잠그기", "dangerous": true}], "expected": {"action": "stop", "label": "카드 사용 잠금 안내", "function_id": "finance.card.freeze"}}
+      ]
+    },
+    {
+      "case_id": "collision_support_live_chat",
+      "intent_id": "support_contact",
+      "goal_text": "친구에게 메시지를 보내는 게 아니라 상담원과 실시간으로 이야기하고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "message_vs_support_chat", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "help", "screen_title": "도움 받기", "stage": "support_gateway", "elements": [{"label": "메시지", "role": "tab", "selected": true, "decoy_kind": "inbox"}, {"label": "새 대화", "decoy_kind": "compose"}, {"label": "상담원과 채팅"}, {"label": "문의 전송", "dangerous": true}], "expected": {"action": "click", "label": "상담원과 채팅", "function_id": "support.chat"}},
+        {"step_id": "chat", "screen_title": "고객지원 대화", "stage": "destination", "elements": [{"label": "상담 연결 대기"}, {"label": "친구 메시지", "decoy_kind": "inbox"}, {"label": "메시지 보내기", "dangerous": true}], "expected": {"action": "stop", "label": "상담 연결 대기", "function_id": "support.chat"}}
+      ]
+    },
+    {
+      "case_id": "collision_personal_message_inbox",
+      "intent_id": "message_inbox",
+      "goal_text": "고객센터 말고 다른 이용자들이 나에게 보낸 대화를 열어볼래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "message_vs_support_chat", "selected_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "home", "screen_title": "소셜 홈", "stage": "destination", "elements": [{"label": "지원", "role": "tab", "selected": true, "decoy_kind": "support"}, {"label": "상담 채팅", "decoy_kind": "support"}, {"label": "이용자 대화함"}, {"label": "새 문의", "dangerous": true}], "expected": {"action": "stop", "label": "이용자 대화함", "function_id": "communication.inbox"}}
+      ]
+    },
+    {
+      "case_id": "collision_support_contact_not_message",
+      "intent_id": "support_contact",
+      "goal_text": "앱 오류를 운영팀에 정식으로 문의할 수 있는 연락 방법을 찾고 있어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["semantic_collision", "message_vs_support_contact"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "support", "screen_title": "문의 방법", "stage": "destination", "elements": [{"label": "채팅", "role": "button", "decoy_kind": "short"}, {"label": "받은 메시지", "decoy_kind": "inbox"}, {"label": "운영팀 연락처와 문의 양식"}, {"label": "신고 제출", "dangerous": true}], "expected": {"action": "stop", "label": "운영팀 연락처와 문의 양식", "function_id": "support.contact"}}
+      ]
+    },
+    {
+      "case_id": "collision_compose_personal_message",
+      "intent_id": "compose_message",
+      "goal_text": "상담 요청이 아니라 친구 한 명에게 새 대화를 먼저 걸고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "message_vs_support_chat", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "inbox", "screen_title": "메시지", "stage": "destination", "elements": [{"label": "Compose", "role": "button", "decoy_kind": "exact_collision"}, {"label": "고객지원 채팅", "decoy_kind": "support"}, {"label": "친구에게 새 대화 쓰기"}, {"label": "전송", "dangerous": true}], "expected": {"action": "stop", "label": "친구에게 새 대화 쓰기", "function_id": "communication.compose"}}
+      ]
+    },
+    {
+      "case_id": "collision_login_two_factor_challenge",
+      "intent_id": "two_factor_verification",
+      "goal_text": "지금 로그인하면서 문자로 받은 추가 확인 번호를 입력하려 해",
+      "locale": "ko-KR",
+      "user_state": "login_challenge",
+      "tags": ["exact_alias_collision", "two_factor_enrollment_vs_challenge"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "challenge", "screen_title": "로그인 추가 확인", "stage": "destination", "elements": [{"label": "2단계 인증", "role": "button"}, {"label": "보안 설정에서 2FA 관리", "decoy_kind": "enrollment"}, {"label": "인증 코드 입력", "role": "input"}, {"label": "확인", "dangerous": true}], "expected": {"action": "stop", "label": "2단계 인증", "function_id": "auth.two_factor"}}
+      ]
+    },
+    {
+      "case_id": "collision_profile_personal_info_not_privacy",
+      "intent_id": "edit_profile",
+      "goal_text": "공개 범위가 아니라 화면에 보이는 내 이름과 소개를 고치고 싶어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "profile_vs_personal_info_vs_privacy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "account", "screen_title": "내 계정", "stage": "destination", "elements": [{"label": "개인정보", "role": "tab", "selected": true, "decoy_kind": "privacy"}, {"label": "회원정보", "decoy_kind": "identity"}, {"label": "공개 프로필 내용 편집"}, {"label": "저장", "dangerous": true}], "expected": {"action": "stop", "label": "공개 프로필 내용 편집", "function_id": "account.profile.edit"}}
+      ]
+    },
+    {
+      "case_id": "collision_privacy_controls_not_profile",
+      "intent_id": "privacy_control",
+      "goal_text": "이름 수정 말고 내 활동이 누구에게 보이는지를 제한하려고 해",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "profile_vs_personal_info_vs_privacy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "account", "screen_title": "계정과 정보", "stage": "destination", "elements": [{"label": "프로필", "role": "tab", "selected": true, "decoy_kind": "profile"}, {"label": "회원 정보", "decoy_kind": "identity"}, {"label": "내 활동 공개와 데이터 제어"}, {"label": "전체 공개", "dangerous": true}], "expected": {"action": "stop", "label": "내 활동 공개와 데이터 제어", "function_id": "privacy.settings"}}
+      ]
+    },
+    {
+      "case_id": "collision_media_autoplay_not_general_playback",
+      "intent_id": "autoplay_settings",
+      "goal_text": "한 영상이 끝난 뒤 다음 영상이 저절로 시작되는 동작만 바꿀래",
+      "locale": "ko-KR",
+      "user_state": "player_settings",
+      "tags": ["exact_alias_collision", "autoplay_vs_playback", "toggle_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "player", "screen_title": "영상 동작", "stage": "destination", "elements": [{"label": "자동 재생"}, {"label": "재생 설정", "role": "tab", "selected": true, "decoy_kind": "general"}, {"label": "백그라운드 재생", "decoy_kind": "playback"}, {"label": "바로 켜기", "role": "switch", "checkable": true, "dangerous": true}], "expected": {"action": "stop", "label": "자동 재생", "function_id": "media.autoplay"}}
+      ]
+    },
+    {
+      "case_id": "collision_playback_settings_not_autoplay",
+      "intent_id": "playback_settings",
+      "goal_text": "자동 넘김 하나가 아니라 재생 품질과 속도 같은 전체 환경을 조정할래",
+      "locale": "ko-KR",
+      "user_state": "in_app_settings",
+      "tags": ["exact_alias_collision", "autoplay_vs_playback"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "settings", "screen_title": "콘텐츠 환경", "stage": "destination", "elements": [{"label": "Autoplay", "role": "button", "decoy_kind": "specific"}, {"label": "재생 전반 환경"}, {"label": "자막", "decoy_kind": "caption"}, {"label": "다운로드"}], "expected": {"action": "stop", "label": "재생 전반 환경", "function_id": "settings.playback"}}
+      ]
+    },
+    {
+      "case_id": "collision_faq_self_service_not_contact",
+      "intent_id": "support_faq",
+      "goal_text": "상담원에게 연락하기 전에 자주 생기는 문제의 해결 글부터 읽어볼래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "faq_vs_help_vs_contact", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "help", "screen_title": "도움말", "stage": "destination", "elements": [{"label": "문의하기", "role": "button", "selected": true, "decoy_kind": "contact"}, {"label": "문제 해결", "decoy_kind": "exact_collision"}, {"label": "많이 묻는 문제 모음"}, {"label": "바로 상담", "dangerous": true}], "expected": {"action": "stop", "label": "많이 묻는 문제 모음", "function_id": "support.faq"}}
+      ]
+    },
+    {
+      "case_id": "collision_saved_content_not_wishlist",
+      "intent_id": "saved_content",
+      "goal_text": "살 물건 목록이 아니라 나중에 보려고 보관한 글과 영상을 찾고 있어",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "saved_vs_wishlist", "selected_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "library", "screen_title": "내 보관함", "stage": "destination", "elements": [{"label": "찜", "role": "tab", "selected": true, "decoy_kind": "commerce"}, {"label": "장바구니", "decoy_kind": "commerce"}, {"label": "나중에 볼 콘텐츠"}, {"label": "모두 삭제", "dangerous": true}], "expected": {"action": "stop", "label": "나중에 볼 콘텐츠", "function_id": "content.saved"}}
+      ]
+    },
+    {
+      "case_id": "collision_wishlist_not_saved_content",
+      "intent_id": "wishlist",
+      "goal_text": "읽을 글이 아니라 구매를 고민하며 표시해 둔 상품들을 모아 볼래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "saved_vs_wishlist", "short_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "shopping", "screen_title": "쇼핑 보관함", "stage": "destination", "elements": [{"label": "Saved", "role": "tab", "selected": true, "decoy_kind": "content"}, {"label": "구매 후보 상품"}, {"label": "나중에 볼 영상", "decoy_kind": "content"}, {"label": "전체 구매", "dangerous": true}], "expected": {"action": "stop", "label": "구매 후보 상품", "function_id": "commerce.wishlist"}}
+      ]
+    },
+    {
+      "case_id": "collision_billing_receipt_not_finance_statement",
+      "intent_id": "billing_receipt",
+      "goal_text": "한 번 결제한 주문의 증빙 문서를 내려받으려고 해",
+      "locale": "ko-KR",
+      "user_state": "purchase_complete",
+      "tags": ["exact_alias_collision", "receipt_vs_finance_statement"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "billing", "screen_title": "주문 결제 상세", "stage": "destination", "elements": [{"label": "거래 명세서", "role": "button", "decoy_kind": "finance"}, {"label": "이 주문의 결제 증빙"}, {"label": "월별 카드 명세", "decoy_kind": "finance"}, {"label": "다시 결제", "dangerous": true}], "expected": {"action": "stop", "label": "이 주문의 결제 증빙", "function_id": "billing.receipt"}}
+      ]
+    },
+    {
+      "case_id": "collision_finance_statement_not_order_receipt",
+      "intent_id": "financial_statements",
+      "goal_text": "이번 달 카드 이용 금액이 합산된 청구 문서를 보고 싶어",
+      "locale": "ko-KR",
+      "user_state": "bank_authenticated",
+      "tags": ["exact_alias_collision", "receipt_vs_finance_statement", "strong_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "card", "screen_title": "카드 이용", "stage": "destination", "elements": [{"label": "영수증", "role": "button", "selected": true, "decoy_kind": "order"}, {"label": "월간 청구 내역서"}, {"label": "거래 명세서", "decoy_kind": "exact_collision"}, {"label": "즉시 결제", "dangerous": true}], "expected": {"action": "stop", "label": "월간 청구 내역서", "function_id": "finance.statements"}}
+      ]
+    },
+    {
+      "case_id": "collision_android_menu_drawer_context",
+      "intent_id": "support_contact",
+      "goal_text": "아래 탭이 아니라 왼쪽에서 펼쳐지는 목록을 거쳐 도움말로 가고 싶어",
+      "locale": "ko-KR",
+      "user_state": "home",
+      "tags": ["exact_alias_collision", "menu_vs_drawer", "icon_content_description"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "home", "screen_title": "홈", "stage": "navigation_gateway", "elements": [{"content_description": "메뉴 열기", "role": "button"}, {"label": "전체 메뉴", "role": "tab", "selected": true, "decoy_kind": "bottom_tab"}, {"label": "더보기", "decoy_kind": "overflow"}, {"label": "검색"}], "expected": {"action": "click", "label": "메뉴 열기", "function_id": "navigation.drawer"}},
+        {"step_id": "drawer", "screen_title": "측면 탐색", "stage": "destination", "ui_surface": "drawer", "elements": [{"label": "기능 전체 목록", "decoy_kind": "menu"}, {"label": "도움과 문의"}, {"label": "설정"}, {"label": "홈"}], "expected": {"action": "stop", "label": "도움과 문의", "function_id": "support.help"}}
+      ]
+    },
+    {
+      "case_id": "collision_login_history_not_current_sessions",
+      "intent_id": "login_history",
+      "goal_text": "현재 열린 기기만 말고 지난달에 있었던 접속까지 시간순으로 확인할래",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "sessions_vs_login_history", "short_decoy"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "security", "screen_title": "계정 보안", "stage": "destination", "elements": [{"label": "로그인 활동", "role": "button"}, {"label": "활성 기기", "role": "tab", "selected": true, "decoy_kind": "sessions"}, {"label": "과거 접속 이력"}, {"label": "전부 로그아웃", "dangerous": true}], "expected": {"action": "stop", "label": "과거 접속 이력", "function_id": "security.login_history"}}
+      ]
+    },
+    {
+      "case_id": "collision_marketing_promo_not_coupon",
+      "intent_id": "marketing_notification_control",
+      "goal_text": "할인 쿠폰을 찾는 게 아니라 광고성 혜택 소식을 그만 받으려 해",
+      "locale": "ko-KR",
+      "user_state": "signed_in",
+      "tags": ["exact_alias_collision", "promotion_marketing_vs_billing", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "preferences", "screen_title": "혜택과 수신", "stage": "destination", "elements": [{"label": "프로모션", "role": "tab", "selected": true, "decoy_kind": "coupon"}, {"label": "쿠폰함", "decoy_kind": "billing"}, {"label": "광고성 혜택 연락 설정"}, {"label": "모두 해제", "dangerous": true}], "expected": {"action": "stop", "label": "광고성 혜택 연락 설정", "function_id": "marketing.settings"}}
+      ]
+    },
+    {
+      "case_id": "collision_optional_consent_not_marketing_toggle",
+      "intent_id": "signup_optional_consent",
+      "goal_text": "가입 도중 꼭 필요하지 않은 조항이 무엇인지 읽고 선택하려고 해",
+      "locale": "ko-KR",
+      "user_state": "signup_terms",
+      "tags": ["exact_alias_collision", "optional_consent_vs_marketing", "state_change_boundary"],
+      "source_kind": "fixed_independent",
+      "steps": [
+        {"step_id": "terms", "screen_title": "가입 동의", "stage": "destination", "elements": [{"label": "프로모션 메시지", "role": "switch", "checkable": true, "decoy_kind": "marketing"}, {"label": "선택 동의 항목 자세히"}, {"label": "수신 설정", "decoy_kind": "marketing"}, {"label": "모두 동의", "dangerous": true}], "expected": {"action": "stop", "label": "선택 동의 항목 자세히", "function_id": "consent.optional"}}
+      ]
+    }
+  ]
+}

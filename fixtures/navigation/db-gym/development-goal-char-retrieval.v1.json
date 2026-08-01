@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "fixture_version": "1.0.0-development.2",
+  "split": "development_goal_char_retrieval_v1",
+  "frozen": false,
+  "catalog_derived": true,
+  "tuning_allowed": true,
+  "source_kind": "retrieval_development_controls",
+  "source_fixture": "development-goal-semantic-fallback.v1.json",
+  "description": "Precision-gate controls for the bounded char/word TF-IDF candidate retriever. This development-only fixture adds no independent or production-accuracy claim.",
+  "provenance": "Controls are derived from the separately authored semantic-development fixture and deliberately tuned against the reviewable catalog. They are regression tests, not holdout evidence. The cold-build ceiling is sized for the V13 catalog while warm-query, memory, and admission precision gates remain unchanged.",
+  "claims": {
+    "independent_accuracy_evidence": false,
+    "unseen_holdout": false,
+    "production_device_accuracy": false
+  },
+  "gate_contract": {
+    "negation_policy": "rank_candidates_but_never_admit",
+    "minimum_development_admissions": 4,
+    "minimum_admitted_precision": 1.0,
+    "maximum_warm_p95_seconds": 0.08,
+    "maximum_build_seconds": 22.0,
+    "maximum_traced_peak_bytes": 268435456,
+    "maximum_estimated_index_bytes": 100663296
+  },
+  "integration_contract": {
+    "minimum_char_adoptions": 5,
+    "minimum_char_adoption_precision": 1.0,
+    "legacy_and_semantic_must_be_generic": true
+  },
+  "integration_cases": [
+    {
+      "case_key": "weather_typo_warning_weather",
+      "source_case_key": "dangerous_weather_warning",
+      "expected_intent_id": "v4_weather_severe_alerts",
+      "expected_function_id": "weather.severe_alerts",
+      "goal": "offical severe weathr warnings location storm flood alert severity affected area expiration time warning weather"
+    },
+    {
+      "case_key": "weather_typo_manage_weather",
+      "source_case_key": "dangerous_weather_warning",
+      "expected_intent_id": "v4_weather_severe_alerts",
+      "expected_function_id": "weather.severe_alerts",
+      "goal": "offical severe weathr warnings location storm flood alert severity affected area expiration time warning manage weather"
+    },
+    {
+      "case_key": "weather_typo_rain_heat",
+      "source_case_key": "dangerous_weather_warning",
+      "expected_intent_id": "v4_weather_severe_alerts",
+      "expected_function_id": "weather.severe_alerts",
+      "goal": "offical severe weathr warnings location storm flood alert severity affected area expiration time rain heat"
+    },
+    {
+      "case_key": "weather_typo_warning_news",
+      "source_case_key": "dangerous_weather_warning",
+      "expected_intent_id": "v4_weather_severe_alerts",
+      "expected_function_id": "weather.severe_alerts",
+      "goal": "offical severe weathr warnings location storm flood alert severity affected area expiration time warning news"
+    },
+    {
+      "case_key": "weather_typo_alerts_manage",
+      "source_case_key": "dangerous_weather_warning",
+      "expected_intent_id": "v4_weather_severe_alerts",
+      "expected_function_id": "weather.severe_alerts",
+      "goal": "offical severe weathr warnings location storm flood alert severity affected area expiration time weather alerts manage"
+    }
+  ],
+  "negation_controls": [
+    "Do not create, send, cancel, transfer, or confirm anything.",
+    "I am not asking for a vaccination record or an inventory adjustment.",
+    "Never file a claim and do not change the account.",
+    "회원가입도 계정 삭제도 하지 않고 아무 버튼도 확정하지 않는다.",
+    "처방약 재요청이 아니라 약국 이전도 원하지 않는다.",
+    "결제, 환불, 구독 해지를 건드리지 말고 멈춰 줘."
+  ],
+  "generic_controls": [
+    "설정",
+    "메뉴를 찾아줘",
+    "처리하고 싶어요",
+    "help",
+    "open the right place",
+    "I need to manage something"
+  ]
+}

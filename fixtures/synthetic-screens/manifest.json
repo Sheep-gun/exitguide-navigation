@@ -1,0 +1,111 @@
+{
+  "description": "Synthetic Korean UI screenshots for ExitGuide AI demos.",
+  "screen_count": 15,
+  "screens": [
+    {
+      "filename": "subscription-cancel-retention.png",
+      "category": "subscription_cancellation",
+      "risk_fixture": "high",
+      "notes": "Prominent retention button, smaller cancellation continuation.",
+      "recommended_goal_id": "cancel_subscription"
+    },
+    {
+      "filename": "subscription-cancel-confirmation.png",
+      "category": "subscription_cancellation",
+      "risk_fixture": "low",
+      "notes": "Final confirmation screen with direct cancellation completion.",
+      "recommended_goal_id": "cancel_subscription"
+    },
+    {
+      "filename": "subscription-pause-offer.png",
+      "category": "subscription_cancellation",
+      "risk_fixture": "medium",
+      "notes": "Pause offer competes with cancellation continuation.",
+      "recommended_goal_id": "cancel_subscription"
+    },
+    {
+      "filename": "trial-renewal-warning.png",
+      "category": "trial_cancellation",
+      "risk_fixture": "high",
+      "notes": "Auto-renewal charge and prominent extension action.",
+      "recommended_goal_id": "cancel_trial"
+    },
+    {
+      "filename": "trial-discount-retention.png",
+      "category": "trial_cancellation",
+      "risk_fixture": "high",
+      "notes": "Discount continuation offer before cancellation.",
+      "recommended_goal_id": "cancel_trial"
+    },
+    {
+      "filename": "trial-cancel-success.png",
+      "category": "trial_cancellation",
+      "risk_fixture": "low",
+      "notes": "Cancellation success / no next billing.",
+      "recommended_goal_id": "cancel_trial"
+    },
+    {
+      "filename": "checkout-preselected-addon.png",
+      "category": "checkout_addons",
+      "risk_fixture": "high",
+      "notes": "Paid optional add-ons selected by default.",
+      "recommended_goal_id": "buy_without_addons"
+    },
+    {
+      "filename": "checkout-donation-addon.png",
+      "category": "checkout_addons",
+      "risk_fixture": "medium",
+      "notes": "Optional donation selected by default.",
+      "recommended_goal_id": "buy_without_addons"
+    },
+    {
+      "filename": "checkout-warranty-addon.png",
+      "category": "checkout_addons",
+      "risk_fixture": "high",
+      "notes": "Warranty add-on selected by default.",
+      "recommended_goal_id": "buy_without_addons"
+    },
+    {
+      "filename": "checkout-no-preselected-addon.png",
+      "category": "checkout_addons",
+      "risk_fixture": "low",
+      "notes": "Optional add-ons visible but unchecked.",
+      "recommended_goal_id": "buy_without_addons"
+    },
+    {
+      "filename": "marketing-consent-optional.png",
+      "category": "marketing_consent",
+      "risk_fixture": "high",
+      "notes": "Agree-all and optional marketing choices selected.",
+      "recommended_goal_id": "reject_marketing"
+    },
+    {
+      "filename": "marketing-separated-optional.png",
+      "category": "marketing_consent",
+      "risk_fixture": "low",
+      "notes": "Optional marketing choices are separated and unchecked.",
+      "recommended_goal_id": "reject_marketing"
+    },
+    {
+      "filename": "consent-required-only.png",
+      "category": "marketing_consent",
+      "risk_fixture": "low",
+      "notes": "Required consent only.",
+      "recommended_goal_id": "reject_marketing"
+    },
+    {
+      "filename": "account-delete-retention.png",
+      "category": "account_deletion",
+      "risk_fixture": "high",
+      "notes": "Prominent keep-account button and smaller deletion continuation.",
+      "recommended_goal_id": "delete_account"
+    },
+    {
+      "filename": "account-delete-confirmation.png",
+      "category": "account_deletion",
+      "risk_fixture": "low",
+      "notes": "Final account deletion confirmation.",
+      "recommended_goal_id": "delete_account"
+    }
+  ]
+}

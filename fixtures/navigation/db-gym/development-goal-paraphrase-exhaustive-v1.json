@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "fixture_version": "development-goal-paraphrase-exhaustive-v1",
+  "split": "development",
+  "frozen": false,
+  "catalog_derived": true,
+  "tuning_allowed": true,
+  "independent_accuracy_evidence": false,
+  "source_kind": "deterministic_catalog_composition",
+  "description": "Exhaustive bilingual development goals composed from canonical intent rules, terminal role, governed asset, lifecycle state, action/result semantics, and the user-owned safety boundary. This is tuning diagnostics and never independent accuracy evidence.",
+  "catalog_expectations": {
+    "catalog_version": "15.0.0",
+    "catalog_sha256": "e0eeef03195a48ec8172421926d08c30823bc678c72ea72082bb513dbec36e24",
+    "equivalence_version": "1.1.0",
+    "equivalence_sha256": "197aa0253c0353e439a6679a3597efed25297c44c554a15c0402a30f077ab2e8",
+    "exact_functions": 2866,
+    "exact_intents": 2660,
+    "exact_cases": 5320,
+    "exact_domains": 178,
+    "cases_per_intent": 2,
+    "cases_per_locale": 2660,
+    "cases_per_family": 665
+  },
+  "locales": [
+    "ko",
+    "en"
+  ],
+  "family_order": [
+    "role_first",
+    "asset_first",
+    "state_first",
+    "purpose_first",
+    "constraint_weave",
+    "review_narrative",
+    "result_backchain",
+    "user_controlled"
+  ],
+  "anti_copy_policy": {
+    "normalization": "navigation_function_catalog._normalize",
+    "minimum_normalized_phrase_length": 4,
+    "reject_exact_alias_or_pattern": true,
+    "reject_normalized_source_substring_at_or_above_minimum": true,
+    "reject_partial_wrapper_at_or_above_minimum": true,
+    "short_source_terms_are_reported_not_rejected": true,
+    "maximum_source_phrase_fraction": 0.34
+  },
+  "diagnostic_gates": {
+    "minimum_correct": 250,
+    "maximum_generic": 1400,
+    "maximum_wrong": 3800,
+    "maximum_short_source_overlap_cases": 89,
+    "maximum_goal_rule_action_overlap_cases": 4379,
+    "maximum_expected_boundary_mismatch_cases": 845,
+    "maximum_safety_violations": 0
+  },
+  "templates": {
+    "role_first": {
+      "ko": "{role}로서 {asset}을 다룬다. 현재 맥락은 {state}이며, 필요한 처리는 {action}이다. 기대하는 도착 조건은 {outcome}이다. {safety}.",
+      "en": "Acting as {role}, I am dealing with {asset}. Its present context is {state}; the required operation is {action}. The intended arrival condition is {outcome}. {safety}."
+    },
+    "asset_first": {
+      "ko": "이번 대상은 {asset}이다. 이를 맡는 주체는 {role}이고 상황은 {state}이다. 내가 이루려는 처리는 {action}이며 결과는 {outcome}이어야 한다. {safety}.",
+      "en": "The item in scope is {asset}. Responsibility sits with {role}, and the situation is {state}. I need {action}, producing {outcome}. {safety}."
+    },
+    "state_first": {
+      "ko": "지금 {state}에 있는 {asset}을 대상으로 한다. {role}의 관점에서 {action}이 필요하고, 그 뒤에는 {outcome}이 보여야 한다. {safety}.",
+      "en": "The current condition is {state} for {asset}. From the perspective of {role}, the need is {action}, after which I should have {outcome}. {safety}."
+    },
+    "purpose_first": {
+      "ko": "목적은 {action}이다. {role}가 다루는 {asset}이 {state}에 놓여 있으므로 {outcome}까지 이어져야 한다. {safety}.",
+      "en": "My purpose is {action}. Because {asset}, handled by {role}, is at {state}, the route should end with {outcome}. {safety}."
+    },
+    "constraint_weave": {
+      "ko": "{asset}과 관련해 {state}라는 조건을 벗어나지 않으면서 {role}에게 필요한 {action}을 이루고 싶다. 목표 결과는 {outcome}이다. {safety}.",
+      "en": "For {asset}, while remaining within the condition {state}, I need to support {role} by {action}. The target result is {outcome}. {safety}."
+    },
+    "review_narrative": {
+      "ko": "검토 중인 {asset}은 현재 {state}이다. 담당 맥락은 {role}이며, 다음에 성립해야 할 의도는 {action}이다. 검토 가능한 결과로 {outcome}을 원한다. {safety}.",
+      "en": "The reviewed item, {asset}, is presently at {state}. The responsible context is {role}; the next intent to realize is {action}. I want the reviewable result {outcome}. {safety}."
+    },
+    "result_backchain": {
+      "ko": "먼저 원하는 결과는 {outcome}이다. 그 결과는 {state}에 있는 {asset}에 대해 {role}가 {action}을 필요로 한다는 맥락에서 나온다. {safety}.",
+      "en": "Start from the desired result: {outcome}. It follows because {role} needs {action} for {asset} while it is at {state}. {safety}."
+    },
+    "user_controlled": {
+      "ko": "{role}가 {asset}을 {state} 맥락에서 다루는 동안 {action}을 위한 흐름이 필요하다. 도착점은 {outcome}으로 한정한다. {safety}.",
+      "en": "While {role} handles {asset} in the context {state}, I need a path for {action}. Limit the destination to {outcome}. {safety}."
+    }
+  }
+}

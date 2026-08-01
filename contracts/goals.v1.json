@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "goals": [
+    {
+      "id": "protect_user_intent",
+      "label_ko": "원치 않는 유도 피하기"
+    },
+    {
+      "id": "cancel_subscription",
+      "label_ko": "구독 해지하기"
+    },
+    {
+      "id": "cancel_trial",
+      "label_ko": "무료 체험 해지하기"
+    },
+    {
+      "id": "buy_without_addons",
+      "label_ko": "추가 비용 없이 결제하기"
+    },
+    {
+      "id": "reject_marketing",
+      "label_ko": "선택 마케팅 동의 거절하기"
+    },
+    {
+      "id": "delete_account",
+      "label_ko": "계정 탈퇴하기"
+    }
+  ]
+}
