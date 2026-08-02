@@ -58,8 +58,7 @@ class NavigationRuntime:
             "decision_db": {
                 "schema_version": self.memory.metadata.get("schema_version"),
                 "database_kind": self.memory.metadata.get("database_kind"),
-                "legacy_routes_served": self.memory.metadata.get("legacy_routes_served"),
-                "android_control_imported": self.memory.metadata.get("android_control_imported"),
+                "access_mode": "read_only",
             },
             "runtime_db": self.store.status(),
             "planner": {

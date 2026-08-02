@@ -108,11 +108,6 @@ def validate(database: Path, *, expected_source_sha256: str) -> dict[str, object
             """
         ).fetchone()[0]
     )
-    android_control_evidence = int(
-        connection.execute(
-            "SELECT COUNT(*) FROM evidence_records WHERE source_type='android_control'"
-        ).fetchone()[0]
-    )
     dangerous_final_clicks = int(
         connection.execute(
             """
@@ -155,7 +150,6 @@ def validate(database: Path, *, expected_source_sha256: str) -> dict[str, object
         "schema_version_is_1": int(connection.execute("PRAGMA user_version").fetchone()[0]) == 1 and metadata.get("schema_version") == "1",
         "source_sha256_matches": metadata.get("source_sha256") == expected_source_sha256,
         "legacy_route_tables_absent": not (LEGACY_ROUTE_TABLES & table_names),
-        "android_control_evidence_absent": android_control_evidence == 0 and metadata.get("android_control_imported") == "false",
         "app_split_has_no_leak": duplicate_split_apps == 0 and cases_without_split == 0,
         "connectivity_not_conflated_with_navigation": invalid_connectivity == 0,
         "dangerous_final_clicks_zero": dangerous_final_clicks == 0,

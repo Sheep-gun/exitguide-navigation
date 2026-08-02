@@ -1,166 +1,113 @@
-# ExitGuide Navigation
+# ExitGuide Navigation DB Redesign
 
-ExitGuideLab의 목적 기반 Android UI Navigation Agent 저장소입니다. 사용자가 “구독을 해지하고 싶어”, “알림을 끄고 싶어”, “회원탈퇴 메뉴를 찾고 싶어”처럼 목적을 입력하면 현재 화면을 해석하고, 그 목적에 가장 적합한 다음 메뉴를 찾아 최종 목적지까지 안내합니다.
+기존 앱별 완성 경로·대형 기능 카탈로그 방식과 분리한 Navigation Agent 실험이다. 이 저장소의 런타임은 **현재 화면에서 발견된 후보만** 다루며, 과거의 화면별 의사결정 결과를 검색해 다음 행동을 선택한다. 앱 이름으로 경로를 재생하거나 임의 좌표를 생성하지 않는다.
 
-- 팀: ExitGuideLab
-- Navigation 담당: 양건
-- 통합 저장소: [`exitguide-ai/exitguide`](https://github.com/exitguide-ai/exitguide)
-- 이 저장소: Android 화면 인식, 동적 메뉴 탐색, 앱 기능 그래프, Gold 데이터, K-EXAONE 판단, EXAONE 4.5 VLM 연동
+## 시스템을 한눈에 보기
 
-## 개발 목표
+> **EXAONE 4.5 VLM = 눈** — 화면 전체 의미, 아이콘, 영역, 주변 문맥을 해석
+>
+> **K-EXAONE LLM = 두뇌** — 목적과 현재 상태를 바탕으로 다음 행동을 계획
+>
+> **N100 신규 DB = 기억** — 과거의 유사 화면·후보·선택·결과·실패 경험을 검색하고 축적
+>
+> **Navigation API = 신경계 및 통제 장치** — 눈·두뇌·기억을 연결하고, 후보 ID 제한과 위험 행동 차단을 담당
+>
+> **Android 앱/실행기 = 손과 몸** — 승인된 클릭·스크롤·뒤로가기만 실제 실행
 
-핵심 목표는 앱별 좌표 경로를 암기하는 매크로가 아닙니다.
+```mermaid
+flowchart LR
+    U["사용자 목적"] --> API["Navigation API<br/>신경계·통제 장치"]
+    APP["Android 앱/실행기<br/>손과 몸"] -->|"화면 + 실제 후보 ID"| API
+    API -->|"화면 해석"| VLM["EXAONE 4.5 VLM<br/>눈"]
+    API <-->|"유사 결정·결과·실패"| DB["N100 Decision DB<br/>기억"]
+    API -->|"목적 + 상태 + 후보 + 기억"| LLM["K-EXAONE LLM<br/>두뇌"]
+    LLM -->|"계획·후보 가치"| API
+    API -->|"안전 검사된 행동만"| APP
+    APP -->|"행동 후 화면 변화"| API
+```
 
-> 처음 보는 Android 앱에서도 현재 화면의 선택지를 동적으로 분석하고, K-EXAONE이 사용자 목적에 맞는 다음 행동을 결정하며, 성공한 탐색 결과를 의미 기반 기능 그래프로 축적하는 범용 Navigation Agent를 만든다.
+## N100에 구축된 현재 DB
 
-Gold는 `좌표 A → 좌표 B` 재생 경로가 아니라 다음 내용을 담는 학습·검색 사례로 사용합니다.
+Canonical SQLite: `/home/kyle/exitguide/imports/yanggeon/20260802-navigation-db-redesign/output/navigation-decision-v1.sqlite`
 
-- 사용자 목적과 최종 기능
-- 현재 화면의 문맥
-- 화면에서 발견한 전체 후보
-- 올바르게 선택한 후보와 잘못된 후보
-- 행동 이후 도착한 화면
-- 성공, 실패, 무변화와 복구 결과
-- 앱 버전, locale, 검증 수준
+| 계층 | 테이블 | 현재 행 수 | 역할 |
+|---|---|---:|---|
+| Goal Ontology | `goals`, `goal_phrases`, `goal_relations` | 6 / 41 / 4 | 한국어 목적을 회원가입·회원탈퇴·멤버십 목적과 조건으로 정규화 |
+| Destination Signature | `destination_signatures` | 6 | 화면 전체 의미 특징으로 목적지 판정 |
+| Semantic Screen State | `semantic_screens`, `screen_observations` | 73 / 73 | 앱·좌표 독립 화면 상태와 Accessibility/OCR/VLM 관찰 |
+| Affordance Memory | `affordance_roles`, `affordance_role_aliases`, `affordances` | 14 / 76 / 1,525 | 화면에 실제 존재한 전체 후보와 기능 역할 |
+| Transition Outcome | `decision_cases`, `transition_outcomes` | 74 / 74 | 한 화면에서 한 후보를 선택한 결과와 목적지 거리 변화 |
+| Failure & Recovery | `recovery_memories` | 11 | 금지 후보, 반복 실패와 안전 복구 행동 |
+| Evidence & Confidence | `evidence_records` | 222 | Human Gold·실기기·합성·모델 추론의 출처와 신뢰도 |
+| Leakage Control | `evaluation_app_splits` | 8 | 앱 단위 train/validation/test 분리 |
 
-상세 설계와 두 개의 전체 워크플로우는 [Navigation Agent 학습 아키텍처](docs/NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)에 정리되어 있습니다.
+DB 파일 크기는 1,912,832 bytes이고 schema version은 1이다. 기존 대형 AndroidControl 색인, 앱별 Gold 매크로, 전체 기능 카탈로그, Terms RAG는 이 실험의 런타임 의존성이 아니다. Human Gold는 화면별 고신뢰 의사결정 사례로 분해된 결과만 사용한다.
 
-## 모델과 시스템의 역할
+상세 스키마와 인덱스는 [Navigation Decision DB 설계](docs/NAVIGATION_DECISION_DB_V1.md), SQL은 [navigation_decision_v1.sql](db/navigation_decision_v1.sql)에서 확인할 수 있다.
 
-| 구성 요소 | 역할 |
-| --- | --- |
-| AccessibilityService | 텍스트, 버튼 역할, 상태, 화면 계층과 좌표 수집 |
-| OCR | 접근성 정보에서 누락된 화면 문구 보충 |
-| EXAONE 4.5 VLM | 이름 없는 아이콘, 이미지 버튼, WebView, 팝업과 시각 상태 분석 |
-| K-EXAONE | 목적, 현재 후보와 검색 근거를 보고 다음 행동 결정 |
-| Gold·기능 그래프 | 실제로 성공·실패한 화면 선택 경험 제공 |
-| AndroidControl | 처음 보는 앱에서 탐색 방향을 잡는 범용 사전 사례 |
-| Android 실행기 | 안전 정책을 통과한 클릭, 스크롤과 뒤로가기 실행 |
-
-EXAONE 4.5는 눈, K-EXAONE은 판단하는 두뇌, Gold·AndroidControl·기능 그래프는 기억, Android 실행기는 손으로 사용합니다.
-
-## 런타임 워크플로우
+## 최종 Navigation Agent 흐름
 
 ```mermaid
 flowchart TD
-    A["사용자 목적 입력"] --> B["대상 앱에서 탐색 시작"]
-    B --> C["AccessibilityService와 OCR로 현재 화면 관찰"]
-    C --> D{"후보 의미가 불명확한가?"}
-    D -- "예" --> E["EXAONE 4.5 VLM으로 아이콘·화면 분석"]
-    D -- "아니오" --> F["통합 후보 목록 생성"]
-    E --> F
-    F --> G["Gold·앱 그래프·기능 카탈로그·AndroidControl 검색"]
-    G --> H["K-EXAONE이 다음 행동 선택"]
-    H --> I{"안전 정책 통과?"}
-    I -- "예" --> J["저위험 중간 메뉴 실행"]
-    I -- "아니오" --> K["중단 또는 사용자 행동 요청"]
-    J --> L["새 화면 관찰 후 반복"]
-    L --> M{"최종 목적지인가?"}
-    M -- "아니오" --> C
-    M -- "예" --> N["탐색 종료 후 최종 버튼 안내"]
-    N --> O["상태 변경은 사용자가 직접 클릭"]
+    A["1. 사용자 목적 입력"] --> B["2. Goal Ontology 정규화"]
+    B --> C["3. Destination Signature 생성"]
+    C --> D["4. Accessibility/OCR + EXAONE 4.5 VLM<br/>Semantic Screen State 생성"]
+    D --> E["5. 현재 화면의 유한 후보 ID 열거"]
+    E --> F["6. N100 DB에서 유사 의사결정·실패 검색"]
+    F --> G["7. K²식 계층 계획<br/>검증 가능한 즉시 sub-goal"]
+    G --> H["8. V-Droid식 후보 가치 평가<br/>각 허용 후보를 동일 문맥으로 채점"]
+    H --> I["9. Python 안전 게이트<br/>실재 ID·위험 최종 행동 검사"]
+    I --> J["10. Android 실행기가 승인 행동 실행"]
+    J --> K["11. DroidRun식 행동 후 화면 검증"]
+    K --> L{"목적지에 가까워졌나?"}
+    L -->|"예"| M["Transition Outcome 기록"]
+    L -->|"아니오/불확실"| N["MobileUse식 선택적 reflection·복구"]
+    N --> D
+    M --> O{"위험 최종 행동 직전인가?"}
+    O -->|"아니오"| D
+    O -->|"예"| P["stop_for_user()<br/>최종 행동은 사용자 수행"]
 ```
 
-## 안전 원칙
+허용 행동은 `click(candidate_id)`, `scroll(direction)`, `back()`, `wait_and_observe()`, `stop_for_user()`뿐이다. `click`은 관찰된 후보 ID가 아니면 안전 행동으로 대체되고, 결제·탈퇴 확정·해지 확정·개인정보 제출은 항상 `stop_for_user()`로 전환된다. 연결 오류는 UI 탐색 실패와 별도 상태로 저장한다.
 
-- 자동 탐색은 보이고 활성화된 저위험 중간 메뉴에만 허용합니다.
-- 결제, 탈퇴, 해지 확정, 환불, 동의, 권한 변경, 토글, 체크박스, 라디오 버튼과 텍스트 입력은 자동 실행하지 않습니다.
-- 최종 목적지에 도착하면 탐색을 자동 종료하고 최종 상태 변경은 사용자에게 맡깁니다.
-- 모델이 임의의 좌표를 만들어 클릭하지 않습니다. 현재 화면에서 관찰된 후보 ID를 Android 실행기가 다시 검증합니다.
-- 화면 또는 후보를 확실하게 식별할 수 없으면 추측 클릭 대신 복구하거나 중단합니다.
-- 민감 정보가 포함된 `.env`, 원본 스크린샷과 로컬 DB는 Git에 올리지 않습니다.
+## AndroidWorld 상위 연구를 적용한 위치
 
-## 현재 구현 범위
+- K²-Agent: 상위 목적을 즉시 검증 가능한 sub-goal과 기대 결과로 분해한다.
+- V-Droid: 모델이 좌표를 생성하지 않고, 현재 화면에서 열거된 후보 각각의 가치를 검증한다.
+- DroidRun/Mobilerun: 실행 성공 여부를 다음 화면 관찰로 판정하고 공유 상태와 Transition Outcome에 기록한다.
+- MobileUse: 매 단계가 아니라 낮은 신뢰도·반복·무변화·역행 시에만 action/trajectory/global reflection을 호출한다.
 
-- FastAPI 기반 Navigation API와 Hermes 도구 계약
-- Android AccessibilityService와 플로팅 오버레이
-- 목적 입력 후 대상 앱에서 시작하는 탐색 UX
-- 클릭, 화면 단위 스크롤, 뒤로가기와 탐색 종료
-- 이름 없는 후보를 보완하는 OCR 좌표 후보
-- 화면·행동·전이·경로를 저장하는 SQLite 기능 그래프
-- 앱·버전·기능별 `shadow`, `verified_candidate`, `stale` 경로 생명주기
-- 재방문, 무한 스크롤, 무변화와 잘못된 화면에 대한 복구·중단 규칙
-- 범용 기능 카탈로그와 목적 resolver
-- AndroidControl 변환·검색 파이프라인
-- 실기기·에뮬레이터 관찰 수집, 개인정보 제거, 오프라인 재생과 평가 도구
-- 유튜브·넷플릭스·배민 실기기 탐색과 일부 Human Gold 검증
-- Windows MVP 실행 파일과 시연 영상
+논문의 벤치마크 데이터나 학습 가중치를 복제했다고 주장하지 않는다. 구조와 입출력 경계를 가져와 K-EXAONE·EXAONE 4.5·N100 DB에 맞게 구현했다. 근거, 구현 대응표, 아직 검증하지 못한 부분은 [AndroidWorld 연구 기반 아키텍처](docs/ANDROIDWORLD_RESEARCH_ARCHITECTURE.md)에 정리돼 있다.
 
-수치와 완료·미완료 항목은 [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)을 참고합니다. 세부 변경 이력은 [개발 로그](docs/DEVELOPMENT_LOG.md)에 있습니다.
-
-## 저장소 구조
+## 코드 구성
 
 ```text
-exitguide-navigation/
-├─ apps/
-│  ├─ api/                     # FastAPI, K-EXAONE, 기능 그래프와 탐색 정책
-│  └─ mobile/                  # Android 앱, AccessibilityService와 오버레이
-├─ contracts/                  # Navigation·Terms 통합 계약
-├─ deploy/                     # 서버와 공개 APK 배포 설정
-├─ fixtures/
-│  └─ navigation/              # 기능 카탈로그, 평가·회귀·오프라인 자료
-├─ scripts/                    # 빌드, 수집, 검증, 최적화와 배포 자동화
-├─ docs/                       # 아키텍처, 정책, 테스트와 연구 기록
-├─ dist/                       # MVP 실행 파일
-└─ MVP.mp4                     # MVP 시연 영상
+apps/api/app/navigation_main.py                 FastAPI 진입점
+apps/api/app/navigation_contracts.py            후보·행동·관찰 계약
+apps/api/app/services/navigation_decision_memory.py  신규 DB Retriever
+apps/api/app/services/navigation_research_policy.py  계층 계획·후보 검증·선택적 복구
+apps/api/app/services/navigation_model_clients.py    K-EXAONE / EXAONE 4.5 어댑터
+apps/api/app/services/navigation_runtime.py          결정→실행 후 검증 흐름
+apps/api/app/services/navigation_runtime_store.py    승격 전 append-only 경험 저장
+db/navigation_decision_v1.sql                   검증된 기억 스키마
+db/navigation_runtime_v1.sql                    런타임 관찰 스키마
+scripts/Migrate-NavigationDecisionDb.py         기존 기록의 결정 단위 변환기
+scripts/Evaluate-NavigationRuntimeOffline.py    앱 분리 오프라인 A/B 평가기
 ```
 
-## 주요 문서
+API 계약은 [Navigation API v1](docs/NAVIGATION_API_V1.md)에 있다.
 
-- [Navigation Agent 학습 아키텍처](docs/NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)
-- [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)
-- [범용 Navigation Agent](docs/UNIVERSAL_NAVIGATION_AGENT.md)
-- [Navigation DB Gym](docs/NAVIGATION_DB_GYM.md)
-- [AndroidControl 연동](docs/ANDROID_CONTROL.md)
-- [API 계약](docs/API_CONTRACT.md)
-- [실기기 Human Gold 기록](docs/GOLD_RECORDING.md)
-- [휴대폰 테스트](docs/PHONE_TESTING.md)
-- [공개 APK 배포](docs/PUBLIC_APK_DEPLOYMENT.md)
-- [Navigation 시간 최적화](docs/NAVIGATION_TIME_OPTIMIZATION.md)
-- [개발 로그](docs/DEVELOPMENT_LOG.md)
+## 로컬 검증
 
-## 빠른 시작
-
-로컬 `.env`는 [`.env.example`](.env.example)을 복사해 사용합니다. 실제 API 키와 Endpoint ID가 들어 있는 `.env`는 Git에 포함하지 않습니다.
-
-백엔드:
-
-```powershell
-cd apps\api
-python -m venv .venv
-.\.venv\Scripts\pip.exe install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8010
+```bash
+python -m pip install -r apps/api/requirements.txt
+python apps/api/tests/navigation_decision_memory_unit.py
+python apps/api/tests/navigation_research_architecture_unit.py
+python apps/api/tests/navigation_runtime_unit.py
 ```
 
-모바일 앱:
+실기기 테스트 전 단계에서는 모델 미연결 fallback과 기록된 화면으로 계약·안전성만 검증한다. 실제 성공률 개선 여부는 앱 단위 완전 분리 A/B 평가와 실기기 검증 전에는 확정하지 않는다.
 
-```powershell
-cd apps\mobile
-npm ci
-npm run typecheck
-```
+## 현재 결과에 대한 냉정한 결론
 
-Android 로컬 빌드와 설치:
-
-```powershell
-.\scripts\Build-AndroidLocal.ps1
-```
-
-빠른 API 회귀 검사:
-
-```powershell
-.\scripts\Test-ApiUnit.ps1
-```
-
-기능 DB 검증:
-
-```powershell
-.\scripts\Test-NavigationDbGym.ps1 -Mode fast
-```
-
-## MVP
-
-- [Navigation·다크패턴 통합 MVP 시연 영상](MVP.mp4)
-- Windows 실행 파일: [`dist/EGL-Navigation-MVP.exe`](dist/EGL-Navigation-MVP.exe)
-
-이 저장소는 Navigation 모듈의 개인 작업·실험·백업 공간입니다. 검증이 끝난 통합 변경은 `exitguide-ai/exitguide`와 계약을 맞춰 반영합니다.
+74개 변환 사례를 source app 제외 방식으로 다시 재생한 진단 결과는 첫 행동 0.7778, 전체 positive next-action exact match 0.4444, 기록된 실패 클릭 회피 0.8182, 위험 행동 자동 클릭 0건이었다. 이는 **최종 A/B가 아니라 runtime 방향성 검사**다. 전체 다음 행동 정확도 44.44%는 아직 낮고 기존 방식보다 개선됐다고 말할 근거도 없다. 따라서 정적 데이터를 더 쌓지 않고, 실제 K-EXAONE/EXAONE 4.5 endpoint를 연결한 앱 분리 A/B와 실패 지점 분석을 먼저 수행한다.

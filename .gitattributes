@@ -1,9 +1,5 @@
-* text=auto eol=lf
-
-*.png binary
-*.jpg binary
-*.jpeg binary
-*.webp binary
-*.zip binary
-
-fixtures/navigation/function-catalog.v1.json filter=lfs diff=lfs merge=lfs -text
+* text=auto
+*.py text eol=lf
+*.sql text eol=lf
+*.md text eol=lf
+*.yml text eol=lf

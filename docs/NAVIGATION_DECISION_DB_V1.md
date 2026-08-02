@@ -31,7 +31,7 @@ v1의 범위는 `회원가입`, `회원탈퇴`, `멤버십 가입·관리·변�
 
 반입하지 않는 항목:
 
-- AndroidControl 1.2GB 인덱스와 원시 레코드
+- 기존 대형 외부 행동 예시 인덱스와 원시 레코드
 - 전체 기능 카탈로그 JSON/SQLite
 - 앱별 Gold 경로의 런타임 재생 정책
 - 기존 route cache의 serving 상태
@@ -94,10 +94,10 @@ Human Gold는 경로 매크로가 아니라 높은 신뢰도의 화면별 선택
 
 ### Evidence and Confidence
 
-- `evidence_records`: Human Gold, 실기기, AndroidControl, 합성, 모델 추론을 구분하고 검증 횟수·앱 버전·locale·마지막 검증일을 저장
+- `evidence_records`: Human Gold, 실기기, 합성, 모델 추론을 구분하고 검증 횟수·앱 버전·locale·마지막 검증일을 저장
 - `evaluation_app_splits`: 앱 단위 누수 방지 split
 
-AndroidControl은 source type enum에는 남겨 향후 출처를 명시할 수 있지만 이번 DB에는 해당 출처 행이 0개여야 한다.
+이번 스키마는 사용하지 않는 외부 행동 예시 출처를 허용하지 않는다.
 
 ## 주요 인덱스
 
@@ -159,7 +159,7 @@ python3 scripts/Validate-NavigationDecisionDb.py \
 이번 산출물은 격리 실험 DB다. 공유 `runtime/rag.env`, Terms 서비스, 기존 Navigation DB를 변경하지 않는다. 신규 DB를 런타임에 연결하려면 별도 검토에서 다음을 확인해야 한다.
 
 1. DB schema version과 SHA-256 고정
-2. AndroidControl·legacy route·Gold macro fallback 비활성화
+2. 외부 행동 예시 색인·legacy route·Gold macro fallback 비활성화
 3. K-EXAONE에 전달되는 evidence packet에서 앱 이름과 절대 좌표 제거
 4. 현재 화면 후보 allowlist 검사
 5. 위험한 최종 행동 `stop_for_user` 강제

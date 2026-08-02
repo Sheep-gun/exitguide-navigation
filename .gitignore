@@ -1,27 +1,12 @@
-# Dependencies
-node_modules/
-.expo/
-.expo-shared/
 __pycache__/
+*.py[cod]
 .venv/
-.tools/
-.logs/
 .artifacts/
-
-# Build outputs
-dist/
-build/
-android/
-ios/
-*.apk
-*.aab
-
-# Local config
 .env
 .env.local
-
-# OS/editor
-.DS_Store
-Thumbs.db
+.pytest_cache/
+.mypy_cache/
 .idea/
 .vscode/
+.DS_Store
+Thumbs.db

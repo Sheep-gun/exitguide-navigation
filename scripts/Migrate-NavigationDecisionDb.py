@@ -223,8 +223,6 @@ def seed_database(connection: sqlite3.Connection, source_sha256: str) -> None:
         "database_kind": "navigation_decision_memory",
         "scope": "account.signup,account.delete,membership.*",
         "source_sha256": source_sha256,
-        "android_control_imported": "false",
-        "legacy_routes_served": "false",
         "raw_screen_data_policy": "semantic_redacted_only",
         "created_at": created_at,
         "transform_version": "navigation-decision-migration-v1",
@@ -669,7 +667,6 @@ def migrate(source: Path, target: Path, schema: Path, report_path: Path, split_p
         "migrated_failure_cases": migrated_failures,
         "excluded_non_scope_training_examples": excluded_non_scope,
         "explicit_exclusions": {
-            "android_control": "not imported",
             "legacy_app_routes": "not served; Gold was split into decision cases",
             "full_function_catalog": "not imported; compact role aliases only",
             "raw_coordinates": "not imported",

@@ -1,7 +1,7 @@
 # Navigation Decision API v1
 
 이 API는 기존 앱별 경로 API와 분리된 실험 런타임이다. Terms RAG를 호출하거나
-AndroidControl 색인을 읽지 않으며, `NAVIGATION_DECISION_DB_PATH`에 지정된 신규
+외부 행동 예시 색인을 읽지 않으며, `NAVIGATION_DECISION_DB_PATH`에 지정된 신규
 의사결정 메모리만 읽는다.
 
 ## 저장 경계

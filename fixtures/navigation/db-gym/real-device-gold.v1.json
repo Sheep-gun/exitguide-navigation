@@ -1,9 +1,0 @@
-{
-  "dataset_version": "1.0",
-  "split": "real_device_gold",
-  "collection_status": "pending_device_validation",
-  "instructions": "Copy a confirmed real-device navigation trace into cases. Remove or mask account identifiers, payment data, messages, and other personal information before saving.",
-  "required_fields": ["case_id", "app_package", "app_version", "intent_id", "goal_text", "locale", "device_model", "android_version", "verified_by", "verified_at", "steps"],
-  "step_fields": ["step_id", "screen_title", "activity_name", "stage", "elements", "expected_function", "expected_label", "expected_action", "source", "notes"],
-  "cases": []
-}

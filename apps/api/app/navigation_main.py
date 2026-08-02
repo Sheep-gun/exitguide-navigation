@@ -88,12 +88,11 @@ def navigation_status() -> dict[str, object]:
         return {
             "ready": False,
             "reason": "navigation_decision_db_not_configured_or_missing",
-            "terms_rag_dependency": False,
         }
     try:
-        return {**get_navigation_runtime().status(), "terms_rag_dependency": False}
+        return get_navigation_runtime().status()
     except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
-        return {"ready": False, "reason": str(error), "terms_rag_dependency": False}
+        return {"ready": False, "reason": str(error)}
 
 
 @app.post("/v1/navigation/decide", response_model=DecideResponse)

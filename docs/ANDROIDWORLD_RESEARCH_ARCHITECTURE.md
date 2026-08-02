@@ -39,7 +39,7 @@ flowchart LR
 ## 현재 N100 Navigation DB
 
 2026-08-02에 N100의 canonical SQLite를 읽기 전용으로 확인한 값이다. 이 DB는 기존
-Terms RAG 벡터 DB, AndroidControl DB, 앱별 Gold 경로 DB와 별개다.
+Terms RAG 벡터 DB, 기존 외부 행동 예시 DB, 앱별 Gold 경로 DB와 별개다.
 
 | 항목 | 현재 값 |
 |---|---:|
@@ -226,6 +226,11 @@ flowchart TD
 계약 테스트까지 구현돼 있다. 논문의 학습법인 K² C-GRPO와 V-Droid P³ 가중치를 재현한
 것은 아니다. 실제 모델 endpoint를 사용한 앱 분리 A/B, 실기기 성공률, APK 실행기 연결은
 후속 검증 대상이며 그 전에는 기존 방식보다 성능이 높다고 주장하지 않는다.
+
+74개 변환 사례의 source-app 제외 진단 재생에서는 첫 행동 정확도 0.7778, positive
+next-action exact match 0.4444, 실패 클릭 회피율 0.8182, 위험 행동 자동 클릭 0건이었다.
+이 수치는 모델 endpoint가 없는 fallback의 방향성 검사이며 최종 A/B가 아니다. 특히 전체
+다음 행동 정확도는 낮으므로 데이터를 더 늘릴 근거가 되지 않는다.
 
 ## 반드시 구분할 것
 

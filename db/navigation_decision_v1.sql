@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS screen_observations (
     ocr_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(ocr_json)),
     vlm_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(vlm_json)),
     source_type TEXT NOT NULL
-        CHECK (source_type IN ('human_gold', 'real_device', 'android_control', 'synthetic', 'model_inference')),
+        CHECK (source_type IN ('human_gold', 'real_device', 'synthetic', 'model_inference')),
     captured_at TEXT NOT NULL,
     UNIQUE(screen_id, app_package, app_version, locale, source_type, captured_at)
 );
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS decision_cases (
     source_record_id TEXT NOT NULL,
     source_step_ordinal INTEGER NOT NULL CHECK (source_step_ordinal >= 0),
     source_type TEXT NOT NULL
-        CHECK (source_type IN ('human_gold', 'real_device', 'android_control', 'synthetic', 'model_inference')),
+        CHECK (source_type IN ('human_gold', 'real_device', 'synthetic', 'model_inference')),
     evidence_weight REAL NOT NULL CHECK (evidence_weight BETWEEN 0.0 AND 1.0),
     observed_at TEXT NOT NULL,
     UNIQUE(source_type, source_record_id, source_step_ordinal),
@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     )),
     entity_id TEXT NOT NULL,
     source_type TEXT NOT NULL CHECK (source_type IN (
-        'human_gold', 'real_device', 'android_control', 'synthetic', 'model_inference'
+        'human_gold', 'real_device', 'synthetic', 'model_inference'
     )),
     source_ref TEXT NOT NULL,
     verification_count INTEGER NOT NULL DEFAULT 1 CHECK (verification_count >= 0),
