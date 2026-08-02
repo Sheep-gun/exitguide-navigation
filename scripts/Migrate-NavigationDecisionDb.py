@@ -178,7 +178,7 @@ ADDITIONAL_SIGNATURES: tuple[tuple[str, str, dict[str, object]], ...] = (
 )
 
 ROLE_ALIASES: dict[str, tuple[str, tuple[tuple[str, str, float], ...], str, bool]] = {
-    "navigation.menu": ("전체 내비게이션 메뉴", (("메뉴", "ko", .94), ("더보기", "ko", .92), ("전체 메뉴", "ko", 1.0), ("탐색 서랍", "ko", .96), ("menu", "en", .94), ("more", "en", .86)), "low", False),
+    "navigation.menu": ("전체 내비게이션 메뉴", (("메뉴", "ko", .94), ("더보기", "ko", .92), ("전체 메뉴", "ko", 1.0), ("전체메뉴", "ko", 1.0), ("탐색 서랍", "ko", .96), ("menu", "en", .94), ("more", "en", .86)), "low", False),
     "profile.hub": ("프로필 허브", (("프로필", "ko", 1.0), ("나의 넷플릭스", "ko", .96), ("profile", "en", 1.0)), "low", False),
     "account.hub": ("계정/마이페이지 허브", (("마이페이지", "ko", 1.0), ("내 정보", "ko", .98), ("내정보", "ko", .98), ("내 계정", "ko", 1.0), ("마이쿠팡", "ko", .98), ("account", "en", .92), ("my account", "en", 1.0)), "low", False),
     "account.settings": ("계정 설정", (("계정 설정", "ko", 1.0), ("내정보관리", "ko", 1.0), ("회원정보", "ko", .94), ("설정", "ko", .72), ("account settings", "en", 1.0), ("settings", "en", .72)), "low", False),

@@ -742,6 +742,51 @@ def main() -> None:
     )
     assert max(guarded, key=lambda key: (guarded[key][0], key)) == "click:members-entry"
     assert guarded["click:members-entry"][1].startswith("python_direct_role_guard:")
+    repeat_guarded = selective_policy._apply_immediate_repeat_guard(
+        scores={
+            "click:members-category": (0.90, "top-level membership category"),
+            "click:members-entry": (0.70, "membership child page"),
+            "click:benefits": (0.60, "membership benefits"),
+        },
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-category"), 0.80,
+                NavigationCandidate(
+                    candidate_id="members-category", label="Members", role="clickable",
+                    parent_semantics="Travel preparation", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-entry"), 0.78,
+                NavigationCandidate(
+                    candidate_id="members-entry", label="Members", role="clickable",
+                    parent_semantics="Members", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="benefits"), 0.60,
+                NavigationCandidate(
+                    candidate_id="benefits", label="Member benefits", role="clickable",
+                    parent_semantics="Member benefits", risk_level="low",
+                ),
+            ),
+        ],
+        recent_history=[
+            {
+                "connectivity_status": "observed",
+                "action_name": "click",
+                "candidate_id": "members-category",
+                "outcome_type": "navigated",
+                "progress_label": "advanced",
+            }
+        ],
+    )
+    assert max(repeat_guarded, key=lambda key: (repeat_guarded[key][0], key)) == (
+        "click:members-entry"
+    )
+    assert repeat_guarded["click:members-category"][1].startswith(
+        "python_immediate_repeat_guard:"
+    )
     structurally_resolved = selective_policy._resolve_structural_direct_candidate(
         prior_values=[
             CandidateValue(

@@ -652,6 +652,11 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             enumerated=enumerated,
         )
+        scores = self._apply_immediate_repeat_guard(
+            scores=scores,
+            enumerated=enumerated,
+            recent_history=recent_history,
+        )
         scored = [
             (scores[_action_key(item.action)][0], item)
             for item in enumerated
@@ -753,6 +758,92 @@ class AndroidWorldResearchPolicy:
             min(1.0, max(selected_score, best_score + 0.001)),
             "python_direct_role_guard: direct candidate role outranks unrelated click; "
             + selected_reason,
+        )
+        return adjusted
+
+    def _apply_immediate_repeat_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        enumerated: Sequence[EnumeratedAction],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> dict[str, tuple[float, str]]:
+        """Prefer a newly revealed child over re-clicking its successful expander.
+
+        Android accessibility trees often expose an expanded menu category and
+        its child page with the same label but different candidate IDs.  When
+        the immediately previous click advanced the UI, selecting the same
+        persistent candidate again usually collapses the category or produces
+        no change.  This guard only acts when an enabled low-risk sibling with
+        the same direct label/icon is present, so unrelated alternatives remain
+        under Solar's control.
+        """
+
+        if not recent_history:
+            return dict(scores)
+        latest = recent_history[-1]
+        if (
+            str(latest.get("connectivity_status", "")) != "observed"
+            or str(latest.get("action_name", "")) != "click"
+            or str(latest.get("progress_label", "")) != "advanced"
+        ):
+            return dict(scores)
+        repeated_id = str(latest.get("candidate_id", "")).strip()
+        if not repeated_id:
+            return dict(scores)
+
+        click_items = {
+            str(item.action.candidate_id): item
+            for item in enumerated
+            if item.action.name == "click" and item.candidate is not None
+        }
+        repeated = click_items.get(repeated_id)
+        if repeated is None or repeated.candidate is None:
+            return dict(scores)
+
+        def semantic_key(candidate: NavigationCandidate) -> str:
+            direct = candidate.label.strip() or candidate.icon_semantics.strip()
+            return " ".join(direct.casefold().split())
+
+        repeated_key = semantic_key(repeated.candidate)
+        if not repeated_key:
+            return dict(scores)
+        alternatives = [
+            item
+            for candidate_id, item in click_items.items()
+            if candidate_id != repeated_id
+            and item.candidate is not None
+            and semantic_key(item.candidate) == repeated_key
+            and item.candidate.clickable
+            and item.candidate.enabled
+            and not item.candidate.selected
+            and item.candidate.risk_level == "low"
+        ]
+        if not alternatives:
+            return dict(scores)
+
+        def child_rank(item: EnumeratedAction) -> tuple[int, float, str]:
+            assert item.candidate is not None
+            label = " ".join(item.candidate.label.casefold().split())
+            parent = " ".join(item.candidate.parent_semantics.casefold().split())
+            return (
+                int(bool(label) and label == parent),
+                item.memory_prior,
+                str(item.action.candidate_id),
+            )
+
+        child = max(alternatives, key=child_rank)
+        child_action_key = _action_key(child.action)
+        repeat_action_key = f"click:{repeated_id}"
+        adjusted = dict(scores)
+        if repeat_action_key not in adjusted or child_action_key not in adjusted:
+            return adjusted
+        child_score = adjusted[child_action_key][0]
+        repeated_score, repeated_reason = adjusted[repeat_action_key]
+        adjusted[repeat_action_key] = (
+            min(repeated_score, max(0.0, child_score - 0.001)),
+            "python_immediate_repeat_guard: successful expander persisted while a "
+            "same-label child appeared; " + repeated_reason,
         )
         return adjusted
 
