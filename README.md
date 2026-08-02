@@ -37,9 +37,11 @@ DB 파일 크기는 1,912,832 bytes이고 schema version은 1이다. 기존 대�
 
 ```mermaid
 flowchart TD
-    USER["사용자 자연어 목적"] --> GOAL["Solar Pro 3<br/>표준 목적 1개 선택"]
-    GOAL_DB["Goal Ontology DB<br/>기능 카탈로그"] --> GOAL
-    GOAL --> DEST["Destination Signature DB<br/>목표에 맞는 최종 목적지 설정"]
+    USER["사용자 자연어 목적"] --> GOAL_INPUT["Navigation API<br/>사용자 목적과 허용 goal_id 목록 준비"]
+    GOAL_DB["Goal Ontology DB<br/>기능 카탈로그"] --> GOAL_INPUT
+    GOAL_INPUT --> GOAL["Solar Pro 3<br/>표준 goal_id 1개 반환"]
+    GOAL --> GOAL_CHECK["Navigation API<br/>DB에 실제 존재하는 goal_id인지 검사<br/>없는 ID는 거부"]
+    GOAL_CHECK --> DEST["Destination Signature DB<br/>goal_id에 맞는 최종 목적지 설정"]
 
     SCREEN["현재 Android 화면"] --> VIEW["Accessibility/OCR + EXAONE 4.5<br/>현재 화면과 후보 파악"]
     DEST --> K2["K²식 Navigation API<br/>다음 중간 목표 결정"]
@@ -71,10 +73,10 @@ flowchart TD
 `Decision Memory DB`는 과거 선택과 결과 경험이다. 모두 N100 Navigation Decision DB 안의
 서로 다른 데이터 계층이다.
 
-LLM은 SQLite에 직접 접속하지 않는다. Navigation API가 Goal Ontology의 지원 기능 후보를
-읽어 LLM에 전달하고, LLM은 사용자 자연어 목적을 그중 하나로 반환한다. 다만 **현재 코드는
-이 단계가 Python 문구 매칭으로 구현돼 있어 위 목표 흐름과 다르다.** 이 차이를 해소하려면
-Solar 기반 Goal Ontology classifier를 별도로 구현해야 한다.
+Navigation API가 Goal Ontology DB에서 허용된 `goal_id` 목록을 읽어 Solar에 전달한다.
+Solar는 그중 하나만 반환하고, Navigation API는 그 ID가 DB에 실제 존재하는지 검사한다.
+없는 ID는 거부한다. 현재 코드는 첫 분류를 Python 문구 매칭으로 수행하므로 Solar classifier
+구현이 남아 있다.
 
 허용 행동은 `click(candidate_id)`, `scroll(direction)`, `back()`, `wait_and_observe()`, `stop_for_user()`뿐이다. `click`은 관찰된 후보 ID가 아니면 안전 행동으로 대체되고, 결제·탈퇴 확정·해지 확정·개인정보 제출은 항상 `stop_for_user()`로 전환된다. 연결 오류는 UI 탐색 실패와 별도 상태로 저장한다.
 

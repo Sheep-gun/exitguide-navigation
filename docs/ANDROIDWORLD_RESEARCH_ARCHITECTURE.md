@@ -172,9 +172,11 @@ ExitGuide 대응:
 
 ```mermaid
 flowchart TD
-    USER["사용자 자연어 목적"] --> GOAL["Solar Pro 3<br/>표준 목적 1개 선택"]
-    GOAL_DB["Goal Ontology DB<br/>기능 카탈로그"] --> GOAL
-    GOAL --> DEST["Destination Signature DB<br/>목표에 맞는 최종 목적지 설정"]
+    USER["사용자 자연어 목적"] --> GOAL_INPUT["Navigation API<br/>사용자 목적과 허용 goal_id 목록 준비"]
+    GOAL_DB["Goal Ontology DB<br/>기능 카탈로그"] --> GOAL_INPUT
+    GOAL_INPUT --> GOAL["Solar Pro 3<br/>표준 goal_id 1개 반환"]
+    GOAL --> GOAL_CHECK["Navigation API<br/>DB에 실제 존재하는 goal_id인지 검사<br/>없는 ID는 거부"]
+    GOAL_CHECK --> DEST["Destination Signature DB<br/>goal_id에 맞는 최종 목적지 설정"]
 
     SCREEN["현재 Android 화면"] --> VIEW["Accessibility/OCR + EXAONE 4.5<br/>현재 화면과 후보 파악"]
     DEST --> K2["K²식 Navigation API<br/>다음 중간 목표 결정"]
@@ -206,8 +208,10 @@ flowchart TD
 `Decision Memory DB`는 과거 선택과 결과 경험이다. 모두 N100 Navigation Decision DB 안의
 서로 다른 데이터 계층이다.
 
-이 목표 흐름에서는 Solar가 사용자 자연어 목적을 Goal Ontology의 표준 기능 하나로 반환한다.
-현재 구현은 이 부분이 Python 문구 매칭이므로 Solar Goal Ontology classifier 구현이 남아 있다.
+Navigation API가 Goal Ontology DB의 허용된 `goal_id` 목록을 Solar에 전달한다. Solar는
+표준 `goal_id` 하나만 반환하고, Navigation API는 그 ID가 DB에 실제 존재하는지 검사한다.
+없는 ID는 거부한다. 현재 구현은 첫 분류가 Python 문구 매칭이므로 Solar classifier 구현이
+남아 있다.
 
 ### API와 실행기 사이의 계약
 
