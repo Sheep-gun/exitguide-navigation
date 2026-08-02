@@ -391,6 +391,19 @@ def main() -> None:
     )
     assert level == "none"
     level, _ = trigger.choose_level(
+        outcome_type="navigated",
+        execution_succeeded=True,
+        action_confidence=0.9,
+        reflection_on_demand=False,
+        action_name="click",
+        recent_history=[
+            {"screen_fingerprint": "screen-a", "progress_label": "unknown"},
+            {"screen_fingerprint": "screen-b", "progress_label": "unknown"},
+            {"screen_fingerprint": "screen-a", "progress_label": "unknown"},
+        ],
+    )
+    assert level == "trajectory"
+    level, _ = trigger.choose_level(
         outcome_type="destination_reached",
         execution_succeeded=True,
         action_confidence=0.9,
@@ -511,6 +524,29 @@ def main() -> None:
     )
     assert disabled_action.name == "wait_and_observe"
     assert disabled_status == "replaced_with_safe_action"
+    planner_calls_before_loop_guard = planner_transport.plan_calls
+    loop_guarded = selective_policy.decide_action(
+        query=fast_path_query,
+        plan=fast_path_plan,
+        candidates=[
+            NavigationCandidate(
+                candidate_id="signup",
+                label="회원가입",
+                role="button",
+                position_bucket="middle",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+        recent_history=[
+            {"step_ordinal": 1, "screen_fingerprint": "screen-a"},
+            {"step_ordinal": 2, "screen_fingerprint": "screen-b"},
+            {"step_ordinal": 3, "screen_fingerprint": "screen-a"},
+        ],
+    )
+    assert loop_guarded.proposal.action.name == "stop_for_user"
+    assert loop_guarded.verifier_provider == "python_screen_visit_guard"
+    assert planner_transport.plan_calls == planner_calls_before_loop_guard
     assert selective_policy._should_invoke_planner(
         query=fast_path_query,
         plan=fast_path_plan,

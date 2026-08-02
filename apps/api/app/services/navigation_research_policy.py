@@ -170,6 +170,28 @@ class AndroidWorldResearchPolicy:
             candidates,
             forbidden_candidate_ids=forbidden_candidate_ids,
         )
+        current_fingerprint = query.screen.semantic_fingerprint
+        prior_visits = sum(
+            bool(current_fingerprint)
+            and str(item.get("screen_fingerprint", "")) == current_fingerprint
+            for item in recent_history
+        )
+        if prior_visits >= 2:
+            provider = "python_screen_visit_guard"
+            proposal = PlannerProposal(
+                NavigationAction(name="stop_for_user"),
+                1.0,
+                provider,
+                False,
+            )
+            return ResearchDecision(
+                plan=plan,
+                proposal=proposal,
+                candidate_values=tuple(prior_values),
+                verifier_provider=provider,
+                score_margin=1.0,
+                reflection_on_demand=True,
+            )
         enumerated = self._enumerate_actions(
             candidates=candidates,
             prior_values=prior_values,
@@ -654,8 +676,10 @@ class ReflectionTriggerPolicy:
         repeated_screens = (
             len(screens) >= 2 and bool(screens[-1]) and screens[-1] == screens[-2]
         )
-        if repeated_action_on_screen or repeated_screens or errors >= 2:
-            return "trajectory", "same screen/action loop or accumulated observed errors"
+        nonempty_screens = [screen for screen in screens if screen]
+        revisited_screen = len(nonempty_screens) != len(set(nonempty_screens))
+        if repeated_action_on_screen or repeated_screens or revisited_screen or errors >= 2:
+            return "trajectory", "revisited screen/action loop or accumulated observed errors"
         if (
             execution_succeeded is False
             or reflection_on_demand
