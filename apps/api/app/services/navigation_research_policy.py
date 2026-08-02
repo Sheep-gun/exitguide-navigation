@@ -181,7 +181,7 @@ class AndroidWorldResearchPolicy:
         )
         if self.planner_model.configured and should_invoke_planner:
             try:
-                model_plan, scored, updated_values = self._plan_and_verify_actions(
+                model_plan, scored, updated_values = self._plan_and_verify_actions_with_retry(
                     query=query,
                     plan=plan,
                     recent_history=recent_history,
@@ -277,6 +277,42 @@ class AndroidWorldResearchPolicy:
             score_margin=round(margin, 4),
             reflection_on_demand=reflect,
         )
+
+    def _plan_and_verify_actions_with_retry(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        recent_history: Sequence[Mapping[str, object]],
+        enumerated: Sequence[EnumeratedAction],
+        prior_values: Sequence[CandidateValue],
+    ) -> tuple[
+        HierarchicalPlan,
+        list[tuple[float, EnumeratedAction]],
+        list[CandidateValue],
+    ]:
+        try:
+            return self._plan_and_verify_actions(
+                query=query,
+                plan=plan,
+                recent_history=recent_history,
+                enumerated=enumerated,
+                prior_values=prior_values,
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            LOGGER.warning(
+                "planner_model_output_retry provider=%s failure_class=%s detail=%s",
+                self.planner_model.name,
+                type(error).__name__,
+                str(error)[:500],
+            )
+            return self._plan_and_verify_actions(
+                query=query,
+                plan=plan,
+                recent_history=recent_history,
+                enumerated=enumerated,
+                prior_values=prior_values,
+            )
 
     def _should_invoke_planner(
         self,

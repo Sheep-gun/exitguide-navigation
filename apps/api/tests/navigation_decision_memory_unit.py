@@ -124,6 +124,16 @@ def main() -> None:
         assert memory.normalize_goal("이 앱에서 회원가입하고 싶어").goal_id == "account.signup"
         assert memory.normalize_goal("멤버쉽을 해지해 줘").goal_id == "membership.cancel"
         assert memory.normalize_goal("요금제를 변경하고 싶어").goal_id == "membership.change"
+        logged_out_state = memory.semantic_screen_state(
+            window_title="전체 메뉴",
+            activity_name="androidx.drawerlayout.widget.DrawerLayout",
+            candidates=[
+                {"candidate_id": "signup", "label": "회원가입", "role": "button"},
+                {"candidate_id": "login", "label": "로그인", "role": "button"},
+                {"candidate_id": "my-page", "label": "마이페이지", "role": "button"},
+            ],
+        )
+        assert logged_out_state.auth_state == "logged_out"
 
         current_candidates = [
             {"element_id": "current-account", "label": "내 계정", "role": "button", "risk_level": "low"},

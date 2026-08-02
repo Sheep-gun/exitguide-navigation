@@ -585,12 +585,20 @@ class NavigationDecisionMemory:
             )
         joined = " ".join((title, *labels)).casefold()
         auth_state = "unknown"
-        if any(token in joined for token in ("로그인", "회원가입", "sign in", "log in", "sign up")):
-            auth_state = "logged_out"
-        if any(token in joined for token in ("로그아웃", "내 계정", "마이페이지", "sign out", "my account")):
-            auth_state = "logged_in"
         if any(token in joined for token in ("다시 로그인", "세션 만료", "reauth", "session expired")):
             auth_state = "reauthentication"
+        elif any(
+            token in joined
+            for token in ("로그인", "회원가입", "sign in", "log in", "sign up")
+        ):
+            # A generic My Page tab is commonly visible while logged out. An
+            # explicit login/signup affordance is therefore stronger evidence.
+            auth_state = "logged_out"
+        elif any(
+            token in joined
+            for token in ("로그아웃", "내 계정", "계정 관리", "sign out", "my account")
+        ):
+            auth_state = "logged_in"
         surface_type = "webview" if "webview" in activity else "native"
         semantic_payload = {
             "title": normalize_text(title),

@@ -68,9 +68,10 @@ def _tool_response(name: str, payload: dict[str, object]) -> dict[str, object]:
 class ScriptedPlannerClient:
     configured = True
 
-    def __init__(self) -> None:
+    def __init__(self, *, fail_first_step_evaluation: bool = False) -> None:
         self.plan_calls = 0
         self.verifier_actions: list[str] = []
+        self.fail_first_step_evaluation = fail_first_step_evaluation
 
     def complete(self, *, messages, **_kwargs):
         system = str(messages[0]["content"])
@@ -92,6 +93,18 @@ class ScriptedPlannerClient:
                 == "submit_navigation_step_evaluation"
             )
             self.plan_calls += 1
+            if self.fail_first_step_evaluation and self.plan_calls == 1:
+                return _tool_response(
+                    "submit_navigation_step_evaluation",
+                    {
+                        "stage": "hub_discovery",
+                        "immediate_subgoal": "open account hub",
+                        "expected_outcome": "account entries appear",
+                        "target_roles": ["account_hub"],
+                        "best_action_key": "click:profile",
+                        "scores": [],
+                    },
+                )
             packet = json.loads(messages[1]["content"])
             assert "app_package" not in packet
             scores = {
@@ -283,6 +296,33 @@ def main() -> None:
         assert sorted(planner_transport.verifier_actions) == sorted(
             ["click:profile", "click:search", "scroll:down", "wait_and_observe", "stop_for_user"]
         )
+
+        retry_transport = ScriptedPlannerClient(fail_first_step_evaluation=True)
+        retry_policy = AndroidWorldResearchPolicy(
+            planner_model=NavigationPlannerResearchClient(
+                retry_transport,
+                provider_name="solar_pro3",
+            ),
+            exaone_vlm=exaone_vlm,
+            allow_model_fallback=False,
+            planner_mode="always",
+            vlm_mode="disabled",
+        )
+        retry_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(root / "retry-runtime.sqlite"),
+            policy=retry_policy,
+        )
+        retried = retry_runtime.decide(
+            DecideRequest(
+                request_id="research-retry-1",
+                app_package="heldout.retry.app",
+                goal_text="회원 탈퇴 메뉴를 찾아줘",
+                screen=_screen(),
+            )
+        )
+        assert retried.action.name == "click" and retried.action.candidate_id == "profile"
+        assert retry_transport.plan_calls == 2
 
         observation = runtime.observe(
             ObserveRequest(

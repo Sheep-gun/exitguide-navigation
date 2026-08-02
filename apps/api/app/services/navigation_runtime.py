@@ -177,6 +177,18 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_terminal_boundary"
+        elif (
+            query.goal is not None
+            and _requires_authenticated_account(query.goal.goal_id)
+            and query.screen.auth_state in {"logged_out", "reauthentication"}
+        ):
+            proposal = PlannerProposal(
+                NavigationAction(name="stop_for_user"),
+                1.0,
+                "python_authentication_boundary",
+                False,
+            )
+            planner_provider = "python_authentication_boundary"
         elif effective_screen.candidates and all(
             candidate.risk_level in {"medium", "high", "blocked"}
             or is_dangerous_final_candidate(
@@ -642,6 +654,15 @@ def verify_transition(
             NavigationAction(name="back"),
         )
     return VerifiedTransition("navigated", True, "unknown", destination_match_after, "", None)
+
+
+def _requires_authenticated_account(goal_id: str) -> bool:
+    return goal_id in {
+        "account.delete",
+        "membership.cancel",
+        "membership.change",
+        "membership.manage",
+    }
 
 
 def _goal_resolution(

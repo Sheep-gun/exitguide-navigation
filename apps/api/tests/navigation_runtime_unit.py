@@ -201,6 +201,25 @@ def main() -> None:
         )
         assert state_changing.action.name == "stop_for_user"
 
+        logged_out = safety_runtime.decide(
+            DecideRequest(
+                request_id="request-auth-boundary",
+                app_package="evaluation.another.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                screen=ScreenObservation(
+                    window_title="전체 메뉴",
+                    activity_name="androidx.drawerlayout.widget.DrawerLayout",
+                    candidates=[
+                        NavigationCandidate(candidate_id="signup", label="회원가입", role="button"),
+                        NavigationCandidate(candidate_id="login", label="로그인", role="button"),
+                        NavigationCandidate(candidate_id="my-page", label="마이페이지", role="button"),
+                    ],
+                ),
+            )
+        )
+        assert logged_out.action.name == "stop_for_user"
+        assert logged_out.planner_provider == "python_authentication_boundary"
+
         out_of_scope = runtime.decide(
             DecideRequest(
                 request_id="request-4",
