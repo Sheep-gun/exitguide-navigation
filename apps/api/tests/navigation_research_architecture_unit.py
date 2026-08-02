@@ -368,6 +368,28 @@ def main() -> None:
     )
     assert level == "trajectory"
     level, _ = trigger.choose_level(
+        outcome_type="navigated",
+        execution_succeeded=True,
+        action_confidence=0.9,
+        reflection_on_demand=False,
+        action_name="click",
+        recent_history=[
+            {
+                "action_name": "click",
+                "candidate_id": "profile",
+                "screen_fingerprint": "screen-a",
+                "progress_label": "advanced",
+            },
+            {
+                "action_name": "click",
+                "candidate_id": "menu",
+                "screen_fingerprint": "screen-b",
+                "progress_label": "unknown",
+            },
+        ],
+    )
+    assert level == "none"
+    level, _ = trigger.choose_level(
         outcome_type="destination_reached",
         execution_succeeded=True,
         action_confidence=0.9,

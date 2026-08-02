@@ -552,17 +552,31 @@ class ReflectionTriggerPolicy:
     ) -> tuple[str, str]:
         if outcome_type == "destination_reached" or action_name == "stop_for_user":
             return "global", "destination signature reached; verify completion boundary"
-        actions = [str(item.get("action_name", "")) for item in recent_history[-5:]]
         screens = [str(item.get("screen_fingerprint", "")) for item in recent_history[-5:]]
         errors = sum(
             str(item.get("progress_label", "")) in {"unchanged", "regressed"}
             or bool(item.get("failure_class"))
             for item in recent_history[-5:]
         )
-        repeated_actions = len(actions) >= 2 and actions[-1] == actions[-2]
-        repeated_screens = len(screens) >= 2 and screens[-1] == screens[-2]
-        if repeated_actions or repeated_screens or errors >= 2:
-            return "trajectory", "recent repeated action/screen or accumulated errors"
+        action_signatures = [
+            (
+                str(item.get("screen_fingerprint", "")),
+                str(item.get("action_name", "")),
+                str(item.get("candidate_id", "")),
+                str(item.get("scroll_direction", "")),
+            )
+            for item in recent_history[-5:]
+        ]
+        repeated_action_on_screen = (
+            len(action_signatures) >= 2
+            and bool(action_signatures[-1][0])
+            and action_signatures[-1] == action_signatures[-2]
+        )
+        repeated_screens = (
+            len(screens) >= 2 and bool(screens[-1]) and screens[-1] == screens[-2]
+        )
+        if repeated_action_on_screen or repeated_screens or errors >= 2:
+            return "trajectory", "same screen/action loop or accumulated observed errors"
         if (
             execution_succeeded is False
             or reflection_on_demand

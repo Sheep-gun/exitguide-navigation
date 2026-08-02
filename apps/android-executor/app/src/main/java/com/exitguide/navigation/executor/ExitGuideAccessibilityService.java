@@ -444,20 +444,24 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         stepOrdinal++;
                         String outcome = response.optString("outcome_type", "unknown");
                         String progress = response.optString("progress_label", "unknown");
+                        String sessionStatus = response.optString("session_status", "active");
                         publish("관찰 결과: " + outcome + " / " + progress);
-                        if (stopAfterObserve || "destination_reached".equals(outcome)) {
-                            stop(stopMessage.isEmpty()
-                                    ? "목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요."
-                                    : stopMessage);
+                        if (stopAfterObserve
+                                || "destination_reached".equals(outcome)
+                                || "stopped".equals(sessionStatus)
+                                || "reached".equals(sessionStatus)) {
+                            String terminalMessage = stopMessage;
+                            if (terminalMessage.isEmpty()) {
+                                terminalMessage = "stopped".equals(sessionStatus)
+                                        ? "안전 경계가 감지되어 사용자의 확인이 필요합니다."
+                                        : "목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요.";
+                            }
+                            stop(terminalMessage);
                             return;
                         }
                         JSONObject recovery = response.optJSONObject("recovery_action");
                         if (recovery != null) {
                             String recoveryName = recovery.optString("name", "reselect");
-                            if ("stop_for_user".equals(recoveryName)) {
-                                stop("인증·위험·차단 경계가 감지되어 사용자의 확인이 필요합니다.");
-                                return;
-                            }
                             publish("복구 필요: " + recoveryName
                                     + ". 다음 판단에서 안전하게 반영합니다.");
                         }

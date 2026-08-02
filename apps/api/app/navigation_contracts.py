@@ -203,3 +203,4 @@ class ObserveResponse(BaseModel):
     reflection_level: Literal["none", "action", "trajectory", "global"]
     reflection_reason: str
     knowledge_revision_queued: bool
+    session_status: Literal["active", "stopped", "reached", "failed"]

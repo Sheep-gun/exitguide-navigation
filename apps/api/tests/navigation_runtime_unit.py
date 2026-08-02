@@ -154,6 +154,7 @@ def main() -> None:
         assert disconnected.knowledge_revision_queued is False
         assert disconnected.recovery_action is not None
         assert disconnected.recovery_action.name == "wait_and_observe"
+        assert disconnected.session_status == "active"
 
         dangerous = runtime.decide(
             DecideRequest(
@@ -273,6 +274,7 @@ def main() -> None:
         assert auth_observation.outcome_type == "login_required"
         assert auth_observation.recovery_action is not None
         assert auth_observation.recovery_action.name == "stop_for_user"
+        assert auth_observation.session_status == "stopped"
 
         signup_terminal = auth_transition_runtime.decide(
             DecideRequest(

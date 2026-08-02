@@ -619,6 +619,15 @@ class NavigationRuntime:
                         verified.failure_class,
                         NavigationAction(name=reflection_result.recovery_hint),
                     )
+        final_session_status = session_status or "active"
+        if (
+            request.connectivity_status == "observed"
+            and verified.recovery_action is not None
+            and verified.recovery_action.name == "stop_for_user"
+            and final_session_status != "reached"
+        ):
+            final_session_status = "stopped"
+            self.store.set_session_status(str(decision["session_id"]), final_session_status)
         self.store.record_execution_details(
             decision_id=request.decision_id,
             observation_id=observation_id,
@@ -647,6 +656,7 @@ class NavigationRuntime:
             reflection_level=reflection_level,
             reflection_reason=reflection_reason,
             knowledge_revision_queued=knowledge_revision_queued,
+            session_status=final_session_status,
         )
 
 

@@ -266,6 +266,16 @@ class NavigationRuntimeStore:
             ).fetchone()
         return None if row is None else dict(row)
 
+    def set_session_status(self, session_id: str, status: str) -> None:
+        if status not in {"active", "stopped", "reached", "failed"}:
+            raise ValueError(f"unsupported navigation session status: {status}")
+        with self._lock, closing(self._connect()) as connection:
+            connection.execute(
+                "UPDATE navigation_sessions SET status = ?, updated_at = ? WHERE session_id = ?",
+                (status, utc_now(), session_id),
+            )
+            connection.commit()
+
     def record_decision(
         self,
         *,
