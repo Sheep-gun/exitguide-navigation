@@ -546,12 +546,14 @@ class NavigationPlannerResearchClient:
                         "action only when no safe progress action exists. Do not execute an action. Never invent an "
                         "action_key, candidate ID, coordinate, or app-specific route. Keep every "
                         "action_key unchanged and return exactly one score for each supplied key. "
-                        "The unique best action must have helpful_probability at least 0.5."
+                        "The unique best action must have helpful_probability at least 0.5. "
+                        "Keep expected_progress under 60 characters and reason under 100 "
+                        "characters for every action so the complete allowlist fits in one call."
                     ),
                 },
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
-            max_tokens=1_250,
+            max_tokens=2_000,
             temperature=0.0,
             tools=[
                 {
@@ -596,8 +598,14 @@ class NavigationPlannerResearchClient:
                                                 "minimum": 0.0,
                                                 "maximum": 1.0,
                                             },
-                                            "expected_progress": {"type": "string"},
-                                            "reason": {"type": "string"},
+                                            "expected_progress": {
+                                                "type": "string",
+                                                "maxLength": 60,
+                                            },
+                                            "reason": {
+                                                "type": "string",
+                                                "maxLength": 100,
+                                            },
                                         },
                                         "required": [
                                             "action_key",

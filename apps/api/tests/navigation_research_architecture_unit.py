@@ -88,6 +88,7 @@ class ScriptedPlannerClient:
                 },
             )
         if "combined K2-style planner and V-Droid-style batch verifier" in system:
+            assert _kwargs["max_tokens"] == 2_000
             assert (
                 _kwargs["tools"][0]["function"]["name"]
                 == "submit_navigation_step_evaluation"
