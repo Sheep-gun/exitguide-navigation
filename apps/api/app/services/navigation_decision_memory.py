@@ -25,6 +25,34 @@ EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNO
 PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}(?!\d)")
 LONG_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{7,}(?!\d)")
 ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+KOREAN_TOKEN_SUFFIXES = tuple(
+    sorted(
+        (
+            "\ud558고싶어요",
+            "\ud558고싶어",
+            "\ud558려고",
+            "\ud558고",
+            "\ud569니다",
+            "\ud574요",
+            "\uc744",
+            "\ub97c",
+            "\uc740",
+            "\ub294",
+            "\uc774",
+            "\uac00",
+            "\uc5d0서",
+            "\uc5d0",
+            "\uc73c로",
+            "\ub85c",
+            "\uc640",
+            "\uacfc",
+            "\ub3c4",
+            "\ub9cc",
+        ),
+        key=len,
+        reverse=True,
+    )
+)
 DANGEROUS_FINAL_PHRASES = (
     "최종 탈퇴",
     "탈퇴 확정",
@@ -228,16 +256,19 @@ class NavigationDecisionMemory:
         with closing(self._connect()) as connection:
             rows = connection.execute(
                 """
-                SELECT p.goal_id, p.phrase, p.normalized_phrase, p.phrase_kind, p.confidence,
+                SELECT p.goal_id, p.locale, p.phrase, p.normalized_phrase, p.phrase_kind, p.confidence,
                        g.family, g.operation, g.terminal_action_policy
                 FROM goal_phrases AS p
                 JOIN goals AS g ON g.goal_id = p.goal_id
-                WHERE g.active = 1 AND (lower(p.locale) = lower(?) OR lower(p.locale) = ? OR p.locale = '*')
-                """,
-                (locale, locale_prefix),
+                WHERE g.active = 1
+                """
             ).fetchall()
         scored: list[tuple[float, sqlite3.Row]] = []
         goal_tokens = set(tokenize(normalized))
+        token_goal_ids: dict[str, set[str]] = {}
+        for candidate_row in rows:
+            for token in tokenize(str(candidate_row["normalized_phrase"])):
+                token_goal_ids.setdefault(token, set()).add(str(candidate_row["goal_id"]))
         for row in rows:
             phrase = str(row["normalized_phrase"])
             phrase_tokens = set(tokenize(phrase))
@@ -246,8 +277,23 @@ class NavigationDecisionMemory:
                 len(goal_tokens & phrase_tokens) / len(phrase_tokens) if phrase_tokens else 0.0
             )
             sequence = SequenceMatcher(None, normalized, phrase).ratio()
-            score = max(containment * 0.98, token_recall * 0.88, sequence * 0.76)
-            score *= float(row["confidence"])
+            discriminative_hit = any(
+                token in phrase_tokens and len(token_goal_ids.get(token, ())) == 1
+                for token in goal_tokens
+            )
+            row_locale = str(row["locale"]).casefold()
+            locale_weight = (
+                1.0
+                if row_locale in {locale.casefold(), locale_prefix, "*"}
+                else 0.92
+            )
+            score = max(
+                containment * 0.98,
+                token_recall * 0.88,
+                sequence * 0.76,
+                0.86 if discriminative_hit else 0.0,
+            )
+            score *= float(row["confidence"]) * locale_weight
             if row["phrase_kind"] == "negative":
                 score *= -1.0
             scored.append((score, row))
@@ -274,12 +320,10 @@ class NavigationDecisionMemory:
         with closing(self._connect()) as connection:
             rows = connection.execute(
                 """
-                SELECT role_id, normalized_alias, confidence, negative_context_json
+                SELECT role_id, locale, normalized_alias, confidence, negative_context_json
                 FROM affordance_role_aliases
-                WHERE lower(locale) = lower(?) OR lower(locale) = ? OR locale = '*'
                 ORDER BY confidence DESC, length(normalized_alias) DESC
-                """,
-                (locale, locale_prefix),
+                """
             ).fetchall()
         scored: dict[str, float] = {}
         for row in rows:
@@ -290,7 +334,12 @@ class NavigationDecisionMemory:
             if any(normalize_text(str(value)) in normalized for value in negatives):
                 continue
             role_id = str(row["role_id"])
-            scored[role_id] = max(scored.get(role_id, 0.0), float(row["confidence"]))
+            row_locale = str(row["locale"]).casefold()
+            locale_weight = 1.0 if row_locale in {locale.casefold(), locale_prefix, "*"} else 0.92
+            scored[role_id] = max(
+                scored.get(role_id, 0.0),
+                float(row["confidence"]) * locale_weight,
+            )
         return tuple(role for role, _ in sorted(scored.items(), key=lambda item: (-item[1], item[0])))
 
     def semantic_screen_state(
@@ -313,9 +362,16 @@ class NavigationDecisionMemory:
             label = redact_text(str(_value(candidate, "label", "")))
             role = normalize_text(str(_value(candidate, "role", "unknown"))) or "unknown"
             risk_level = str(_value(candidate, "risk_level", "low"))
-            inferred_roles = self.infer_affordance_roles(label, locale=locale)
+            icon_semantics = redact_text(str(_value(candidate, "icon_semantics", "")))
+            nearby_text = redact_text(str(_value(candidate, "nearby_text", "")))
+            parent_semantics = redact_text(str(_value(candidate, "parent_semantics", "")))
+            position_bucket = str(_value(candidate, "position_bucket", "unknown"))
+            semantic_context = " ".join(
+                value for value in (label, icon_semantics, nearby_text, parent_semantics) if value
+            )
+            inferred_roles = self.infer_affordance_roles(semantic_context, locale=locale)
             labels.append(label)
-            screen_tokens.update(tokenize(label))
+            screen_tokens.update(tokenize(semantic_context))
             screen_tokens.update(inferred_roles)
             role_counts[role] = role_counts.get(role, 0) + 1
             candidate_payloads.append(
@@ -324,7 +380,11 @@ class NavigationDecisionMemory:
                     "label": label,
                     "role": role,
                     "risk_level": risk_level,
-                    "dangerous_final": is_dangerous_final_candidate(label),
+                    "icon_semantics": icon_semantics,
+                    "nearby_text": nearby_text,
+                    "parent_semantics": parent_semantics,
+                    "position_bucket": position_bucket,
+                    "dangerous_final": is_dangerous_final_candidate(semantic_context),
                     "inferred_function_roles": list(inferred_roles),
                 }
             )
@@ -341,6 +401,7 @@ class NavigationDecisionMemory:
             "title": normalize_text(title),
             "auth_state": auth_state,
             "surface_type": surface_type,
+            "navigation_depth": navigation_depth,
             "role_counts": role_counts,
             "tokens": sorted(screen_tokens),
         }
@@ -485,17 +546,25 @@ class NavigationDecisionMemory:
             roles = set(candidate["inferred_function_roles"])  # type: ignore[arg-type]
             ontology = max((priors.get(role, 0.0) for role in roles), default=0.0)
             memory_support = 0.0
+            failure_support = 0.0
             for item in evidence:
                 if item.action != "click":
                     continue
                 label_score = text_similarity(label, item.selected_label)
                 role_score = jaccard(roles, set(item.function_roles))
-                memory_support = max(
-                    memory_support,
-                    item.score * (label_score * 0.58 + role_score * 0.42),
-                )
+                support = item.score * (label_score * 0.58 + role_score * 0.42)
+                if item.outcome_type in {"no_change", "wrong_destination", "infinite_feed"}:
+                    failure_support = max(failure_support, support)
+                else:
+                    memory_support = max(memory_support, support)
             lexical = text_similarity(goal.goal_id.replace(".", " "), label)
             score = max(ontology * 0.72 + memory_support * 0.28, memory_support * 0.82, lexical * 0.25)
+            # A recorded failure is negative evidence, never a weak positive
+            # example. Exact cross-app failure similarity can veto the
+            # candidate even when its generic role prior is attractive.
+            score *= max(0.0, 1.0 - failure_support * 1.8)
+            if failure_support >= max(0.32, memory_support + 0.08):
+                score = 0.0
             if str(candidate["risk_level"]) in {"high", "blocked"}:
                 score = min(score, 0.05)
             scores[candidate_id] = round(max(0.0, min(1.0, score)), 4)
@@ -547,7 +616,16 @@ def is_dangerous_final_candidate(label: str) -> bool:
 
 
 def tokenize(value: str) -> tuple[str, ...]:
-    return tuple(TOKEN_PATTERN.findall(normalize_text(value)))
+    return tuple(_stem_token(token) for token in TOKEN_PATTERN.findall(normalize_text(value)))
+
+
+def _stem_token(token: str) -> str:
+    if not any("\uac00" <= character <= "\ud7a3" for character in token):
+        return token
+    for suffix in KOREAN_TOKEN_SUFFIXES:
+        if token.endswith(suffix) and len(token) > len(suffix) + 1:
+            return token[: -len(suffix)]
+    return token
 
 
 def canonical_json(value: object) -> str:
