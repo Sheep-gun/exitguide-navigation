@@ -27,6 +27,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     CandidateMemoryConfidence,
     DecisionMemoryQuery,
     NavigationDecisionMemory,
+    NormalizedGoal,
     SemanticScreenState,
 )
 from app.services.navigation_model_clients import (  # noqa: E402
@@ -508,6 +509,106 @@ def main() -> None:
     assert selected_value.value == 0.235
     assert selected_value.fast_path_eligible is False
     assert "already_selected_state" in selected_value.confidence_reasons
+    conflict_query = DecisionMemoryQuery(
+        goal=NormalizedGoal(
+            goal_id="membership.cancel",
+            family="membership",
+            operation="cancel",
+            confidence=1.0,
+            matched_phrase="cancel membership",
+            terminal_action_policy="stop_before_final_confirmation",
+        ),
+        screen=SemanticScreenState(
+            semantic_fingerprint="video-screen",
+            title="video playback",
+            auth_state="logged_in",
+            surface_type="native",
+            navigation_depth=None,
+            tokens=("my page",),
+            candidate_payloads=(
+                {
+                    "candidate_id": "my-page",
+                    "label": "My page",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "function_role_scores": {"account.hub": 1.0},
+                },
+            ),
+        ),
+        destination_signatures=(),
+        evidence=(),
+        candidate_scores={"my-page": 0.0},
+        candidate_confidence={
+            "my-page": CandidateMemoryConfidence(
+                candidate_id="my-page",
+                score=0.0,
+                support_tier="ontology_only",
+                supporting_cases=0,
+                supporting_apps=0,
+                conflicting_cases=1,
+                provenance_quality=0.0,
+                fast_path_eligible=False,
+                reasons=("conflicting_cases=1",),
+            )
+        },
+        action_scores={},
+        destination_match=0.0,
+        standards_profile="exitguide.navigation-experience.v1",
+    )
+    conflicted_value = CandidateValueScorer().score(
+        conflict_query,
+        [
+            NavigationCandidate(
+                candidate_id="my-page",
+                label="My page",
+                role="button",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )[0]
+    assert conflicted_value.value == 0.0
+    mixed_conflict_query = replace(
+        conflict_query,
+        candidate_scores={"my-page": 0.3825},
+        candidate_confidence={
+            "my-page": replace(
+                conflict_query.candidate_confidence["my-page"],
+                score=0.3825,
+                support_tier="cross_app_verified",
+                supporting_cases=2,
+                supporting_apps=2,
+                conflicting_cases=3,
+            )
+        },
+    )
+    mixed_conflicted_value = CandidateValueScorer().score(
+        mixed_conflict_query,
+        [
+            NavigationCandidate(
+                candidate_id="my-page",
+                label="My page",
+                role="button",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )[0]
+    assert mixed_conflicted_value.value < 0.18
+    assert selective_policy._semantic_stage_fast_path_candidate(
+        query=conflict_query,
+        plan=HierarchicalPlan(
+            goal_id="membership.cancel",
+            stage="hub_discovery",
+            target_roles=["account.hub"],
+            immediate_subgoal="open account hub",
+            expected_outcome="membership controls appear",
+            completion_rule="select one safe account hub",
+            source="decision_memory_fallback",
+        ),
+        prior_values=[conflicted_value],
+        recent_history=[],
+    ) is None
     disabled_action, disabled_status, _ = ActionSafetyGate().validate(
         NavigationAction(name="click", candidate_id="disabled"),
         candidates=[

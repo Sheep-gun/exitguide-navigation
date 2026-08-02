@@ -180,7 +180,7 @@ ADDITIONAL_SIGNATURES: tuple[tuple[str, str, dict[str, object]], ...] = (
 ROLE_ALIASES: dict[str, tuple[str, tuple[tuple[str, str, float], ...], str, bool]] = {
     "navigation.menu": ("전체 내비게이션 메뉴", (("메뉴", "ko", .94), ("더보기", "ko", .92), ("전체 메뉴", "ko", 1.0), ("전체메뉴", "ko", 1.0), ("탐색 서랍", "ko", .96), ("menu", "en", .94), ("more", "en", .86)), "low", False),
     "profile.hub": ("프로필 허브", (("프로필", "ko", 1.0), ("나의 넷플릭스", "ko", .96), ("profile", "en", 1.0)), "low", False),
-    "account.hub": ("계정/마이페이지 허브", (("마이페이지", "ko", 1.0), ("내 정보", "ko", .98), ("내정보", "ko", .98), ("내 계정", "ko", 1.0), ("마이쿠팡", "ko", .98), ("account", "en", .92), ("my account", "en", 1.0)), "low", False),
+    "account.hub": ("계정/마이페이지 허브", (("마이페이지", "ko", 1.0), ("내 페이지", "ko", 1.0), ("내 정보", "ko", .98), ("내정보", "ko", .98), ("내 계정", "ko", 1.0), ("마이쿠팡", "ko", .98), ("account", "en", .92), ("my account", "en", 1.0)), "low", False),
     "account.settings": ("계정 설정", (("계정 설정", "ko", 1.0), ("내정보관리", "ko", 1.0), ("회원정보", "ko", .94), ("설정", "ko", .72), ("account settings", "en", 1.0), ("settings", "en", .72)), "low", False),
     "privacy.settings": ("개인정보 설정", (("개인정보", "ko", .98), ("개인 정보", "ko", .98), ("privacy", "en", 1.0), ("personal information", "en", .96)), "low", False),
     "auth.entry": ("로그인/인증 진입", (("로그인", "ko", 1.0), ("인증", "ko", .78), ("log in", "en", 1.0), ("sign in", "en", 1.0)), "low", False),
@@ -271,6 +271,14 @@ def seed_database(connection: sqlite3.Connection, source_sha256: str) -> None:
             negatives: list[str] = []
             if role_id == "membership.hub":
                 negatives = ["구독 피드", "구독 채널", "subscriptions feed", "channels"]
+            elif role_id == "navigation.menu":
+                negatives = [
+                    "작업 메뉴",
+                    "추가 작업",
+                    "동영상 작업",
+                    "shorts",
+                    "video actions",
+                ]
             connection.execute(
                 "INSERT INTO affordance_role_aliases VALUES (?,?,?,?,?,?,?)",
                 (

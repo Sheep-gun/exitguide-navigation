@@ -127,6 +127,40 @@ def main() -> None:
         assert memory.normalize_goal("이 앱에서 회원가입하고 싶어").goal_id == "account.signup"
         assert memory.normalize_goal("멤버쉽을 해지해 줘").goal_id == "membership.cancel"
         assert memory.normalize_goal("요금제를 변경하고 싶어").goal_id == "membership.change"
+        assert memory.infer_affordance_role_scores("내 페이지")["account.hub"] == 1.0
+        assert memory.infer_affordance_role_scores(
+            "전체메뉴 열기",
+            negative_context="로그인 전체메뉴 열기",
+        )["navigation.menu"] == 1.0
+        assert "navigation.menu" not in memory.infer_affordance_role_scores(
+            "작업 메뉴",
+            negative_context="Shorts 작업 메뉴",
+        )
+        content_menu_state = memory.semantic_screen_state(
+            window_title="YouTube Premium",
+            activity_name="HomeActivity",
+            candidates=[
+                {
+                    "candidate_id": "content-actions",
+                    "label": "작업 메뉴",
+                    "icon_semantics": "작업 메뉴",
+                    "parent_semantics": "Shorts 작업 메뉴",
+                    "role": "button",
+                },
+                {
+                    "candidate_id": "my-page",
+                    "label": "내 페이지",
+                    "parent_semantics": "홈 Shorts 만들기",
+                    "role": "button",
+                },
+            ],
+        )
+        content_roles = {
+            str(item["candidate_id"]): item["function_role_scores"]
+            for item in content_menu_state.candidate_payloads
+        }
+        assert "navigation.menu" not in content_roles["content-actions"]
+        assert content_roles["my-page"]["account.hub"] == 1.0
         logged_out_state = memory.semantic_screen_state(
             window_title="전체 메뉴",
             activity_name="androidx.drawerlayout.widget.DrawerLayout",

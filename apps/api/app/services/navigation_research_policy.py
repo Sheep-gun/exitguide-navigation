@@ -588,6 +588,7 @@ class AndroidWorldResearchPolicy:
             if (
                 value is None
                 or value.forbidden
+                or value.conflicting_cases > 0
                 or value.risk_level != "low"
                 or str(candidate.get("risk_level", "low")) != "low"
                 or bool(candidate.get("dangerous_final", False))

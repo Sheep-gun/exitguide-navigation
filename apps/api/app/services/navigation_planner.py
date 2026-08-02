@@ -115,6 +115,21 @@ class CandidateValueScorer:
             memory_score = float(query.candidate_scores.get(candidate.candidate_id, 0.0))
             memory_confidence = query.candidate_confidence.get(candidate.candidate_id)
             value = max(memory_score, role_score * 0.78 + memory_score * 0.22)
+            if memory_confidence and memory_confidence.conflicting_cases > 0:
+                # The retriever has already combined positive and negative
+                # transition evidence into memory_score.  Do not let a broad
+                # ontology alias re-inflate a candidate that has an observed
+                # matching failure; ambiguous cases must go to the planner.
+                evidence_total = (
+                    memory_confidence.supporting_cases
+                    + memory_confidence.conflicting_cases
+                )
+                conflict_adjusted_support = (
+                    memory_confidence.supporting_cases / evidence_total
+                    if evidence_total
+                    else 0.0
+                )
+                value = min(value, memory_score) * conflict_adjusted_support
             forbidden = candidate.candidate_id in forbidden_candidate_ids
             semantic_text = " ".join(
                 (

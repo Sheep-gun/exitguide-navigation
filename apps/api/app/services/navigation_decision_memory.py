@@ -519,10 +519,12 @@ class NavigationDecisionMemory:
         text: str,
         *,
         locale: str = "ko-KR",
+        negative_context: str = "",
     ) -> dict[str, float]:
         normalized = normalize_text(text)
         if not normalized:
             return {}
+        normalized_context = normalize_text(" ".join((text, negative_context)))
         locale_prefix = locale.split("-", 1)[0].casefold()
         with closing(self._connect()) as connection:
             rows = connection.execute(
@@ -538,7 +540,7 @@ class NavigationDecisionMemory:
             if not alias or alias not in normalized:
                 continue
             negatives = tuple(json.loads(row["negative_context_json"] or "[]"))
-            if any(normalize_text(str(value)) in normalized for value in negatives):
+            if any(normalize_text(str(value)) in normalized_context for value in negatives):
                 continue
             role_id = str(row["role_id"])
             row_locale = str(row["locale"]).casefold()
@@ -600,6 +602,7 @@ class NavigationDecisionMemory:
                 for function_role, alias_score in self.infer_affordance_role_scores(
                     field_text,
                     locale=locale,
+                    negative_context=semantic_context,
                 ).items():
                     field_role_scores[function_role] = max(
                         field_role_scores.get(function_role, 0.0),
