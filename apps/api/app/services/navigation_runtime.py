@@ -116,6 +116,19 @@ class NavigationRuntime:
             ],
         }
 
+    def stop_session(self, session_id: str) -> dict[str, object]:
+        """Idempotently close one executor session without fabricating a UI outcome."""
+
+        session = self.store.session(session_id)
+        if session is None:
+            raise KeyError(session_id)
+        if session["status"] == "active":
+            self.store.set_session_status(session_id, "stopped")
+            session = self.store.session(session_id)
+            if session is None:  # Defensive: the row cannot disappear under the store lock.
+                raise KeyError(session_id)
+        return session
+
     def decide(self, request: DecideRequest) -> DecideResponse:
         if self.dataset_split_manifest is not None:
             self.dataset_split_manifest.require_collection_access(

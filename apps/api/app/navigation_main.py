@@ -166,6 +166,22 @@ def navigation_episode(session_id: str) -> dict[str, object]:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
 
+@app.post("/v1/navigation/sessions/{session_id}/stop")
+def navigation_stop_session(session_id: str) -> dict[str, object]:
+    """Stop one executor session without treating cancellation as navigation failure."""
+
+    try:
+        session = get_navigation_runtime().stop_session(session_id)
+        return {
+            "session_id": session["session_id"],
+            "status": session["status"],
+        }
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="navigation session was not found") from error
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
 @app.get("/v1/navigation/dataset-splits")
 def navigation_dataset_splits() -> dict[str, object]:
     """Return the immutable runtime copy of the app-disjoint split manifest."""

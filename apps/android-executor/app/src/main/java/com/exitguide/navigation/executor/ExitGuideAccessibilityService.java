@@ -38,6 +38,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final NavigationApiClient apiClient = new NavigationApiClient();
+    private final EpisodeGenerationGuard episodeGuard = new EpisodeGenerationGuard();
 
     private AccessibilityScreenReader screenReader;
     private boolean inFlight;
@@ -52,6 +53,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            String previousSessionId = sessionId;
             resetSession();
             if (ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
                 holdScreenAwake();
@@ -59,6 +61,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             } else {
                 cancelPending();
                 releaseScreenAwake();
+                requestSessionStop(previousSessionId);
             }
         }
     };
@@ -113,6 +116,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void verifyApiAndSchedule() {
+        long generation = episodeGuard.current();
         holdScreenAwake();
         publish("Navigation API 상태를 확인하는 중입니다.");
         apiClient.get(
@@ -121,6 +125,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 new NavigationApiClient.Callback() {
                     @Override
                     public void onSuccess(JSONObject response) {
+                        if (!acceptsCallback(generation)) {
+                            return;
+                        }
                         if (!response.optBoolean("ready", false)) {
                             stop("Navigation API가 준비되지 않았습니다.");
                             return;
@@ -131,6 +138,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
                     @Override
                     public void onFailure(String failureClass, String detail) {
+                        if (!acceptsCallback(generation)) {
+                            return;
+                        }
                         publish("Navigation API 연결 오류(" + failureClass + "). 잠시 후 재확인합니다.");
                         scheduleDecision(2_000);
                     }
@@ -176,14 +186,24 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             scheduleDecision(1_000);
             return;
         }
+        long generation = episodeGuard.current();
         inFlight = true;
-        captureScreenshot(dataUrl -> postDecision(snapshot, emptyToNull(dataUrl)));
+        captureScreenshot(dataUrl -> {
+            if (!acceptsCallback(generation)) {
+                return;
+            }
+            postDecision(snapshot, emptyToNull(dataUrl), generation);
+        });
     }
 
     private void postDecision(
             AccessibilityScreenReader.ScreenSnapshot snapshot,
-            String screenshotDataUrl
+            String screenshotDataUrl,
+            long generation
     ) {
+        if (!acceptsCallback(generation)) {
+            return;
+        }
         try {
             JSONObject request = new JSONObject();
             request.put("request_id", UUID.randomUUID().toString());
@@ -209,11 +229,18 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     new NavigationApiClient.Callback() {
                         @Override
                         public void onSuccess(JSONObject response) {
-                            handleDecision(response, snapshot, screenshotDataUrl);
+                            if (!acceptsCallback(generation)) {
+                                requestSessionStop(response.optString("session_id", ""));
+                                return;
+                            }
+                            handleDecision(response, snapshot, screenshotDataUrl, generation);
                         }
 
                         @Override
                         public void onFailure(String failureClass, String detail) {
+                            if (!acceptsCallback(generation)) {
+                                return;
+                            }
                             inFlight = false;
                             stop("판단 요청 실패(" + failureClass + "). 화면 탐색 실패로 기록하지 않았습니다.");
                         }
@@ -228,8 +255,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private void handleDecision(
             JSONObject response,
             AccessibilityScreenReader.ScreenSnapshot beforeSnapshot,
-            String beforeScreenshot
+            String beforeScreenshot,
+            long generation
     ) {
+        if (!acceptsCallback(generation)) {
+            requestSessionStop(response.optString("session_id", ""));
+            return;
+        }
         sessionId = response.optString("session_id", sessionId);
         String decisionId = response.optString("decision_id", "");
         JSONObject action = response.optJSONObject("action");
@@ -244,6 +276,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     decisionId,
                     beforeSnapshot,
                     beforeScreenshot,
+                    generation,
                     false,
                     "blocked",
                     true,
@@ -256,6 +289,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     decisionId,
                     beforeSnapshot,
                     beforeScreenshot,
+                    generation,
                     false,
                     "blocked",
                     true,
@@ -267,15 +301,21 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         ActionExecution execution = execute(action, beforeSnapshot);
         publish(execution.message);
         handler.postDelayed(
-                () -> observeDecision(
-                        decisionId,
-                        beforeSnapshot,
-                        beforeScreenshot,
-                        execution.succeeded,
-                        execution.observedSignal,
-                        false,
-                        ""
-                ),
+                () -> {
+                    if (!acceptsCallback(generation)) {
+                        return;
+                    }
+                    observeDecision(
+                            decisionId,
+                            beforeSnapshot,
+                            beforeScreenshot,
+                            generation,
+                            execution.succeeded,
+                            execution.observedSignal,
+                            false,
+                            ""
+                    );
+                },
                 "wait_and_observe".equals(actionName) ? 1_600 : OBSERVATION_DELAY_MS
         );
     }
@@ -369,14 +409,20 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             String decisionId,
             AccessibilityScreenReader.ScreenSnapshot beforeSnapshot,
             String beforeScreenshot,
+            long generation,
             boolean executionSucceeded,
             String executionSignal,
             boolean stopAfterObserve,
             String stopMessage
     ) {
+        if (!acceptsCallback(generation)) {
+            return;
+        }
         AccessibilityScreenReader.ScreenSnapshot afterSnapshot = currentSnapshot();
         if (afterSnapshot == null) {
-            postUnobservedOutcome(decisionId, executionSucceeded, stopAfterObserve, stopMessage);
+            postUnobservedOutcome(
+                    decisionId, generation, executionSucceeded, stopAfterObserve, stopMessage
+            );
             return;
         }
         String observedSignal = ObservationSignalDetector.detect(
@@ -386,6 +432,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 afterSnapshot.payload.toString()
         );
         captureScreenshot(afterScreenshot -> {
+            if (!acceptsCallback(generation)) {
+                return;
+            }
             try {
                 JSONObject request = new JSONObject();
                 request.put("request_id", UUID.randomUUID().toString());
@@ -400,7 +449,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     request.put("after_screenshot_data_url", afterScreenshot);
                 }
                 request.put("next_screen", afterSnapshot.payload);
-                postObservation(request, stopAfterObserve, stopMessage);
+                postObservation(request, generation, stopAfterObserve, stopMessage);
             } catch (JSONException error) {
                 inFlight = false;
                 stop("관찰 요청을 만들 수 없습니다: " + error.getMessage());
@@ -410,10 +459,14 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void postUnobservedOutcome(
             String decisionId,
+            long generation,
             boolean executionSucceeded,
             boolean stopAfterObserve,
             String stopMessage
     ) {
+        if (!acceptsCallback(generation)) {
+            return;
+        }
         try {
             JSONObject request = new JSONObject();
             request.put("request_id", UUID.randomUUID().toString());
@@ -421,7 +474,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             request.put("connectivity_status", "device_disconnected");
             request.put("observed_signal", "none");
             request.put("execution_succeeded", executionSucceeded);
-            postObservation(request, stopAfterObserve, stopMessage);
+            postObservation(request, generation, stopAfterObserve, stopMessage);
         } catch (JSONException error) {
             inFlight = false;
             stop("기기 관찰 오류를 기록하지 못했습니다.");
@@ -430,9 +483,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void postObservation(
             JSONObject request,
+            long generation,
             boolean stopAfterObserve,
             String stopMessage
     ) {
+        if (!acceptsCallback(generation)) {
+            return;
+        }
         apiClient.post(
                 ExecutorPreferences.apiBaseUrl(this),
                 "/v1/navigation/observe",
@@ -440,6 +497,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 new NavigationApiClient.Callback() {
                     @Override
                     public void onSuccess(JSONObject response) {
+                        if (!acceptsCallback(generation)) {
+                            return;
+                        }
                         inFlight = false;
                         stepOrdinal++;
                         String outcome = response.optString("outcome_type", "unknown");
@@ -470,6 +530,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
                     @Override
                     public void onFailure(String failureClass, String detail) {
+                        if (!acceptsCallback(generation)) {
+                            return;
+                        }
                         inFlight = false;
                         stop("관찰 전송 실패(" + failureClass + "). UI 탐색 실패로 오인하지 않고 중지했습니다.");
                     }
@@ -554,11 +617,45 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void resetSession() {
+        episodeGuard.reset();
         sessionId = "";
         sessionAppPackage = "";
         stepOrdinal = 0;
         episodeStartedAtElapsed = 0L;
         inFlight = false;
+    }
+
+    private boolean acceptsCallback(long generation) {
+        return episodeGuard.accepts(generation, ExecutorPreferences.active(this));
+    }
+
+    private void requestSessionStop(String stoppingSessionId) {
+        if (stoppingSessionId == null
+                || !stoppingSessionId.matches("[A-Za-z0-9_-]{1,200}")) {
+            return;
+        }
+        try {
+            JSONObject request = new JSONObject();
+            request.put("request_id", UUID.randomUUID().toString());
+            apiClient.post(
+                    ExecutorPreferences.apiBaseUrl(this),
+                    "/v1/navigation/sessions/" + stoppingSessionId + "/stop",
+                    request,
+                    new NavigationApiClient.Callback() {
+                        @Override
+                        public void onSuccess(JSONObject response) {
+                            // Idempotent server-side cleanup; no new UI work is scheduled.
+                        }
+
+                        @Override
+                        public void onFailure(String failureClass, String detail) {
+                            // Connection failures stay separate from navigation failure.
+                        }
+                    }
+            );
+        } catch (JSONException ignored) {
+            // UUID and fixed keys cannot normally fail JSON construction.
+        }
     }
 
     private void stop(String message) {

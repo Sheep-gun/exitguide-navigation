@@ -442,6 +442,17 @@ def main() -> None:
             )
             assert repeated_observation.status_code == 200
             assert repeated_observation.json() == api_observation.json()
+            stop_response = client.post(
+                f"/v1/navigation/sessions/{api_decision.json()['session_id']}/stop"
+            )
+            assert stop_response.status_code == 200
+            assert stop_response.json()["status"] == "stopped"
+            repeated_stop = client.post(
+                f"/v1/navigation/sessions/{api_decision.json()['session_id']}/stop"
+            )
+            assert repeated_stop.status_code == 200
+            assert repeated_stop.json() == stop_response.json()
+            assert client.post("/v1/navigation/sessions/missing/stop").status_code == 404
             api_episode = client.get(
                 f"/v1/navigation/sessions/{api_decision.json()['session_id']}/episode"
             )
