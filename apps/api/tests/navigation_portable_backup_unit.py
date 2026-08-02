@@ -23,6 +23,15 @@ def main() -> None:
         index.parent.mkdir(parents=True)
         _database(database, "navigation")
         _database(index, "android-control")
+        index_connection = sqlite3.connect(index)
+        try:
+            index_connection.execute(
+                "INSERT INTO sample(value) VALUES (?)",
+                ("https://example.test/risk-evaluation-and-mitigation-strategies-rems",),
+            )
+            index_connection.commit()
+        finally:
+            index_connection.close()
         external_artifacts = base / "server-artifacts"
         training = external_artifacts / "navigation-training"
         training.mkdir(parents=True)
