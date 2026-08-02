@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     navigation_reflection_confidence_threshold: float = 0.45
     navigation_reflection_margin_threshold: float = 0.08
     navigation_planner_mode: str = "selective"
-    navigation_planner_score_threshold: float = 0.72
-    navigation_planner_margin_threshold: float = 0.18
+    navigation_planner_score_threshold: float = 0.90
+    navigation_planner_margin_threshold: float = 0.25
     navigation_vlm_mode: str = "selective"
 
     navigation_planner_provider: str = "solar_pro3"

@@ -5,6 +5,7 @@ import json
 import sqlite3
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 
@@ -336,10 +337,10 @@ def main() -> None:
         ),
         CandidateValue(
             candidate_id="login",
-            value=0.70,
+            value=0.68,
             memory_score=0.58,
             role_score=0.78,
-            final_score=0.70,
+            final_score=0.68,
             forbidden=False,
             risk_level="low",
         ),
@@ -372,7 +373,7 @@ def main() -> None:
         ),
         destination_signatures=(),
         evidence=(),
-        candidate_scores={"signup": 0.94, "login": 0.70},
+        candidate_scores={"signup": 0.94, "login": 0.68},
         candidate_confidence={
             "signup": CandidateMemoryConfidence(
                 candidate_id="signup",
@@ -387,7 +388,7 @@ def main() -> None:
             ),
             "login": CandidateMemoryConfidence(
                 candidate_id="login",
-                score=0.70,
+                score=0.68,
                 support_tier="medium",
                 supporting_cases=2,
                 supporting_apps=1,
@@ -415,6 +416,29 @@ def main() -> None:
             }
         ],
     ) is False
+    near_tie_values = [
+        high_confidence_values[0],
+        high_confidence_values[1].model_copy(
+            update={"value": 0.70, "final_score": 0.70}
+        ),
+    ]
+    near_tie_query = replace(
+        fast_path_query,
+        candidate_scores={"signup": 0.94, "login": 0.70},
+        candidate_confidence={
+            **fast_path_query.candidate_confidence,
+            "login": replace(
+                fast_path_query.candidate_confidence["login"],
+                score=0.70,
+            ),
+        },
+    )
+    assert selective_policy._should_invoke_planner(
+        query=near_tie_query,
+        plan=fast_path_plan,
+        prior_values=near_tie_values,
+        recent_history=[],
+    ) is True
     assert selective_policy._should_invoke_planner(
         query=fast_path_query,
         plan=fast_path_plan,

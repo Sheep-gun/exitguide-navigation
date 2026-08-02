@@ -79,9 +79,26 @@ stop_for_user()
 중간·고위험 후보, 차단 후보, 탈퇴·해지·결제·구매·개인정보 제출의 최종 행동은
 Python 안전 게이트가 `stop_for_user()`로 교체한다.
 
+## 중간 목적지와 LLM 호출 경계
+
+- 중간 목적지의 계획 주체는 Navigation API 내부의 K²식 Planner다.
+- K²는 모델명이 아니라 최종 목표를 즉시 검증 가능한 sub-goal로 나누는 구조다.
+- Solar Pro 3는 K²식 Planner와 V-Droid식 후보 평가에 사용하는 추론 엔진이다.
+- Decision Memory DB는 유사 성공·실패·복구 사례를 근거로 제공하며 단독 판단자가 아니다.
+- fast path는 sub-goal과 기능적으로 사실상 동일한 안전 후보가 하나뿐이고 경쟁 후보와 충분히
+  구분되며 이상 이력이 없을 때만 허용한다.
+- 위 조건을 하나라도 만족하지 못하면 Solar Pro 3에 현재 전체 후보와 검색된 DB 근거를 함께
+  전달한다.
+- fast path도 `/observe` 검증을 생략하지 않는다.
+
+코드는 LLM-first 정책을 약화하지 못하도록 fast path의 최소 floor를 강제한다. 배포 설정은
+후보 점수 `0.90`, 경쟁 후보와의 margin `0.25`를 기본값으로 사용하며, 설정으로 이보다 느슨하게
+만들 수 없다. 이 숫자는 사용자 설명용 의미가 아니라 “명백한 동일 후보만 자동 선택”이라는
+정책을 강제하는 내부 gate다.
+
 ## 연구 구조의 코드 대응
 
-- K² 계층적 계획: `NavigationPlannerResearchClient.plan_and_verify_actions`의 검증 가능한 즉시 sub-goal
+- K² 계층적 계획: Navigation API가 소유하고 `NavigationPlannerResearchClient.plan_and_verify_actions`가 Solar Pro 3 추론으로 구체화하는 즉시 sub-goal
 - V-Droid 후보 가치 평가: 동일 Hermes 응답에서 유한 행동 전체를 독립 채점
 - DroidRun 행동 후 검증: `verify_transition`
 - MobileUse 선택적 복구: action/trajectory/global trigger와 VLM/LLM reflector

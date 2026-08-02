@@ -117,6 +117,12 @@ ExitGuide 대응:
 - Verify: 행동 전후 Semantic Screen State와 Destination Signature 변화
 - Locate/Revise: 첫 불일치 decision과 실패 후보를 runtime memory에 격리 기록
 
+여기서 중간 목적지를 설정하는 주체는 **Navigation API 내부의 K²식 Planner**다. K²는
+별도 LLM 이름이 아니라 계층적 계획 구조다. Solar Pro 3는 이 Planner가 sub-goal을 구체화하고
+애매한 후보를 비교할 때 사용하는 추론 엔진이며, Decision Memory DB는 성공·실패 근거를
+제공한다. 따라서 `K²식 Planner = 계획 주체`, `Solar Pro 3 = 추론 엔진`, `DB = 판단 근거`로
+책임을 구분한다.
+
 K²의 C-GRPO 학습은 이번 N100 프로토타입에 포함하지 않는다. 논문 구현은 대규모 GPU
 훈련을 전제로 하므로, 현재는 비모수 DB 기억과 Solar Pro 3 planner/executor 경계만
 구현한다. 이를 K² 전체 재현이라고 부르지 않는다.
@@ -134,8 +140,23 @@ ExitGuide 대응:
 - 좌표 후보, 임의 텍스트 입력, 앱별 정답 경로는 생성하지 않음
 - Solar Pro 3는 직접 좌표나 임의 행동을 생성하지 않고 각 허용 후보의 도움 가능성을 채점
 - Hermes tool call은 semantic sub-goal 제출과 단일 후보 점수 제출에만 사용
-- DB 점수는 prior이며 Solar Pro 3 verifier 점수와 출처를 분리
+- DB 점수는 판단 결과가 아니라 prior evidence이며 Solar Pro 3 verifier 점수와 출처를 분리
 - 위험 후보는 verifier 호출 전 Python이 차단하고 최종 선택 후 다시 검사
+
+### LLM-first와 엄격한 fast path 경계
+
+DB 점수가 높다는 이유만으로 행동을 바로 실행하지 않는다. fast path는 다음 조건을 모두
+만족할 때만 허용한다.
+
+- K²식 Planner가 만든 현재 sub-goal과 후보의 기능 역할이 사실상 동일
+- 그 수준으로 일치하는 안전 후보가 하나뿐이며 경쟁 후보와 명확하게 구분됨
+- 금지·위험 후보가 아니고 최근 무변화·반복·역행 이력이 없음
+
+예를 들어 sub-goal이 `계정·프로필 관리 허브 진입`이고 현재 화면에 `내 계정` 하나만
+명확하게 존재하면 fast path가 가능하다. `프로필`, `프로필 수정`, `계정 관리`, `설정`이
+함께 있거나 아이콘·WebView 문맥 해석이 필요하면 Solar Pro 3가 DB의 유사 경험과 전체 후보를
+함께 받아 V-Droid식으로 평가한다. 즉 운영 원칙은 **LLM 중심, DB 보조, Python 안전 통제**다.
+fast path와 LLM 경로 모두 DroidRun식 행동 후 검증을 거친다.
 
 V-Droid의 8B verifier 가중치와 P³ pairwise 학습은 이번 단계에서 그대로 사용하지
 않는다. 대신 동일한 verifier 입출력 계약을 Solar Pro 3에 적용하고, 향후 실제 결과로
@@ -179,15 +200,16 @@ flowchart TD
     GOAL_CHECK --> DEST["Destination Signature DB<br/>goal_id에 맞는 최종 목적지 설정"]
 
     SCREEN["현재 Android 화면"] --> VIEW["Accessibility/OCR + EXAONE 4.5<br/>현재 화면과 후보 파악"]
-    DEST --> K2["K²식 Navigation API<br/>다음 중간 목표 결정"]
+    DEST --> K2["Navigation API의 K²식 Planner<br/>다음 중간 목표 결정"]
     VIEW --> K2
+    MEMORY["Decision Memory DB<br/>과거 선택·결과를 판단 근거로 제공"] --> K2
 
-    K2 --> VDROID["V-Droid식 Navigation API<br/>현재 후보 중 다음 행동 평가"]
-    MEMORY["Decision Memory DB<br/>과거 선택과 결과 경험"] --> VDROID
-    VDROID --> CLEAR{"DB 경험으로<br/>결정 가능한가?"}
-    CLEAR -->|"예"| CHOOSE["다음 행동 선택"]
-    CLEAR -->|"아니오"| SOLAR["Solar Pro 3<br/>현재 후보 재평가"]
-    SOLAR --> CHOOSE
+    K2 --> CLEAR{"중간 목표와 기능적으로 동일한<br/>안전 후보가 하나뿐인가?"}
+    CLEAR -->|"누가 봐도 명확"| FAST["엄격한 fast path"]
+    CLEAR -->|"조금이라도 애매"| VDROID["Solar Pro 3 + V-Droid식 평가<br/>DB 근거와 전체 후보를 함께 비교"]
+    MEMORY --> VDROID
+    FAST --> CHOOSE["다음 행동 선택"]
+    VDROID --> CHOOSE
 
     CHOOSE --> SAFE["Python 안전 검사<br/>실재 후보 확인 · 위험 행동 차단"]
     SAFE -->|"위험"| STOP["사용자에게 최종 행동 요청"]
@@ -210,8 +232,8 @@ flowchart TD
 
 Navigation API가 Goal Ontology DB의 허용된 `goal_id` 목록을 Solar에 전달한다. Solar는
 표준 `goal_id` 하나만 반환하고, Navigation API는 그 ID가 DB에 실제 존재하는지 검사한다.
-없는 ID는 거부한다. 현재 구현은 첫 분류가 Python 문구 매칭이므로 Solar classifier 구현이
-남아 있다.
+없는 ID는 거부한다. 모델 호출이 실패하거나 사용할 수 없을 때만 Python 문구 매칭을 명시적인
+fallback으로 사용한다.
 
 ### API와 실행기 사이의 계약
 

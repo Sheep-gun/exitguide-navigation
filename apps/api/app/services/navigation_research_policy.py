@@ -26,6 +26,10 @@ from app.services.navigation_planner import (
 )
 
 
+STRICT_FAST_PATH_SCORE_FLOOR = 0.90
+STRICT_FAST_PATH_MARGIN_FLOOR = 0.25
+
+
 @dataclass(frozen=True)
 class ResearchDecision:
     plan: HierarchicalPlan
@@ -70,8 +74,8 @@ class AndroidWorldResearchPolicy:
         reflection_confidence_threshold: float = 0.45,
         reflection_margin_threshold: float = 0.08,
         planner_mode: str = "selective",
-        planner_score_threshold: float = 0.72,
-        planner_margin_threshold: float = 0.18,
+        planner_score_threshold: float = STRICT_FAST_PATH_SCORE_FLOOR,
+        planner_margin_threshold: float = STRICT_FAST_PATH_MARGIN_FLOOR,
         vlm_mode: str = "selective",
     ) -> None:
         self.planner_model = planner_model
@@ -81,8 +85,16 @@ class AndroidWorldResearchPolicy:
         self.reflection_confidence_threshold = reflection_confidence_threshold
         self.reflection_margin_threshold = reflection_margin_threshold
         self.planner_mode = _validated_mode(planner_mode, "planner_mode")
-        self.planner_score_threshold = planner_score_threshold
-        self.planner_margin_threshold = planner_margin_threshold
+        # Configuration may make the gate stricter, but never weaker than the
+        # agreed LLM-first policy. Fast path is reserved for an obvious,
+        # effectively identical candidate; every ordinary ambiguity goes to
+        # the Solar-backed K²/V-Droid evaluation.
+        self.planner_score_threshold = max(
+            STRICT_FAST_PATH_SCORE_FLOOR, planner_score_threshold
+        )
+        self.planner_margin_threshold = max(
+            STRICT_FAST_PATH_MARGIN_FLOOR, planner_margin_threshold
+        )
         self.vlm_mode = _validated_mode(vlm_mode, "vlm_mode")
         self.fallback_planner = HierarchicalPlanBuilder()
         self.prior_scorer = CandidateValueScorer()
@@ -273,15 +285,19 @@ class AndroidWorldResearchPolicy:
         if not safe:
             return True
         safe.sort(key=lambda value: (-value.final_score, value.candidate_id))
+        best = safe[0].final_score
+        second = safe[1].final_score if len(safe) > 1 else 0.0
         if query.standards_profile == "exitguide.navigation-experience.v1":
             fast_path_candidate_id = query.fast_path_candidate_id()
+            eligible_count = sum(value.fast_path_eligible for value in safe)
             return not (
                 fast_path_candidate_id is not None
                 and safe[0].candidate_id == fast_path_candidate_id
                 and safe[0].fast_path_eligible
+                and eligible_count == 1
+                and best >= self.planner_score_threshold
+                and best - second >= self.planner_margin_threshold
             )
-        best = safe[0].final_score
-        second = safe[1].final_score if len(safe) > 1 else 0.0
         return not (
             best >= self.planner_score_threshold
             and best - second >= self.planner_margin_threshold
