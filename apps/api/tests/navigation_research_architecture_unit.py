@@ -562,6 +562,135 @@ def main() -> None:
         ],
     ) is False
 
+    semantic_fast_path_query = replace(
+        fast_path_query,
+        screen=SemanticScreenState(
+            semantic_fingerprint="membership-home",
+            title="home",
+            auth_state="unknown",
+            surface_type="native",
+            navigation_depth=None,
+            tokens=("마이페이지",),
+            candidate_payloads=(
+                {
+                    "candidate_id": "my-page",
+                    "label": "마이페이지",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"account.hub": 1.0},
+                },
+                {
+                    "candidate_id": "search",
+                    "label": "검색",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {},
+                },
+            ),
+        ),
+        candidate_scores={"my-page": 0.44, "search": 0.02},
+        candidate_confidence={},
+    )
+    semantic_fast_path_plan = HierarchicalPlan(
+        goal_id="membership.join",
+        stage="hub_discovery",
+        target_roles=["membership.join.entry", "membership.hub", "account.hub"],
+        immediate_subgoal="open an account or membership hub",
+        expected_outcome="membership choices become visible",
+        completion_rule="choose one uniquely matching safe hub",
+        source="decision_memory_fallback",
+    )
+    semantic_fast_path_values = [
+        CandidateValue(
+            candidate_id="my-page",
+            value=0.44,
+            memory_score=0.44,
+            role_score=0.44,
+            final_score=0.44,
+            forbidden=False,
+            risk_level="low",
+        ),
+        CandidateValue(
+            candidate_id="search",
+            value=0.02,
+            memory_score=0.02,
+            role_score=0.0,
+            final_score=0.02,
+            forbidden=False,
+            risk_level="low",
+        ),
+    ]
+    assert selective_policy._should_invoke_planner(
+        query=semantic_fast_path_query,
+        plan=semantic_fast_path_plan,
+        prior_values=semantic_fast_path_values,
+        recent_history=[],
+    ) is False
+    planner_calls_before_semantic_fast_path = planner_transport.plan_calls
+    semantic_fast_path_decision = selective_policy.decide_action(
+        query=semantic_fast_path_query,
+        plan=semantic_fast_path_plan,
+        candidates=[
+            NavigationCandidate(
+                candidate_id="my-page", label="마이페이지", role="button", risk_level="low"
+            ),
+            NavigationCandidate(
+                candidate_id="search", label="검색", role="button", risk_level="low"
+            ),
+        ],
+        forbidden_candidate_ids=set(),
+        recent_history=[],
+    )
+    assert semantic_fast_path_decision.proposal.action.candidate_id == "my-page"
+    assert semantic_fast_path_decision.proposal.provider == (
+        "semantic_intermediate_role_fast_path"
+    )
+    assert semantic_fast_path_decision.reflection_on_demand is False
+    assert planner_transport.plan_calls == planner_calls_before_semantic_fast_path
+    ambiguous_semantic_query = replace(
+        semantic_fast_path_query,
+        screen=replace(
+            semantic_fast_path_query.screen,
+            candidate_payloads=(
+                *semantic_fast_path_query.screen.candidate_payloads,
+                {
+                    "candidate_id": "full-menu",
+                    "label": "전체 메뉴",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"account.hub": 1.0},
+                },
+            ),
+        ),
+    )
+    ambiguous_values = [
+        *semantic_fast_path_values,
+        CandidateValue(
+            candidate_id="full-menu",
+            value=0.43,
+            memory_score=0.43,
+            role_score=0.44,
+            final_score=0.43,
+            forbidden=False,
+            risk_level="low",
+        ),
+    ]
+    assert selective_policy._should_invoke_planner(
+        query=ambiguous_semantic_query,
+        plan=semantic_fast_path_plan,
+        prior_values=ambiguous_values,
+        recent_history=[],
+    ) is True
+
     guarded = selective_policy._apply_direct_role_guard(
         scores={
             "click:travel": (0.70, "surrounding text suggests account access"),

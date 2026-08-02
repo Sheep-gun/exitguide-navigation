@@ -35,6 +35,18 @@ STRICT_FAST_PATH_MARGIN_FLOOR = 0.25
 DIRECT_ROLE_GUARD_FLOOR = 0.78
 UNRELATED_ROLE_CEILING = 0.50
 DIRECT_ROLE_MODEL_FLOOR = 0.50
+SEMANTIC_FAST_PATH_ROLE_FLOOR = 0.95
+SAFE_INTERMEDIATE_FAST_PATH_ROLES = frozenset(
+    {
+        "account.hub",
+        "account.settings",
+        "billing.manage",
+        "membership.hub",
+        "navigation.menu",
+        "privacy.settings",
+        "profile.hub",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -198,11 +210,18 @@ class AndroidWorldResearchPolicy:
             plan=plan,
             recent_history=recent_history,
         )
+        semantic_fast_path_candidate_id = self._semantic_stage_fast_path_candidate(
+            query=query,
+            plan=plan,
+            prior_values=prior_values,
+            recent_history=recent_history,
+        )
         should_invoke_planner = self._should_invoke_planner(
             query=query,
             plan=plan,
             prior_values=prior_values,
             recent_history=recent_history,
+            semantic_fast_path_candidate_id=semantic_fast_path_candidate_id,
         )
         if self.planner_model.configured and should_invoke_planner:
             try:
@@ -242,13 +261,37 @@ class AndroidWorldResearchPolicy:
             scored = [(item.memory_prior, item) for item in enumerated]
             updated_values = prior_values
             provider = (
-                "decision_memory_profile_fast_path"
+                "semantic_intermediate_role_fast_path"
+                if semantic_fast_path_candidate_id is not None
+                else "decision_memory_profile_fast_path"
                 if query.standards_profile == "exitguide.navigation-experience.v1"
                 else "decision_memory_high_confidence"
                 if self.planner_model.configured and self.planner_mode == "selective"
                 else "decision_memory_fallback"
             )
             fallback_used = False
+            if semantic_fast_path_candidate_id is not None:
+                selected_key = f"click:{semantic_fast_path_candidate_id}"
+                scored = [
+                    (
+                        1.0 if _action_key(item.action) == selected_key else min(score, 0.74),
+                        item,
+                    )
+                    for score, item in scored
+                ]
+                updated_values = [
+                    value.model_copy(
+                        update={
+                            "final_score": 1.0,
+                            "verifier_reason": (
+                                "python_semantic_fast_path: unique safe intermediate role"
+                            ),
+                        }
+                    )
+                    if value.candidate_id == semantic_fast_path_candidate_id
+                    else value
+                    for value in updated_values
+                ]
         fallback_semantically_resolved = False
         if fallback_used:
             resolved_key = self._resolve_structural_direct_candidate(
@@ -425,6 +468,7 @@ class AndroidWorldResearchPolicy:
         plan: HierarchicalPlan,
         prior_values: Sequence[CandidateValue],
         recent_history: Sequence[Mapping[str, object]],
+        semantic_fast_path_candidate_id: str | None = None,
     ) -> bool:
         if self.planner_mode == "disabled":
             return False
@@ -443,6 +487,18 @@ class AndroidWorldResearchPolicy:
         best = safe[0].final_score
         second = safe[1].final_score if len(safe) > 1 else 0.0
         if query.standards_profile == "exitguide.navigation-experience.v1":
+            if semantic_fast_path_candidate_id is None:
+                semantic_fast_path_candidate_id = self._semantic_stage_fast_path_candidate(
+                    query=query,
+                    plan=plan,
+                    prior_values=prior_values,
+                    recent_history=recent_history,
+                )
+            if (
+                semantic_fast_path_candidate_id is not None
+                and safe[0].candidate_id == semantic_fast_path_candidate_id
+            ):
+                return False
             fast_path_candidate_id = query.fast_path_candidate_id()
             eligible_count = sum(value.fast_path_eligible for value in safe)
             return not (
@@ -457,6 +513,69 @@ class AndroidWorldResearchPolicy:
             best >= self.planner_score_threshold
             and best - second >= self.planner_margin_threshold
         )
+
+    def _semantic_stage_fast_path_candidate(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        prior_values: Sequence[CandidateValue],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> str | None:
+        """Return one obvious, safe intermediate-role candidate or refuse.
+
+        This is the strict B-policy fast path: it does not cover enrollment,
+        deletion, cancellation, payment or other terminal roles.  A role must
+        come directly from the candidate label/icon (>= 0.95), be unique on
+        the screen, remain the top deterministic prior, and have no observed
+        anomaly in the active episode.
+        """
+
+        if (
+            query.standards_profile != "exitguide.navigation-experience.v1"
+            or plan.stage not in {"hub_discovery", "destination_entry"}
+            or _history_requires_planner(recent_history)
+        ):
+            return None
+        target_roles = set(plan.target_roles) & SAFE_INTERMEDIATE_FAST_PATH_ROLES
+        if not target_roles:
+            return None
+        value_by_id = {value.candidate_id: value for value in prior_values}
+        eligible: list[str] = []
+        for candidate in query.screen.candidate_payloads:
+            candidate_id = str(candidate.get("candidate_id", ""))
+            value = value_by_id.get(candidate_id)
+            role_scores = candidate.get("function_role_scores", {})
+            if (
+                value is None
+                or value.forbidden
+                or value.risk_level != "low"
+                or str(candidate.get("risk_level", "low")) != "low"
+                or bool(candidate.get("dangerous_final", False))
+                or not bool(candidate.get("clickable", True))
+                or not bool(candidate.get("enabled", True))
+                or bool(candidate.get("selected", False))
+                or not isinstance(role_scores, Mapping)
+            ):
+                continue
+            if any(
+                float(role_scores.get(role, 0.0)) >= SEMANTIC_FAST_PATH_ROLE_FLOOR
+                for role in target_roles
+            ):
+                eligible.append(candidate_id)
+        if len(eligible) != 1:
+            return None
+        safe_values = sorted(
+            (
+                value
+                for value in prior_values
+                if not value.forbidden and value.score_source != "safety_blocked"
+            ),
+            key=lambda value: (-value.final_score, value.candidate_id),
+        )
+        if not safe_values or safe_values[0].candidate_id != eligible[0]:
+            return None
+        return eligible[0]
 
     def _enumerate_actions(
         self,
