@@ -134,6 +134,21 @@ def main() -> None:
             ],
         )
         assert logged_out_state.auth_state == "logged_out"
+        membership_false_positive = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="제주항공",
+            activity_name="android.widget.FrameLayout",
+            candidates=[
+                {"candidate_id": "home", "label": "홈", "role": "button"},
+                {"candidate_id": "ticket", "label": "항공권예매", "role": "button"},
+                {"candidate_id": "schedule", "label": "스케줄조회", "role": "button"},
+                {"candidate_id": "my-page", "label": "마이페이지", "role": "button"},
+            ],
+            top_k=0,
+        )
+        assert membership_false_positive.goal is not None
+        assert membership_false_positive.goal.goal_id == "membership.join"
+        assert membership_false_positive.destination_match < 0.62
 
         current_candidates = [
             {"element_id": "current-account", "label": "내 계정", "role": "button", "risk_level": "low"},

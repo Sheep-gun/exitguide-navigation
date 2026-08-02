@@ -1095,7 +1095,11 @@ def _signature_payload(row: sqlite3.Row) -> dict[str, object]:
 
 
 def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, object]]) -> float:
-    token_text = " ".join(tokens)
+    # Function-role IDs (for example ``membership.plan``) are useful for
+    # cross-app retrieval, but they are not screen evidence. Including them
+    # here can satisfy both "membership" and "plan" without either word being
+    # visible to the user.
+    token_text = " ".join(token for token in tokens if "." not in token)
     best = 0.0
     for signature in signatures:
         required = signature.get("required_features", {})
