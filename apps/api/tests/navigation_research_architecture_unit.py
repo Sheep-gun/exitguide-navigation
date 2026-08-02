@@ -199,6 +199,9 @@ class ScriptedVisionClient:
     def complete(self, *, messages, **_kwargs):
         system = str(messages[0]["content"])
         if "visual perception module" in system:
+            assert _kwargs["temperature"] == 0.0
+            assert _kwargs["top_p"] == 1.0
+            assert _kwargs["presence_penalty"] == 0.0
             self.perception_calls += 1
             return _response(
                 {

@@ -778,6 +778,10 @@ class Exaone45VisionClient:
             "accessibility_ocr_candidates": candidate_packet,
             "required_output": {
                 "semantic_summary": "screen-level meaning",
+                "annotation_policy": (
+                    "Annotate at most 8 candidates whose icon or context is missing; "
+                    "omit candidates already clear from text."
+                ),
                 "candidate_annotations": [
                     {
                         "candidate_id": "must be one of the supplied IDs",
@@ -795,7 +799,9 @@ class Exaone45VisionClient:
                     "content": (
                         "You are the visual perception module for Android navigation. Describe the "
                         "whole screen semantically and annotate only candidate IDs supplied by the "
-                        "client. Never invent a candidate, coordinate, route, or action. Return JSON."
+                        "client. Emit at most 8 compact annotations and omit already-clear text "
+                        "candidates. Never invent a candidate, coordinate, route, or action. "
+                        "Return strict JSON."
                     ),
                 },
                 {
@@ -807,9 +813,9 @@ class Exaone45VisionClient:
                 },
             ],
             max_tokens=900,
-            temperature=0.6,
-            top_p=0.95,
-            presence_penalty=1.5,
+            temperature=0.0,
+            top_p=1.0,
+            presence_penalty=0.0,
         )
         payload = _response_json(response)
         annotations = payload.get("candidate_annotations", [])
@@ -817,7 +823,7 @@ class Exaone45VisionClient:
             annotations = []
         annotation_by_id = {
             str(annotation.get("candidate_id")): annotation
-            for annotation in annotations
+            for annotation in annotations[:8]
             if isinstance(annotation, Mapping)
         }
         allowed_ids = {candidate.candidate_id for candidate in screen.candidates}
