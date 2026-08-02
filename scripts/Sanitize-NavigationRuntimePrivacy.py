@@ -18,6 +18,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     EMAIL_PATTERN,
     LONG_NUMBER_PATTERN,
     PHONE_PATTERN,
+    USER_HANDLE_PATTERN,
     canonical_json,
     redact_text,
 )
@@ -106,7 +107,12 @@ def redact_json_value(value: Any, *, key: str | None = None) -> Any:
 def sensitive_hits(value: str) -> int:
     return sum(
         len(pattern.findall(value))
-        for pattern in (EMAIL_PATTERN, PHONE_PATTERN, LONG_NUMBER_PATTERN)
+        for pattern in (
+            EMAIL_PATTERN,
+            USER_HANDLE_PATTERN,
+            PHONE_PATTERN,
+            LONG_NUMBER_PATTERN,
+        )
     )
 
 

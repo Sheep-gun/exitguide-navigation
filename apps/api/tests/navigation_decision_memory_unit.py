@@ -105,6 +105,7 @@ def main() -> None:
     assert redact_text("고객센터 1599-1500 / 서울 02-1234-5678") == (
         "고객센터 [phone] / 서울 [phone]"
     )
+    assert redact_text("프로필 @sample_user") == "프로필 [account]"
     migration = _load_migration_module()
     with tempfile.TemporaryDirectory() as temporary:
         database = Path(temporary) / "decision.sqlite"
@@ -277,6 +278,30 @@ def main() -> None:
         )
         assert membership_benefits_destination.destination_match >= destination_threshold
         assert memory.recommend_action(membership_benefits_destination)[0] == "stop_for_user"
+
+        active_membership_screen = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="계정",
+            activity_name="android.view.View",
+            candidates=[
+                {
+                    "candidate_id": "status",
+                    "label": "Premium 회원",
+                    "role": "text",
+                },
+                {
+                    "candidate_id": "benefits",
+                    "label": "Premium 혜택 월 요금제",
+                    "role": "button",
+                },
+            ],
+            top_k=0,
+        )
+        active_threshold = min(
+            float(item["threshold"])
+            for item in active_membership_screen.destination_signatures
+        )
+        assert active_membership_screen.destination_match < active_threshold
 
         membership_menu = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",

@@ -24,6 +24,7 @@ ALLOWED_ACTIONS = (
 )
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
+USER_HANDLE_PATTERN = re.compile(r"(?<![\w@])@[0-9A-Za-z._-]{2,64}\b")
 PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:"
     r"(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}"
@@ -1110,6 +1111,7 @@ def _candidate_ontology_score(
 def redact_text(value: str) -> str:
     value = unicodedata.normalize("NFKC", value or "").translate(ZERO_WIDTH)
     value = EMAIL_PATTERN.sub("[email]", value)
+    value = USER_HANDLE_PATTERN.sub("[account]", value)
     value = PHONE_PATTERN.sub("[phone]", value)
     value = LONG_NUMBER_PATTERN.sub("[number]", value)
     return " ".join(value.split())[:500]
