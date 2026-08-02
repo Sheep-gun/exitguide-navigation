@@ -1042,7 +1042,14 @@ class NavigationDecisionMemory:
     def recommend_action(self, query: DecisionMemoryQuery) -> tuple[str, str | None, str | None, float]:
         if query.goal is None:
             return "wait_and_observe", None, None, 0.0
-        if query.destination_match >= 0.72:
+        destination_threshold = min(
+            (
+                float(signature.get("threshold", 0.72))
+                for signature in query.destination_signatures
+            ),
+            default=0.72,
+        )
+        if query.destination_match >= destination_threshold:
             return "stop_for_user", None, None, query.destination_match
         ranked = sorted(query.candidate_scores.items(), key=lambda item: (-item[1], item[0]))
         if ranked and ranked[0][1] >= 0.24:
@@ -1172,7 +1179,15 @@ def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, obj
     # cross-app retrieval, but they are not screen evidence. Including them
     # here can satisfy both "membership" and "plan" without either word being
     # visible to the user.
-    token_text = " ".join(token for token in tokens if "." not in token)
+    visible_tokens = {token for token in tokens if "." not in token}
+
+    def feature_present(value: object) -> bool:
+        # Screen tokens are stored as a sorted set, so phrase substring checks
+        # lose the original word order.  A semantic feature is present when all
+        # of its normalized tokens are visible on the screen.
+        feature_tokens = set(tokenize(str(value)))
+        return bool(feature_tokens) and feature_tokens.issubset(visible_tokens)
+
     best = 0.0
     for signature in signatures:
         required = signature.get("required_features", {})
@@ -1181,23 +1196,21 @@ def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, obj
         terminal = signature.get("terminal_features", [])
         groups = required.get("any_groups", []) if isinstance(required, dict) else []
         required_score = (
-            sum(any(normalize_text(str(term)) in token_text for term in group) for group in groups)
+            sum(any(feature_present(term) for term in group) for group in groups)
             / len(groups)
             if groups
             else 0.0
         )
         optional_values = list(optional) if isinstance(optional, list) else []
         optional_score = (
-            sum(normalize_text(str(term)) in token_text for term in optional_values) / len(optional_values)
+            sum(feature_present(term) for term in optional_values) / len(optional_values)
             if optional_values
             else 0.0
         )
         terminal_values = list(terminal) if isinstance(terminal, list) else []
-        terminal_score = (
-            max((normalize_text(str(term)) in token_text for term in terminal_values), default=False)
-        )
+        terminal_score = max((feature_present(term) for term in terminal_values), default=False)
         forbidden_values = list(forbidden) if isinstance(forbidden, list) else []
-        forbidden_hit = any(normalize_text(str(term)) in token_text for term in forbidden_values)
+        forbidden_hit = any(feature_present(term) for term in forbidden_values)
         score = required_score * 0.70 + optional_score * 0.18 + float(terminal_score) * 0.12
         if forbidden_hit:
             score *= 0.2

@@ -88,7 +88,10 @@ SIGNATURES: dict[str, dict[str, object]] = {
         "optional": ["약관", "인증", "동의", "verification", "terms"],
         "forbidden": ["로그아웃", "회원탈퇴", "delete account"],
         "terminal": ["가입하기", "계정 생성", "create", "continue"],
-        "threshold": 0.62,
+        # A login page commonly exposes both credential fields and a
+        # "회원가입" navigation link.  Require terminal-form evidence as well
+        # before treating the screen as the account-creation boundary.
+        "threshold": 0.78,
     },
     "account.delete": {
         "name": "account deletion confirmation boundary",
@@ -131,6 +134,48 @@ SIGNATURES: dict[str, dict[str, object]] = {
         "threshold": 0.66,
     },
 }
+
+# A paid-plan purchase page is not the only valid membership-join boundary.
+# Free member programs often present a benefits landing page before handing the
+# user to account creation.  Keep this as a separate semantic family so a broad
+# menu containing isolated "회원가입" and "혜택" entries is not mistaken for a
+# destination.
+ADDITIONAL_SIGNATURES: tuple[tuple[str, str, dict[str, object]], ...] = (
+    (
+        "membership.join",
+        "ds_membership_join_member_benefits_v1",
+        {
+            "name": "member benefits enrollment boundary",
+            "required": {
+                "any_groups": [
+                    [
+                        "회원 전용 혜택",
+                        "멤버십 전용 혜택",
+                        "member-only benefits",
+                        "membership benefits",
+                    ],
+                    [
+                        "가입하고 혜택",
+                        "가입 후 혜택",
+                        "join and get benefits",
+                        "sign up and get benefits",
+                    ],
+                ]
+            },
+            "optional": [
+                "신규회원 혜택",
+                "신규 회원 혜택",
+                "포인트 적립",
+                "회원 할인",
+                "new member benefits",
+                "earn points",
+            ],
+            "forbidden": ["구독 피드", "subscriptions feed", "channels"],
+            "terminal": ["회원 가입", "멤버십 가입", "sign up", "join"],
+            "threshold": 0.62,
+        },
+    ),
+)
 
 ROLE_ALIASES: dict[str, tuple[str, tuple[tuple[str, str, float], ...], str, bool]] = {
     "navigation.menu": ("전체 내비게이션 메뉴", (("메뉴", "ko", .94), ("더보기", "ko", .92), ("전체 메뉴", "ko", 1.0), ("탐색 서랍", "ko", .96), ("menu", "en", .94), ("more", "en", .86)), "low", False),
@@ -197,6 +242,21 @@ def seed_database(connection: sqlite3.Connection, source_sha256: str) -> None:
             """,
             (
                 f"ds_{goal_id.replace('.', '_')}_v1", goal_id, payload["name"],
+                canonical_json(payload["required"]), canonical_json(payload["optional"]),
+                canonical_json(payload["forbidden"]), canonical_json(payload["terminal"]),
+                payload["threshold"],
+            ),
+        )
+    for goal_id, signature_id, payload in ADDITIONAL_SIGNATURES:
+        connection.execute(
+            """
+            INSERT INTO destination_signatures(
+                signature_id,goal_id,name,required_features_json,optional_features_json,
+                forbidden_features_json,terminal_features_json,match_threshold,version
+            ) VALUES (?,?,?,?,?,?,?,?,1)
+            """,
+            (
+                signature_id, goal_id, payload["name"],
                 canonical_json(payload["required"]), canonical_json(payload["optional"]),
                 canonical_json(payload["forbidden"]), canonical_json(payload["terminal"]),
                 payload["threshold"],

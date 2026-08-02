@@ -134,6 +134,23 @@ def main() -> None:
             ],
         )
         assert logged_out_state.auth_state == "logged_out"
+        signup_gateway = memory.retrieve(
+            goal_text="새 계정을 만들고 싶어",
+            window_title="로그인",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {"candidate_id": "email", "label": "이메일", "role": "input"},
+                {"candidate_id": "password", "label": "비밀번호", "role": "input"},
+                {"candidate_id": "login", "label": "로그인", "role": "button"},
+                {"candidate_id": "signup", "label": "회원가입", "role": "button"},
+            ],
+            top_k=0,
+        )
+        signup_threshold = min(
+            float(item["threshold"]) for item in signup_gateway.destination_signatures
+        )
+        assert signup_gateway.destination_match < signup_threshold
+        assert memory.recommend_action(signup_gateway)[0:2] == ("click", "signup")
         unselected_tab_state = memory.semantic_screen_state(
             window_title="전체 메뉴",
             activity_name="android.widget.FrameLayout",
@@ -183,6 +200,46 @@ def main() -> None:
         assert membership_false_positive.goal is not None
         assert membership_false_positive.goal.goal_id == "membership.join"
         assert membership_false_positive.destination_match < 0.62
+
+        membership_benefits_menu = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="전체 메뉴",
+            activity_name="androidx.drawerlayout.widget.DrawerLayout",
+            candidates=[
+                {"candidate_id": "signup", "label": "회원가입", "role": "button"},
+                {"candidate_id": "members", "label": "J 멤버스", "role": "clickable"},
+                {"candidate_id": "benefits", "label": "신규 회원 혜택", "role": "clickable"},
+            ],
+            top_k=0,
+        )
+        assert membership_benefits_menu.destination_match < 0.62
+
+        membership_benefits_destination = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="회원 전용 혜택",
+            activity_name="androidx.drawerlayout.widget.DrawerLayout",
+            candidates=[
+                {
+                    "candidate_id": "summary",
+                    "label": "포인트 적립부터 회원 할인까지 회원 가입하고 혜택 받자!",
+                    "role": "clickable",
+                },
+                {
+                    "candidate_id": "new-member-benefits",
+                    "label": "신규회원 혜택",
+                    "role": "tab",
+                    "selected": True,
+                },
+                {"candidate_id": "menu", "label": "전체메뉴 열기", "role": "button"},
+            ],
+            top_k=0,
+        )
+        destination_threshold = min(
+            float(item["threshold"])
+            for item in membership_benefits_destination.destination_signatures
+        )
+        assert membership_benefits_destination.destination_match >= destination_threshold
+        assert memory.recommend_action(membership_benefits_destination)[0] == "stop_for_user"
 
         membership_menu = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",
