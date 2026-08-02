@@ -102,6 +102,9 @@ def main() -> None:
         "click", "scroll", "back", "wait_and_observe", "stop_for_user"
     )
     assert redact_text("me@example.com 010-1234-5678 123456789") == "[email] [phone] [number]"
+    assert redact_text("고객센터 1599-1500 / 서울 02-1234-5678") == (
+        "고객센터 [phone] / 서울 [phone]"
+    )
     migration = _load_migration_module()
     with tempfile.TemporaryDirectory() as temporary:
         database = Path(temporary) / "decision.sqlite"

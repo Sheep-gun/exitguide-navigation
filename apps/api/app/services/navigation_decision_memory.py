@@ -24,7 +24,13 @@ ALLOWED_ACTIONS = (
 )
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
-PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}(?!\d)")
+PHONE_PATTERN = re.compile(
+    r"(?<!\d)(?:"
+    r"(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}"
+    r"|0(?:2|[3-6]\d)[- ]?\d{3,4}[- ]?\d{4}"
+    r"|1[568]\d{2}[- ]?\d{4}"
+    r")(?!\d)"
+)
 LONG_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{7,}(?!\d)")
 ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
 DIRECT_FUNCTION_ROLE_THRESHOLD = 0.50
