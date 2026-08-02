@@ -25,7 +25,7 @@ from navigation_catalog_v15_data import (  # noqa: E402
 EXPECTED_V15_TOTALS = {
     "function_count": 2866,
     "intent_count": 2660,
-    "alias_count": 53016,
+    "alias_count": 53017,
     "context_count": 109230,
     "intent_pattern_count": 67092,
     "goal_rule_count": 98737,
@@ -59,7 +59,14 @@ def main() -> None:
         assert V15_REQUIRED_DOMAINS <= set(policy["required_domains"])
         assert len(set(policy["required_domains"])) == 179
         assert report["catalog_version"] == CATALOG_V15_VERSION
-        assert report["totals"] == EXPECTED_V15_TOTALS
+        assert report["totals"] == EXPECTED_V15_TOTALS, json.dumps(
+            {
+                "expected": EXPECTED_V15_TOTALS,
+                "actual": report["totals"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
         assert report["status"] == "pass", json.dumps(report["findings"], ensure_ascii=False, indent=2)
         assert report["quality_score"] == 100.0
         assert not [item for item in report["findings"] if item["code"].startswith("unsafe_")]

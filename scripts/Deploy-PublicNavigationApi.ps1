@@ -5,7 +5,8 @@ param(
   [string]$EnvFile = "",
   [string]$Commit = "HEAD",
   [switch]$IncludeWorkingTree,
-  [switch]$PreserveTunnel
+  [switch]$PreserveTunnel,
+  [switch]$SkipRuntimeConfigPublish
 )
 
 $ErrorActionPreference = "Stop"
@@ -92,7 +93,7 @@ if (-not $ApiKeyLine) {
 $SelectedLines.Add("OCR_PROVIDER=mock")
 $SelectedLines.Add("LLM_PROVIDER=exaone")
 $SelectedLines.Add("NAVIGATION_AGENT_PROVIDER=exaone")
-$SelectedLines.Add("NAVIGATION_AGENT_ALLOW_FALLBACK=true")
+$SelectedLines.Add("NAVIGATION_AGENT_ALLOW_FALLBACK=false")
 $SelectedLines.Add("NAVIGATION_AGENT_TIMEOUT_SECONDS=35")
 $SelectedLines.Add("NAVIGATION_GRAPH_DB_PATH=$RemoteRoot/data/universal-navigation.sqlite")
 # The function index is fully derived from the versioned JSON catalog.  Keep
@@ -101,7 +102,30 @@ $SelectedLines.Add("NAVIGATION_GRAPH_DB_PATH=$RemoteRoot/data/universal-navigati
 # minutes in uninterruptible I/O wait.  The learned navigation graph remains
 # on persistent storage above.
 $SelectedLines.Add("NAVIGATION_FUNCTION_DB_PATH=/tmp/exitguide-navigation-function-catalog.sqlite")
-[System.IO.File]::WriteAllLines($RuntimeEnv, $SelectedLines, [System.Text.UTF8Encoding]::new($false))
+$SelectedLines.Add("ANDROID_CONTROL_SOURCE_INDEX_PATH=$RemoteRoot/.artifacts/android-control/navigation-examples.sqlite")
+$SelectedLines.Add("ANDROID_CONTROL_INDEX_PATH=/tmp/exitguide-android-control.sqlite")
+$SelectedLines.Add("ANDROID_CONTROL_RETRIEVAL_TOP_K=5")
+$SelectedLines.Add("NAVIGATION_GOLD_RETRIEVAL_ENABLED=true")
+$SelectedLines.Add("NAVIGATION_GOLD_RETRIEVAL_TOP_K=5")
+$SelectedLines.Add("NAVIGATION_POLICY_RERANKER_PATH=fixtures/navigation/navigation-policy-reranker-v1.json")
+$SelectedLines.Add("NAVIGATION_POLICY_RERANKER_MAX_CANDIDATES=5")
+$SelectedLines.Add("NAVIGATION_POLICY_RERANKER_DECISIVE_SCORE=0.62")
+$SelectedLines.Add("NAVIGATION_POLICY_RERANKER_DECISIVE_MARGIN=0.07")
+$SelectedLines.Add("NAVIGATION_VERIFIED_ROUTE_REPLAY_ENABLED=false")
+$SelectedLines.Add("NAVIGATION_VLM_ENABLED=true")
+$SelectedLines.Add("NAVIGATION_VLM_BASE_URL=http://127.0.0.1:8000/v1")
+$SelectedLines.Add("NAVIGATION_VLM_MODEL=EXAONE-4.5-33B")
+$SelectedLines.Add("NAVIGATION_VLM_TIMEOUT_SECONDS=20")
+$SelectedLines.Add("NAVIGATION_VLM_CACHE_PATH=$RemoteRoot/runtime/navigation-vlm-cache.sqlite")
+# The target is Linux. ``WriteAllLines`` uses CRLF on Windows, and sourcing
+# that file in a reproducibility/evaluation shell leaves a literal ``\r`` on
+# booleans and model names. Emit deterministic UTF-8/LF explicitly.
+$RuntimeEnvText = [string]::Join("`n", $SelectedLines) + "`n"
+[System.IO.File]::WriteAllText(
+  $RuntimeEnv,
+  $RuntimeEnvText,
+  [System.Text.UTF8Encoding]::new($false)
+)
 
 Push-Location $RepoRoot
 try {
@@ -112,14 +136,14 @@ try {
       Remove-Item -LiteralPath $TemporaryIndex -Force -ErrorAction SilentlyContinue
       $env:GIT_INDEX_FILE = $TemporaryIndex
       & git read-tree HEAD
-      & git add -A -- apps/api contracts fixtures
+      & git add -A -- apps/api contracts fixtures scripts
       $Tree = (& git write-tree).Trim()
       if ($LASTEXITCODE -ne 0 -or -not $Tree) {
         throw "Could not prepare the working-tree API snapshot."
       }
       # The catalogs are mostly JSON and compress extremely well.  Shipping an
       # uncompressed archive made every tuning iteration upload hundreds of MB.
-      & git archive --format=tar.gz --output=$SourceArchive $Tree apps/api contracts fixtures
+      & git archive --format=tar.gz --output=$SourceArchive $Tree apps/api contracts fixtures scripts
       if ($LASTEXITCODE -ne 0) {
         throw "Could not create the working-tree API source archive."
       }
@@ -134,7 +158,7 @@ try {
       throw "Git commit was not found: $Commit"
     }
 
-    & git archive --format=tar.gz --output=$SourceArchive $Commit apps/api contracts fixtures
+    & git archive --format=tar.gz --output=$SourceArchive $Commit apps/api contracts fixtures scripts
     if ($LASTEXITCODE -ne 0) {
       throw "Could not create the committed API source archive."
     }
@@ -169,5 +193,29 @@ if (-not $PublicUrlLine) {
 }
 
 $PublicUrl = ($PublicUrlLine -split "=", 2)[1]
+
+if (-not $SkipRuntimeConfigPublish) {
+  $RuntimeConfigPath = Join-Path $RepoRoot "deploy/mobile-runtime.json"
+  $RuntimeConfigPublisher = Join-Path $RepoRoot "scripts/Publish-MobileRuntimeConfig.ps1"
+  if (-not (Test-Path -LiteralPath $RuntimeConfigPath -PathType Leaf) -or
+      -not (Test-Path -LiteralPath $RuntimeConfigPublisher -PathType Leaf)) {
+    throw "Mobile runtime configuration files are missing after API deployment."
+  }
+  $MobileRuntime = Get-Content -Raw -LiteralPath $RuntimeConfigPath | ConvertFrom-Json
+  $MobileRuntime.api_base_url = $PublicUrl
+  $MobileRuntime.active = $true
+  $MobileRuntime.updated_at = (Get-Date).ToString("o")
+  $MobileRuntimeText = $MobileRuntime | ConvertTo-Json -Depth 8
+  [System.IO.File]::WriteAllText(
+    $RuntimeConfigPath,
+    $MobileRuntimeText + "`n",
+    [System.Text.UTF8Encoding]::new($false)
+  )
+  & $RuntimeConfigPublisher -ConfigPath $RuntimeConfigPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "Public API is healthy, but publishing its address for installed APKs failed."
+  }
+}
+
 Write-Host "Public Navigation API is ready: $PublicUrl"
 Write-Output $PublicUrl

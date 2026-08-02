@@ -205,10 +205,12 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.accessibility.AccessibilityManager;
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.WritableMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -311,6 +313,20 @@ public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void getOverlayState(Promise promise) {
+    android.content.SharedPreferences prefs = reactContext.getSharedPreferences(
+      "exitguide_overlay",
+      Context.MODE_PRIVATE
+    );
+    WritableMap state = Arguments.createMap();
+    state.putBoolean("running", ExitGuideOverlayService.isRunning());
+    state.putString("operationMode", prefs.getString("operationMode", "explore"));
+    state.putString("sessionId", prefs.getString("sessionId", ""));
+    state.putString("runtimeState", prefs.getString("runtimeState", "IDLE"));
+    promise.resolve(state);
+  }
+
+  @ReactMethod
   public void startOverlay(
     String apiBaseUrl,
     String goalText,
@@ -368,6 +384,7 @@ public class ExitGuideOverlayModule extends ReactContextBaseJavaModule {
       .remove("goalText")
       .remove("startNonce")
       .putBoolean("explorationActive", false)
+      .putString("runtimeState", "IDLE")
       .apply();
     Intent intent = new Intent(reactContext, ExitGuideOverlayService.class);
     reactContext.stopService(intent);
@@ -496,6 +513,12 @@ import java.net.URL;
 import java.nio.ByteBuffer;
 
 public class ExitGuideOverlayService extends Service {
+  private static volatile boolean serviceRunning = false;
+
+  public static boolean isRunning() {
+    return serviceRunning;
+  }
+
   private static final long SPINNER_ROTATION_PERIOD_MS = 1800L;
 
   /** Twelve-spoke loader matching the supplied reference image. */
@@ -617,6 +640,11 @@ public class ExitGuideOverlayService extends Service {
   public static final String ACTION_CAPTURE_RESULT = "com.exitguide.ai.overlay.CAPTURE_RESULT";
   public static final String FINISH_REASON_DESTINATION_REACHED = "destination_reached";
   public static final String FINISH_REASON_STOPPED_NOT_FOUND = "stopped_not_found";
+  public static final String STATE_IDLE = "IDLE";
+  public static final String STATE_WAITING_FOR_TARGET_APP = "WAITING_FOR_TARGET_APP";
+  public static final String STATE_OBSERVING = "OBSERVING";
+  public static final String STATE_WAITING_FOR_USER_FINAL_ACTION = "WAITING_FOR_USER_FINAL_ACTION";
+  public static final String STATE_FINISHED = "FINISHED";
   public static final String EXTRA_API_BASE_URL = "apiBaseUrl";
   public static final String EXTRA_GOAL_TEXT = "goalText";
   public static final String EXTRA_OPERATION_MODE = "operationMode";
@@ -637,6 +665,7 @@ public class ExitGuideOverlayService extends Service {
   private static final String PREF_SESSION_ID = "sessionId";
   private static final String PREF_START_NONCE = "startNonce";
   private static final String PREF_EXPLORATION_ACTIVE = "explorationActive";
+  private static final String PREF_RUNTIME_STATE = "runtimeState";
   private static final String PREF_PROVIDER_ID = "providerId";
   private static final String PREF_PROVIDER_API_KEY = "providerApiKey";
   private static final String PREF_PROVIDER_MODEL = "providerModel";
@@ -663,6 +692,7 @@ public class ExitGuideOverlayService extends Service {
   private String providerBaseUrl = "";
   private boolean navigationActive = false;
   private boolean awaitingUserStart = true;
+  private String runtimeState = STATE_IDLE;
   private long lastStartAt = 0L;
   private final BroadcastReceiver guidanceReceiver = new BroadcastReceiver() {
     @Override
@@ -688,6 +718,7 @@ public class ExitGuideOverlayService extends Service {
   @Override
   public void onCreate() {
     super.onCreate();
+    serviceRunning = true;
     windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
     mainHandler = new Handler(Looper.getMainLooper());
     restorePrefs();
@@ -710,8 +741,10 @@ public class ExitGuideOverlayService extends Service {
         return START_STICKY;
       }
       Log.i("ExitGuideOverlay", "stopping overlay by explicit request");
+      serviceRunning = false;
       navigationActive = false;
       awaitingUserStart = false;
+      runtimeState = STATE_IDLE;
       savePrefs();
       removeBubble();
       stopForeground(true);
@@ -750,6 +783,7 @@ public class ExitGuideOverlayService extends Service {
       startNonce = "";
       navigationActive = false;
       awaitingUserStart = true;
+      runtimeState = STATE_WAITING_FOR_TARGET_APP;
       savePrefs();
     }
     showBubble();
@@ -771,6 +805,7 @@ public class ExitGuideOverlayService extends Service {
 
   @Override
   public void onDestroy() {
+    serviceRunning = false;
     removeBubble();
     try {
       unregisterReceiver(guidanceReceiver);
@@ -855,6 +890,7 @@ public class ExitGuideOverlayService extends Service {
     }
     awaitingUserStart = false;
     navigationActive = true;
+    runtimeState = STATE_OBSERVING;
     startNonce = Long.toString(System.currentTimeMillis());
     savePrefs();
     removeReadyMessage();
@@ -873,6 +909,9 @@ public class ExitGuideOverlayService extends Service {
     startNonce = "";
     savePrefs();
     boolean destinationReached = FINISH_REASON_DESTINATION_REACHED.equals(finishReason);
+    runtimeState = destinationReached
+      ? STATE_WAITING_FOR_USER_FINAL_ACTION
+      : STATE_FINISHED;
     String normalizedReason = destinationReached
       ? FINISH_REASON_DESTINATION_REACHED
       : FINISH_REASON_STOPPED_NOT_FOUND;
@@ -1138,6 +1177,10 @@ public class ExitGuideOverlayService extends Service {
     startNonce = prefs.getString(PREF_START_NONCE, "");
     navigationActive = prefs.getBoolean(PREF_EXPLORATION_ACTIVE, false);
     awaitingUserStart = !navigationActive;
+    runtimeState = prefs.getString(
+      PREF_RUNTIME_STATE,
+      navigationActive ? STATE_OBSERVING : STATE_IDLE
+    );
     providerId = prefs.getString(PREF_PROVIDER_ID, "server");
     providerApiKey = prefs.getString(PREF_PROVIDER_API_KEY, "");
     providerModel = prefs.getString(PREF_PROVIDER_MODEL, "");
@@ -1153,6 +1196,7 @@ public class ExitGuideOverlayService extends Service {
       .putString(PREF_SESSION_ID, navigationSessionId)
       .putString(PREF_START_NONCE, startNonce)
       .putBoolean(PREF_EXPLORATION_ACTIVE, navigationActive)
+      .putString(PREF_RUNTIME_STATE, runtimeState)
       .putString(PREF_PROVIDER_ID, providerId)
       .putString(PREF_PROVIDER_API_KEY, providerApiKey)
       .putString(PREF_PROVIDER_MODEL, providerModel)
@@ -1427,7 +1471,7 @@ public class ExitGuideOverlayService extends Service {
 function accessibilityServiceConfigSource() {
   return `<?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewScrolled"
+  android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewClicked|typeViewScrolled|typeViewFocused|typeViewAccessibilityFocused|typeViewSelected"
   android:accessibilityFeedbackType="feedbackGeneric"
   android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
   android:canRetrieveWindowContent="true"
@@ -1463,7 +1507,9 @@ import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.ColorSpace;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Path;
 import android.hardware.HardwareBuffer;
@@ -1472,6 +1518,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.Base64;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -1513,7 +1560,9 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private static final String PREF_SESSION_ID = "sessionId";
   private static final String PREF_START_NONCE = "startNonce";
   private static final String PREF_EXPLORATION_ACTIVE = "explorationActive";
+  private static final String PREF_RUNTIME_STATE = "runtimeState";
   private static final long ANALYSIS_DEBOUNCE_MS = 650L;
+  private static final long GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS = 1800L;
   private static final int MAX_NODES = 500;
   private static final float PAGE_SCROLL_EDGE_MARGIN_RATIO = 0.08f;
   private static final float PAGE_SCROLL_MIN_VIEWPORT_RATIO = 0.30f;
@@ -1526,6 +1575,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String lastActivityName = "";
   private String lastEventType = "window_state_changed";
   private String lastTreeSignature = "";
+  private String lastRecordingSemanticSignature = "";
   private String lastScreenFingerprint = "";
   private String lastRecommendationId = "";
   private String lastSelectedElementId = "";
@@ -1536,6 +1586,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String pendingActionKind = "click";
   private long transitionSequenceCounter = 0L;
   private long pendingTransitionSequence = 0L;
+  private long pendingTransitionStartedElapsedMs = 0L;
+  private boolean pendingDirectUserEvidence = false;
   private String activeGoal = "";
   private String activeOperationMode = "explore";
   private String activeStartNonce = "";
@@ -1626,6 +1678,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           : "";
         pendingTransitionOutcome = "navigated";
         pendingActionKind = "click";
+        pendingDirectUserEvidence = true;
         pendingTransitionSequence = ++transitionSequenceCounter;
       }
       Log.i(
@@ -1636,21 +1689,106 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           + " eventTextCount=" + event.getText().size()
           + " hasDescription=" + (event.getContentDescription() != null)
       );
+    } else if ("record".equals(activeOperationMode)
+        && lastScreenFingerprint.length() > 0
+        && pendingPerformedElementId.length() == 0
+        && (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+          || event.getEventType() == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_SELECTED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_FOCUSED
+          || event.getEventType() == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED)) {
+      // Some Compose-based apps (notably Netflix) omit TYPE_VIEW_CLICKED but
+      // include the activated menu's exact semantic label on the ensuing
+      // focus/content/window event. Match that label against the previous
+      // screen's unique clickable index so the human demonstration remains a
+      // real selected candidate rather than an unlabeled screen transition.
+      String performedElementId = elementIdForEvent(event);
+      if (performedElementId.length() == 0
+          && event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+        // Compose can expose only a generic destination such as "bottom
+        // sheet" or "external link". Preserve the demonstrated screen
+        // transition for server-side semantic recovery and human review.
+        performedElementId = "__screen_change__";
+      }
+      if (performedElementId.length() > 0) {
+        pendingFromScreen = lastScreenFingerprint;
+        pendingPerformedElementId = performedElementId;
+        pendingRecommendationId = "";
+        pendingTransitionOutcome = "navigated";
+        pendingActionKind = "click";
+        pendingDirectUserEvidence = false;
+        pendingTransitionSequence = ++transitionSequenceCounter;
+        Log.i(
+          LOG_TAG,
+          "semantic click fallback matched eventType=" + lastEventType
+            + " unresolved=" + "__screen_change__".equals(performedElementId)
+        );
+      }
     } else if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_SCROLLED
-        && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0) {
+        && "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0
+        && pendingPerformedElementId.length() == 0) {
       AccessibilityNodeInfo source = event.getSource();
-      String performedElementId = source == null ? "__scroll__" : stableNodeId(source);
+      boolean recordableScroll = isRecordableGoldScrollEvent(event, source);
+      if (recordableScroll) {
+        String performedElementId = source == null ? "__scroll__" : stableNodeId(source);
+        pendingFromScreen = lastScreenFingerprint;
+        pendingPerformedElementId = performedElementId.length() == 0 ? "__scroll__" : performedElementId;
+        pendingRecommendationId = "";
+        pendingTransitionOutcome = "navigated";
+        pendingActionKind = "scroll_forward";
+        pendingDirectUserEvidence = false;
+        pendingTransitionSequence = ++transitionSequenceCounter;
+      } else {
+        // Baemin and other custom UIs emit TYPE_VIEW_SCROLLED for rotating
+        // banners and bottom-tab navigation even though the user did not
+        // vertically scroll. Do not let those synthetic events become Gold
+        // actions; the following semantic screen change can recover the tap.
+        Log.i(LOG_TAG, "ignored non-vertical or non-container Gold scroll event");
+      }
       if (source != null) {
         source.recycle();
       }
-      pendingFromScreen = lastScreenFingerprint;
-      pendingPerformedElementId = performedElementId.length() == 0 ? "__scroll__" : performedElementId;
-      pendingRecommendationId = "";
-      pendingTransitionOutcome = "navigated";
-      pendingActionKind = "scroll_forward";
-      pendingTransitionSequence = ++transitionSequenceCounter;
     }
-    scheduleAnalysis(false);
+    boolean urgentGoldTransition = "record".equals(activeOperationMode)
+      && pendingPerformedElementId.length() > 0;
+    if (urgentGoldTransition && pendingDirectUserEvidence) {
+      // Gold collection is intentionally paced per transition. The compact
+      // overlay stays on "저장 중" until the clicked screen has reached the
+      // server, then returns to REC so the recorder knows the next click is
+      // safe to perform.
+      sendIndicator(false, "저장 중");
+    }
+    scheduleAnalysis(urgentGoldTransition);
+  }
+
+  private boolean isRecordableGoldScrollEvent(
+    AccessibilityEvent event,
+    AccessibilityNodeInfo source
+  ) {
+    int deltaX = 0;
+    int deltaY = 0;
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      deltaX = event.getScrollDeltaX();
+      deltaY = event.getScrollDeltaY();
+    }
+    if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) >= 8) {
+      return true;
+    }
+    int maxScrollX = Math.max(0, event.getMaxScrollX());
+    int maxScrollY = Math.max(0, event.getMaxScrollY());
+    if (maxScrollY > 0 && maxScrollY >= maxScrollX) {
+      return true;
+    }
+    if (source == null || !source.isScrollable()) {
+      return false;
+    }
+    String className = source.getClassName() == null
+      ? ""
+      : source.getClassName().toString().toLowerCase(Locale.ROOT);
+    boolean verticalContainer = className.contains("scrollview")
+      || className.contains("recyclerview")
+      || className.contains("listview");
+    return verticalContainer && maxScrollX == 0;
   }
 
   @Override
@@ -1726,6 +1864,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       activeStartNonce = startNonce;
       sessionId = requestedSessionId.length() == 0 ? UUID.randomUUID().toString() : requestedSessionId;
       lastTreeSignature = "";
+      lastRecordingSemanticSignature = "";
       lastScreenFingerprint = "";
       lastRecommendationId = "";
       lastSelectedElementId = "";
@@ -1759,6 +1898,19 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         sendIndicator(false, "메뉴 없음");
         return;
       }
+      String preOcrRecordingSignature = recordingSemanticSignature(elements);
+      boolean probableGoldScreenChange = "record".equals(activeOperationMode)
+        && pendingPerformedElementId.length() == 0
+        && lastScreenFingerprint.length() > 0
+        && lastRecordingSemanticSignature.length() > 0
+        && preOcrRecordingSignature.length() > 0
+        && !preOcrRecordingSignature.equals(lastRecordingSemanticSignature);
+      if (probableGoldScreenChange) {
+        // Do not show a saving state yet. Dynamic banners and timers also
+        // change the semantic tree; the server must first confirm that a real
+        // route transition was recovered.
+        Log.i(LOG_TAG, "semantic Gold change awaiting server confirmation");
+      }
       requestInFlight = true;
       inFlightPackageName = packageName;
       captureOcrAndSubmit(apiBaseUrl, packageName, goalText, startNonce, elements);
@@ -1780,7 +1932,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     screenCaptureStartedElapsedMs = SystemClock.elapsedRealtime();
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || ocrRecognizer == null) {
       finishScreenCaptureTiming();
-      submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+      submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements, null);
       return;
     }
     try {
@@ -1801,27 +1953,36 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           }
           if (bitmap == null || ocrRecognizer == null) {
             finishScreenCaptureTiming();
-            submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+            submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements, null);
             return;
           }
           final Bitmap analysisBitmap = bitmap;
           ocrRecognizer.process(InputImage.fromBitmap(analysisBitmap, 0))
             .addOnSuccessListener(result -> {
+              JSONObject visualContext = null;
               try {
                 appendOcrElements(elements, result);
+                visualContext = buildPrivacyMaskedVisualContext(analysisBitmap, elements);
               } catch (Exception error) {
-                Log.w(LOG_TAG, "OCR element merge failed: " + error.getClass().getSimpleName());
+                Log.w(LOG_TAG, "OCR/VLM context preparation failed: " + error.getClass().getSimpleName());
               } finally {
                 analysisBitmap.recycle();
               }
               finishScreenCaptureTiming();
-              submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+              submitObservationElements(
+                apiBaseUrl,
+                packageName,
+                goalText,
+                startNonce,
+                elements,
+                visualContext
+              );
             })
             .addOnFailureListener(error -> {
               analysisBitmap.recycle();
               Log.w(LOG_TAG, "on-device OCR failed: " + error.getClass().getSimpleName());
               finishScreenCaptureTiming();
-              submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+              submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements, null);
             });
         }
 
@@ -1829,13 +1990,13 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         public void onFailure(int errorCode) {
           Log.w(LOG_TAG, "accessibility screenshot failed code=" + errorCode);
           finishScreenCaptureTiming();
-          submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+          submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements, null);
         }
       });
     } catch (Exception error) {
       Log.w(LOG_TAG, "accessibility screenshot unavailable: " + error.getClass().getSimpleName());
       finishScreenCaptureTiming();
-      submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements);
+      submitObservationElements(apiBaseUrl, packageName, goalText, startNonce, elements, null);
     }
   }
 
@@ -1848,12 +2009,108 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     screenCaptureStartedElapsedMs = 0L;
   }
 
+  private JSONObject buildPrivacyMaskedVisualContext(
+    Bitmap source,
+    JSONArray elements
+  ) throws Exception {
+    if (source == null || !needsVisualContext(elements)) {
+      return null;
+    }
+    Bitmap redacted = source.copy(Bitmap.Config.ARGB_8888, true);
+    if (redacted == null) {
+      return null;
+    }
+    Canvas canvas = new Canvas(redacted);
+    Paint mask = new Paint();
+    mask.setColor(0xFF202124);
+    mask.setStyle(Paint.Style.FILL);
+    for (int index = 0; index < elements.length(); index += 1) {
+      JSONObject element = elements.optJSONObject(index);
+      if (element == null) {
+        continue;
+      }
+      String label = clean(
+        element.optString("text", "") + " " + element.optString("content_description", "")
+      );
+      if (!element.optBoolean("password", false) && !isSensitiveVisualLabel(label)) {
+        continue;
+      }
+      Rect bounds = boundsFor(element);
+      if (bounds != null && !bounds.isEmpty()) {
+        canvas.drawRect(bounds, mask);
+      }
+    }
+
+    int targetWidth = Math.min(720, redacted.getWidth());
+    int targetHeight = Math.max(
+      1,
+      Math.round((float) redacted.getHeight() * ((float) targetWidth / (float) redacted.getWidth()))
+    );
+    Bitmap scaled = targetWidth == redacted.getWidth()
+      ? redacted
+      : Bitmap.createScaledBitmap(redacted, targetWidth, targetHeight, true);
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    scaled.compress(Bitmap.CompressFormat.JPEG, 58, output);
+    byte[] encoded = output.toByteArray();
+    output.close();
+
+    JSONObject visual = new JSONObject();
+    visual.put("content_type", "image/jpeg");
+    visual.put("image_base64", Base64.encodeToString(encoded, Base64.NO_WRAP));
+    visual.put("width", scaled.getWidth());
+    visual.put("height", scaled.getHeight());
+    visual.put("redacted", true);
+
+    if (scaled != redacted) {
+      scaled.recycle();
+    }
+    redacted.recycle();
+    return visual;
+  }
+
+  private boolean needsVisualContext(JSONArray elements) {
+    for (int index = 0; index < elements.length(); index += 1) {
+      JSONObject element = elements.optJSONObject(index);
+      if (element == null || !element.optBoolean("visible", false)) {
+        continue;
+      }
+      String role = clean(element.optString("role", "")).toLowerCase(Locale.ROOT);
+      String viewId = clean(element.optString("view_id", "")).toLowerCase(Locale.ROOT);
+      String label = clean(
+        element.optString("text", "") + " " + element.optString("content_description", "")
+      );
+      if (role.contains("webview") || role.contains("canvas") || viewId.contains("webview")) {
+        return true;
+      }
+      if (element.optBoolean("clickable", false) && label.length() == 0 && viewId.length() == 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean isSensitiveVisualLabel(String label) {
+    if (label == null || label.length() == 0) {
+      return false;
+    }
+    String normalized = label.toLowerCase(Locale.ROOT);
+    if (normalized.matches(".*[a-z0-9._%+-]+@[a-z0-9.-]+\\\\.[a-z]{2,}.*")) {
+      return true;
+    }
+    String digits = normalized.replaceAll("[^0-9]", "");
+    return digits.length() >= 10
+      || normalized.contains("bearer ")
+      || normalized.contains("access token")
+      || normalized.contains("session token");
+  }
+
   private void submitObservationElements(
     String apiBaseUrl,
     String packageName,
     String goalText,
     String startNonce,
-    JSONArray elements
+    JSONArray elements,
+    JSONObject visualContext
   ) {
     try {
       if (!isNavigationRequestCurrent(goalText, startNonce)) {
@@ -1862,6 +2119,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       }
       indexClickableElements(elements);
       String treeSignature = sha256(packageName + "|" + goalText + "|" + lastActivityName + "|" + elements.toString());
+      String recordingSemanticSignature = recordingSemanticSignature(elements);
       boolean force = forceNextAnalysis;
       forceNextAnalysis = false;
       if (!force && pendingPerformedElementId.length() == 0
@@ -1878,7 +2136,30 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         finishRequestCycle();
         return;
       }
-      JSONObject request = buildRequest(packageName, goalText, elements);
+      boolean inferredGoldScreenChange = "record".equals(activeOperationMode)
+        && pendingPerformedElementId.length() == 0
+        && lastScreenFingerprint.length() > 0
+        && lastRecordingSemanticSignature.length() > 0
+        && recordingSemanticSignature.length() > 0
+        && !recordingSemanticSignature.equals(lastRecordingSemanticSignature);
+      if (inferredGoldScreenChange) {
+        // Some custom Android views (including Baemin's bottom navigation and
+        // gear button) emit only a changed accessibility tree. Preserve the
+        // preceding screen long enough for the server to match the new screen
+        // title against one unique low-risk candidate. The special marker is
+        // deliberately not accepted as a Gold action when that match fails.
+        pendingFromScreen = lastScreenFingerprint;
+        pendingPerformedElementId = "__semantic_screen_change__";
+        pendingRecommendationId = "";
+        pendingTransitionOutcome = "navigated";
+        pendingActionKind = "click";
+        pendingDirectUserEvidence = false;
+        pendingTransitionSequence = ++transitionSequenceCounter;
+        pendingTransitionStartedElapsedMs = SystemClock.elapsedRealtime();
+        scheduleSemanticGoldTransitionTimeout(pendingTransitionSequence);
+        Log.i(LOG_TAG, "semantic tree change queued for conservative Gold recovery");
+      }
+      JSONObject request = buildRequest(packageName, goalText, elements, visualContext);
       long submittedTransitionSequence = request.has("transition")
         ? pendingTransitionSequence
         : 0L;
@@ -1886,6 +2167,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         apiBaseUrl,
         request,
         treeSignature,
+        recordingSemanticSignature,
         submittedTransitionSequence,
         goalText,
         startNonce
@@ -1903,7 +2185,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       for (Text.Line line : block.getLines()) {
         String label = clean(line.getText());
         Rect bounds = line.getBoundingBox();
-        if (label.length() == 0 || bounds == null || bounds.isEmpty() || isSensitiveOcrRegion(elements, bounds)) {
+        if (label.length() == 0 || isRecorderOverlayOcrLabel(label)
+            || bounds == null || bounds.isEmpty() || isSensitiveOcrRegion(elements, bounds)) {
           continue;
         }
         JSONObject element = new JSONObject();
@@ -1940,6 +2223,16 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       }
     }
     Log.i(LOG_TAG, "on-device OCR merged lines=" + appended);
+  }
+
+  private boolean isRecorderOverlayOcrLabel(String rawLabel) {
+    if (!"record".equals(activeOperationMode)) {
+      return false;
+    }
+    String label = clean(rawLabel).toLowerCase(Locale.ROOT).replaceAll("\\\\s+", "");
+    return "rec".equals(label)
+      || "저장중".equals(label)
+      || "기록준비".equals(label);
   }
 
   private boolean isSensitiveOcrRegion(JSONArray elements, Rect ocrBounds) {
@@ -2042,7 +2335,12 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     return new Rect(bounds.optInt(0), bounds.optInt(1), bounds.optInt(2), bounds.optInt(3));
   }
 
-  private JSONObject buildRequest(String packageName, String goalText, JSONArray elements) throws Exception {
+  private JSONObject buildRequest(
+    String packageName,
+    String goalText,
+    JSONArray elements,
+    JSONObject visualContext
+  ) throws Exception {
     long now = System.currentTimeMillis();
     JSONObject screen = new JSONObject();
     screen.put("activity_name", lastActivityName);
@@ -2060,6 +2358,9 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     request.put("goal_text", goalText);
     request.put("operation_mode", activeOperationMode);
     request.put("screen", screen);
+    if (visualContext != null) {
+      request.put("visual_context", visualContext);
+    }
     long nowElapsed = SystemClock.elapsedRealtime();
     long elapsedSinceAction = lastActionCompletedElapsedMs <= 0L
       ? 0L
@@ -2109,6 +2410,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     final String apiBaseUrl,
     final JSONObject request,
     final String treeSignature,
+    final String submittedRecordingSemanticSignature,
     final long submittedTransitionSequence,
     final String submittedGoal,
     final String submittedStartNonce
@@ -2118,6 +2420,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       public void run() {
         HttpURLConnection connection = null;
         try {
+          setRuntimeState("RETRIEVING");
           URL url = new URL(normalizeBaseUrl(apiBaseUrl) + "/v1/navigation/agent/observe");
           connection = (HttpURLConnection) url.openConnection();
           connection.setConnectTimeout(10000);
@@ -2131,6 +2434,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           output.write(body);
           output.flush();
           output.close();
+          setRuntimeState("PLANNING");
 
           int statusCode = connection.getResponseCode();
           String responseBody = readBody(
@@ -2147,8 +2451,10 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
             return;
           }
           JSONObject response = new JSONObject(responseBody);
+          setRuntimeState(response.optString("runtime_state", "SAFETY_CHECK"));
           clearObservationRequestFailure();
           lastTreeSignature = treeSignature;
+          lastRecordingSemanticSignature = submittedRecordingSemanticSignature;
           lastScreenFingerprint = response.optString("screen_fingerprint", "");
           JSONObject graphUpdate = response.optJSONObject("graph_update");
           JSONObject recommendation = response.optJSONObject("recommendation");
@@ -2164,6 +2470,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
                 ? "none" : recommendation.optString("selected_label", "none"))
               + " transitionRecorded=" + (graphUpdate != null
                 && graphUpdate.optBoolean("transition_recorded", false))
+              + " transitionDiscarded=" + (graphUpdate != null
+                && graphUpdate.optBoolean("transition_discarded", false))
           );
           if (recommendation != null) {
             lastRecommendationId = recommendation.optString("recommendation_id", "");
@@ -2175,8 +2483,28 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
           // A slow model response must never erase a click that happened
           // after this request was submitted. Clear only the exact transition
           // snapshot carried by this response.
-          clearPendingTransition(submittedTransitionSequence);
-          publishOverlayState(response, recommendation);
+          JSONObject submittedTransition = request.optJSONObject("transition");
+          boolean submittedSemanticScreenChange = submittedTransition != null
+            && "__semantic_screen_change__".equals(
+              submittedTransition.optString("performed_element_id", "")
+            );
+          boolean goldTransitionRecorded = graphUpdate != null
+            && graphUpdate.optBoolean("transition_recorded", false);
+          boolean goldTransitionDiscarded = graphUpdate != null
+            && graphUpdate.optBoolean("transition_discarded", false);
+          if (!submittedSemanticScreenChange || goldTransitionRecorded || goldTransitionDiscarded) {
+            clearPendingTransition(submittedTransitionSequence);
+            publishOverlayState(response, recommendation);
+            if ("record".equals(activeOperationMode) && goldTransitionRecorded) {
+              showGoldSavedAcknowledgement();
+            }
+          } else {
+            // A loading/intermediate screen could not yet identify the tapped
+            // control. Keep the marker only for a short, explicit settle
+            // window. It must never survive long enough to consume the user's
+            // next click or bridge across two different destination screens.
+            Log.i(LOG_TAG, "bounded semantic Gold transition awaiting settled destination");
+          }
           if ("destination_reached".equals(response.optString("phase", ""))) {
             postCompletionTiming(
               apiBaseUrl,
@@ -2258,10 +2586,49 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       mainHandler.post(new Runnable() {
         @Override
         public void run() {
-          scheduleAnalysis(false);
+          boolean queuedGoldObservation = "record".equals(activeOperationMode);
+          if (queuedGoldObservation) {
+            sendIndicator(false, "저장 중");
+          }
+          scheduleAnalysis(queuedGoldObservation);
         }
       });
     }
+  }
+
+  private void showGoldSavedAcknowledgement() {
+    sendIndicator(false, "저장됨");
+    mainHandler.postDelayed(new Runnable() {
+      @Override
+      public void run() {
+        if ("record".equals(activeOperationMode)
+            && pendingPerformedElementId.length() == 0) {
+          sendIndicator(true, "");
+        }
+      }
+    }, 650L);
+  }
+
+  private void scheduleSemanticGoldTransitionTimeout(final long transitionSequence) {
+    mainHandler.postDelayed(new Runnable() {
+      @Override
+      public void run() {
+        if (!"record".equals(activeOperationMode)
+            || pendingTransitionSequence != transitionSequence
+            || !"__semantic_screen_change__".equals(pendingPerformedElementId)) {
+          return;
+        }
+        long elapsedMs = pendingTransitionStartedElapsedMs <= 0L
+          ? GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS
+          : SystemClock.elapsedRealtime() - pendingTransitionStartedElapsedMs;
+        if (elapsedMs < GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS) {
+          return;
+        }
+        clearPendingTransition(transitionSequence);
+        sendIndicator(true, "");
+        Log.w(LOG_TAG, "expired unresolved semantic Gold transition before accepting another click");
+      }
+    }, GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS);
   }
 
   private void markObservationRequestFailed(String treeSignature) {
@@ -2322,6 +2689,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     if (automation == null || !automation.optBoolean("safe_to_execute", false)) {
       return;
     }
+    setRuntimeState("SAFETY_CHECK");
     String action = automation.optString("action", "none");
     if ("none".equals(action) && "exploring".equals(phase)) {
       // The API uses a safe no-op only for a bounded re-observation of a
@@ -2357,6 +2725,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       pendingTransitionOutcome = "navigated";
       pendingTransitionSequence = ++transitionSequenceCounter;
       long actionStartedElapsedMs = SystemClock.elapsedRealtime();
+      setRuntimeState("EXECUTING_SAFE_ACTION");
       boolean clicked = performExplorationClick(elementId);
       lastActionExecutionMs = Math.max(0L, SystemClock.elapsedRealtime() - actionStartedElapsedMs);
       lastActionCompletedElapsedMs = SystemClock.elapsedRealtime();
@@ -2373,6 +2742,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       String elementId = automation.optString("selected_element_id", "");
       Log.i(LOG_TAG, "automatic exploration scroll element=" + (elementId.length() > 0));
       long actionStartedElapsedMs = SystemClock.elapsedRealtime();
+      setRuntimeState("EXECUTING_SAFE_ACTION");
       boolean scrolled = performExplorationScroll(elementId);
       lastActionExecutionMs = Math.max(0L, SystemClock.elapsedRealtime() - actionStartedElapsedMs);
       lastActionCompletedElapsedMs = SystemClock.elapsedRealtime();
@@ -2384,6 +2754,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
         && ("exploring".equals(phase) || "returning_to_start".equals(phase))) {
       Log.i(LOG_TAG, "automatic exploration back phase=" + phase);
       long actionStartedElapsedMs = SystemClock.elapsedRealtime();
+      setRuntimeState("EXECUTING_SAFE_ACTION");
       boolean backed = performGlobalAction(GLOBAL_ACTION_BACK);
       lastActionExecutionMs = Math.max(0L, SystemClock.elapsedRealtime() - actionStartedElapsedMs);
       lastActionCompletedElapsedMs = SystemClock.elapsedRealtime();
@@ -2595,10 +2966,12 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private void publishOverlayState(JSONObject response, JSONObject recommendation) {
     String phase = response.optString("phase", "guide");
     if ("recording".equals(phase)) {
+      setRuntimeState("OBSERVING");
       sendIndicator(true, "");
       return;
     }
     if ("destination_reached".equals(phase)) {
+      setRuntimeState("WAITING_FOR_USER_FINAL_ACTION");
       String label = recommendation == null ? "" : recommendation.optString("selected_label", "").trim();
       sendIndicator(
         false,
@@ -2609,6 +2982,7 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       return;
     }
     if ("stopped".equals(phase)) {
+      setRuntimeState("FINISHED");
       sendIndicator(
         false,
         "못 찾음",
@@ -2629,6 +3003,18 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       }
     }
     sendIndicator(false, "완료");
+  }
+
+  private void setRuntimeState(String state) {
+    String normalized = clean(state);
+    if (normalized.length() == 0) {
+      return;
+    }
+    getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+      .edit()
+      .putString(PREF_RUNTIME_STATE, normalized)
+      .apply();
+    Log.i(LOG_TAG, "navigation runtime state=" + normalized);
   }
 
   private void appendNode(
@@ -2739,6 +3125,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     if (className.contains("radiobutton")) return "radio";
     if (className.contains("edittext")) return "input";
     if (className.contains("recyclerview") || className.contains("listview")) return "list";
+    if (className.contains("webview")) return "webview";
+    if (className.contains("canvas")) return "canvas";
     if (className.contains("image")) return "image";
     if (node.isClickable()) return "button";
     return "text";
@@ -2754,6 +3142,42 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       if (description.length() > 0) return description;
     }
     return lastActivityName;
+  }
+
+  private String recordingSemanticSignature(JSONArray elements) throws Exception {
+    JSONArray semantic = new JSONArray();
+    for (int index = 0; index < elements.length(); index += 1) {
+      JSONObject item = elements.optJSONObject(index);
+      if (item == null || item.optBoolean("password", false)
+          || "exitguide:ocr".equals(item.optString("view_id", ""))) {
+        continue;
+      }
+      JSONObject feature = new JSONObject();
+      feature.put("role", item.optString("role", "text"));
+      feature.put("clickable", item.optBoolean("clickable", false));
+      feature.put("scrollable", item.optBoolean("scrollable", false));
+      feature.put("checkable", item.optBoolean("checkable", false));
+      String label = clean(item.optString("text", ""));
+      if (label.length() == 0) {
+        label = clean(item.optString("content_description", ""));
+      }
+      label = label.toLowerCase(Locale.ROOT)
+        .replaceAll("\\\\d+", "")
+        .replaceAll("\\\\s+", " ")
+        .trim();
+      if (label.length() > 0) {
+        feature.put("label", label);
+      } else {
+        String viewId = clean(item.optString("view_id", ""))
+          .toLowerCase(Locale.ROOT)
+          .replaceAll("\\\\d+", "");
+        if (viewId.length() > 0) {
+          feature.put("view_id", viewId);
+        }
+      }
+      semantic.put(feature);
+    }
+    return semantic.length() == 0 ? "" : sha256(semantic.toString());
   }
 
   private void indexClickableElements(JSONArray elements) {
@@ -2838,9 +3262,11 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
 
   private String elementIdForEvent(AccessibilityEvent event) {
     if (event.getContentDescription() != null) {
-      String match = lastClickableElementIds.get(
-        "description|" + clean(event.getContentDescription().toString()).toLowerCase(Locale.ROOT)
-      );
+      String key = clean(event.getContentDescription().toString()).toLowerCase(Locale.ROOT);
+      String match = lastClickableElementIds.get("description|" + key);
+      if (match == null) {
+        match = lastClickableElementIds.get("text|" + key);
+      }
       if (match != null) {
         return match;
       }
@@ -2849,9 +3275,11 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
       if (text == null) {
         continue;
       }
-      String match = lastClickableElementIds.get(
-        "text|" + clean(text.toString()).toLowerCase(Locale.ROOT)
-      );
+      String key = clean(text.toString()).toLowerCase(Locale.ROOT);
+      String match = lastClickableElementIds.get("text|" + key);
+      if (match == null) {
+        match = lastClickableElementIds.get("description|" + key);
+      }
       if (match != null) {
         return match;
       }
@@ -2875,6 +3303,8 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
     pendingTransitionOutcome = "navigated";
     pendingActionKind = "click";
     pendingTransitionSequence = 0L;
+    pendingTransitionStartedElapsedMs = 0L;
+    pendingDirectUserEvidence = false;
   }
 
   private void clearPendingTransition(long submittedTransitionSequence) {
@@ -2887,6 +3317,9 @@ public class ExitGuideAccessibilityService extends AccessibilityService {
   private String eventTypeName(int eventType) {
     if (eventType == AccessibilityEvent.TYPE_VIEW_CLICKED) return "view_clicked";
     if (eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) return "view_scrolled";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_FOCUSED) return "view_focused";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUSED) return "view_accessibility_focused";
+    if (eventType == AccessibilityEvent.TYPE_VIEW_SELECTED) return "view_selected";
     if (eventType == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return "window_content_changed";
     return "window_state_changed";
   }

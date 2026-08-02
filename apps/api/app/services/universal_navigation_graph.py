@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ from app.schemas import (
     UniversalNavigationGraphTransition,
     UniversalNavigationGraphUpdate,
     UniversalNavigationDiscoveredRoute,
+    UniversalNavigationElement,
     UniversalNavigationObserveRequest,
     UniversalNavigationRouteStep,
     UniversalNavigationScreen,
@@ -31,7 +33,17 @@ EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNO
 PHONE_PATTERN = re.compile(r"\b(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}\b")
 LONG_NUMBER_PATTERN = re.compile(r"\b\d{5,}\b")
 TOKEN_PATTERN = re.compile(r"\b(?:bearer|token|session|cookie)[=: ]+[A-Za-z0-9._~+/=-]{8,}\b", re.IGNORECASE)
-SERVING_ROUTE_STATUSES = frozenset({"verified_candidate", "approved"})
+ROUTE_LIFECYCLE_PRIORITIES = {
+    "shadow": 0,
+    "verified_candidate": 1,
+    "verified": 2,
+    "trusted": 3,
+    # Read-compatible legacy value. Schema migration rewrites it to trusted.
+    "approved": 3,
+}
+SERVING_ROUTE_STATUSES = frozenset(
+    {"verified_candidate", "verified", "trusted", "approved"}
+)
 
 
 @dataclass(frozen=True)
@@ -291,6 +303,9 @@ class UniversalNavigationGraphRepository:
             "captured_at": request.screen.captured_at,
             "elements": json.loads(_screen_structure_json(request.screen)),
         }
+        gold_transition_recorded = False
+        gold_transition_discarded = False
+        skip_new_gold_step = False
         with self._connection() as connection:
             existing = connection.execute(
                 "SELECT status FROM navigation_gold_recordings WHERE recording_id = ?",
@@ -353,6 +368,37 @@ class UniversalNavigationGraphRepository:
                         ):
                             selected = candidate
                             break
+                    recorded_action = transition.action_kind
+                    selected_role = str((selected or {}).get("role", ""))
+                    screen_change_distinct = _gold_screen_change_is_distinct(
+                        prior["screen_context_json"],
+                        request.screen,
+                    )
+                    should_infer_click = transition.action_kind in {"click", "scroll_forward"} and (
+                        not sanitize_text(str((selected or {}).get("label", "")))
+                        or (
+                            transition.action_kind == "scroll_forward"
+                            and selected_role not in {"list", "scroll", "scrollview"}
+                        )
+                    ) and not (
+                        transition.action_kind == "scroll_forward"
+                        and selected_role in {"button", "image", "link"}
+                        and isinstance(stored_candidates, list)
+                        and len(stored_candidates) >= 3
+                        and not screen_change_distinct
+                    ) and not (
+                        transition.performed_element_id == "__semantic_screen_change__"
+                        and not screen_change_distinct
+                    )
+                    if should_infer_click:
+                        inferred_row = _infer_gold_row_click(
+                            stored_candidates,
+                            request.screen.elements,
+                            target_function=target_function,
+                        )
+                        if inferred_row is not None:
+                            selected = inferred_row
+                            recorded_action = "click"
                     if selected is None and transition.action_kind == "click":
                         action = connection.execute(
                             """
@@ -367,27 +413,136 @@ class UniversalNavigationGraphRepository:
                         ).fetchone()
                         if action is not None:
                             selected = dict(action)
-                    connection.execute(
-                        """
-                        UPDATE navigation_gold_steps SET
-                          selected_element_id = ?, selected_element_key = ?,
-                          selected_label = ?, selected_action = ?,
-                          selected_risk_level = ?, outcome = ?,
-                          next_screen_fingerprint = ?, updated_at = ?
-                        WHERE step_id = ?
-                        """,
-                        (
-                            transition.performed_element_id,
-                            str((selected or {}).get("element_key", "")),
-                            sanitize_text(str((selected or {}).get("label", ""))),
-                            transition.action_kind,
-                            str((selected or {}).get("risk_level", "low")),
-                            transition.outcome,
-                            observation.screen_fingerprint,
-                            now,
-                            prior["step_id"],
-                        ),
+                    # A semantic tree-change marker is generated before the
+                    # destination has settled. It is evidence that a user
+                    # action probably occurred, not itself a selected control.
+                    # Persist it only when the new screen identifies exactly
+                    # one low-risk candidate from the preceding screen.
+                    unresolved_semantic_change = (
+                        transition.performed_element_id == "__semantic_screen_change__"
+                        and selected is None
                     )
+                    spurious_control_scroll = (
+                        transition.action_kind == "scroll_forward"
+                        and recorded_action == "scroll_forward"
+                        and not screen_change_distinct
+                    )
+                    if spurious_control_scroll:
+                        # Rotating promotions and custom bottom tabs can emit a
+                        # scroll event from a clickable child.  Coalesce the
+                        # refreshed screen instead of teaching Gold that the
+                        # user scrolled or selected an advertisement.
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_steps SET
+                              screen_fingerprint = ?, screen_context_json = ?,
+                              candidates_json = ?, updated_at = ?
+                            WHERE step_id = ?
+                            """,
+                            (
+                                observation.screen_fingerprint,
+                                json.dumps(screen_context, ensure_ascii=False, separators=(",", ":")),
+                                json.dumps(candidate_payload, ensure_ascii=False, separators=(",", ":")),
+                                now,
+                                prior["step_id"],
+                            ),
+                        )
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_recordings
+                            SET start_screen_fingerprint = ?, updated_at = ?
+                            WHERE recording_id = ? AND start_screen_fingerprint = ?
+                            """,
+                            (
+                                observation.screen_fingerprint,
+                                now,
+                                request.session_id,
+                                transition.from_screen_fingerprint,
+                            ),
+                        )
+                        gold_transition_discarded = True
+                        skip_new_gold_step = True
+                    elif unresolved_semantic_change:
+                        # A loading/intermediate destination is resubmitted with
+                        # the same marker after settling. Do not create a fake
+                        # route step while the selected control is unresolved.
+                        skip_new_gold_step = True
+                    else:
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_steps SET
+                              selected_element_id = ?, selected_element_key = ?,
+                              selected_label = ?, selected_action = ?,
+                              selected_risk_level = ?, outcome = ?,
+                              next_screen_fingerprint = ?, updated_at = ?
+                            WHERE step_id = ?
+                            """,
+                            (
+                                str((selected or {}).get("element_id", transition.performed_element_id)),
+                                str((selected or {}).get("element_key", "")),
+                                sanitize_text(str((selected or {}).get("label", ""))),
+                                recorded_action,
+                                str((selected or {}).get("risk_level", "low")),
+                                transition.outcome,
+                                observation.screen_fingerprint,
+                                now,
+                                prior["step_id"],
+                            ),
+                        )
+                        gold_transition_recorded = True
+
+            if transition is None:
+                # Last-resort recovery for custom views that emit neither a
+                # click nor a usable focus event. Only a structurally different
+                # destination whose title matches one unique low-risk candidate
+                # may label the preceding step. Dynamic timers/carousels remain
+                # ordinary unselected observations.
+                prior = connection.execute(
+                    """
+                    SELECT * FROM navigation_gold_steps
+                    WHERE recording_id = ? AND selected_action IS NULL
+                    ORDER BY ordinal DESC LIMIT 1
+                    """,
+                    (request.session_id,),
+                ).fetchone()
+                if (
+                    prior is not None
+                    and str(prior["screen_fingerprint"]) != observation.screen_fingerprint
+                    and _gold_screen_change_is_distinct(
+                        prior["screen_context_json"],
+                        request.screen,
+                    )
+                ):
+                    try:
+                        stored_candidates = json.loads(str(prior["candidates_json"] or "[]"))
+                    except json.JSONDecodeError:
+                        stored_candidates = []
+                    inferred = _infer_gold_row_click(
+                        stored_candidates,
+                        request.screen.elements,
+                        target_function=target_function,
+                    )
+                    if inferred is not None:
+                        connection.execute(
+                            """
+                            UPDATE navigation_gold_steps SET
+                              selected_element_id = ?, selected_element_key = ?,
+                              selected_label = ?, selected_action = 'click',
+                              selected_risk_level = ?, outcome = 'navigated',
+                              next_screen_fingerprint = ?, updated_at = ?
+                            WHERE step_id = ?
+                            """,
+                            (
+                                str(inferred.get("element_id", "")),
+                                str(inferred.get("element_key", "")),
+                                sanitize_text(str(inferred.get("label", ""))),
+                                str(inferred.get("risk_level", "low")),
+                                observation.screen_fingerprint,
+                                now,
+                                prior["step_id"],
+                            ),
+                        )
+                        gold_transition_recorded = True
 
             latest = connection.execute(
                 """
@@ -403,7 +558,9 @@ class UniversalNavigationGraphRepository:
                 and latest["selected_action"] is None
                 and transition is None
             )
-            if duplicate_unselected_screen:
+            if skip_new_gold_step:
+                pass
+            elif duplicate_unselected_screen:
                 connection.execute(
                     """
                     UPDATE navigation_gold_steps SET
@@ -445,7 +602,10 @@ class UniversalNavigationGraphRepository:
                     ),
                 )
             connection.commit()
-        return self.gold_recording(request.session_id)
+        result = self.gold_recording(request.session_id)
+        result["transition_recorded"] = gold_transition_recorded
+        result["transition_discarded"] = gold_transition_discarded
+        return result
 
     def complete_gold_recording(
         self,
@@ -649,6 +809,212 @@ class UniversalNavigationGraphRepository:
                 ),
             )
             connection.commit()
+
+    def record_retrieval_trace(
+        self,
+        *,
+        request_id: str,
+        session_id: str,
+        screen_fingerprint: str,
+        goal_text: str,
+        target_function: str,
+        operation_mode: str,
+        candidates: Iterable[UniversalNavigationCandidate],
+        evidence_hints: Iterable[Mapping[str, object]],
+        android_control_examples: Iterable[object],
+        planner_model: str,
+    ) -> str:
+        """Persist the exact evidence boundary presented to one planner call.
+
+        The trace contains only sanitized structured metadata. In particular,
+        screenshots, OCR bitmaps, credentials, and arbitrary binary payloads
+        are never stored. This makes AndroidControl/Gold/graph/VLM retrieval
+        auditable without turning runtime telemetry into a privacy archive.
+        """
+
+        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        candidate_payload = [
+            {
+                "candidate_id": sanitize_text(candidate.element_id),
+                "element_key": sanitize_text(candidate.element_key),
+                "label": sanitize_text(candidate.label),
+                "role": sanitize_text(candidate.role),
+                "risk_level": sanitize_text(candidate.risk_level),
+                "risk_reason": sanitize_text(candidate.risk_reason or ""),
+            }
+            for candidate in candidates
+        ]
+        hint_payload = [_sanitize_trace_value(item) for item in evidence_hints]
+        android_payload = [
+            _sanitize_trace_value(
+                item.prompt_payload() if hasattr(item, "prompt_payload") else item
+            )
+            for item in android_control_examples
+        ]
+        evidence_payload = {
+            "hints": hint_payload,
+            "android_control": android_payload,
+        }
+        sources = sorted(
+            {
+                sanitize_text(str(item.get("source", "function_graph")))
+                for item in hint_payload
+                if isinstance(item, Mapping)
+            }
+            | ({"android_control"} if android_payload else set())
+        )
+        candidate_json = _trace_json(candidate_payload)
+        evidence_json = _trace_json(evidence_payload)
+        sources_json = _trace_json(sources)
+        digest_payload = "|".join(
+            (
+                sanitize_text(goal_text),
+                sanitize_text(target_function),
+                candidate_json,
+                evidence_json,
+            )
+        )
+        planner_input_sha256 = hashlib.sha256(digest_payload.encode("utf-8")).hexdigest()
+        retrieval_id = "nrt_" + hashlib.sha256(
+            f"{request_id}|{session_id}|{screen_fingerprint}|{now}".encode("utf-8")
+        ).hexdigest()[:24]
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO navigation_retrieval_events (
+                  retrieval_id, request_id, session_id, screen_fingerprint,
+                  goal_text, target_function, operation_mode, candidate_json,
+                  evidence_sources_json, evidence_json, planner_input_sha256,
+                  planner_model, planner_command, selected_element_id,
+                  confidence, risk_level, outcome, recommendation_id,
+                  created_at, completed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', 0.0, '',
+                          'pending', '', ?, NULL)
+                """,
+                (
+                    retrieval_id,
+                    sanitize_text(request_id),
+                    sanitize_text(session_id),
+                    sanitize_text(screen_fingerprint),
+                    sanitize_text(goal_text),
+                    sanitize_text(target_function),
+                    sanitize_text(operation_mode),
+                    candidate_json,
+                    sources_json,
+                    evidence_json,
+                    planner_input_sha256,
+                    sanitize_text(planner_model),
+                    now,
+                ),
+            )
+            connection.commit()
+        return retrieval_id
+
+    def finalize_retrieval_trace(
+        self,
+        retrieval_id: str,
+        *,
+        planner_command: str,
+        selected_element_id: str | None,
+        confidence: float,
+        risk_level: str,
+        outcome: str,
+        recommendation_id: str | None = None,
+    ) -> None:
+        """Attach the validated Hermes decision to its retrieval trace."""
+
+        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self._connection() as connection:
+            result = connection.execute(
+                """
+                UPDATE navigation_retrieval_events SET
+                  planner_command = ?, selected_element_id = ?, confidence = ?,
+                  risk_level = ?, outcome = ?, recommendation_id = ?,
+                  completed_at = ?
+                WHERE retrieval_id = ?
+                """,
+                (
+                    sanitize_text(planner_command),
+                    sanitize_text(selected_element_id or ""),
+                    max(0.0, min(1.0, float(confidence))),
+                    sanitize_text(risk_level),
+                    sanitize_text(outcome),
+                    sanitize_text(recommendation_id or ""),
+                    now,
+                    retrieval_id,
+                ),
+            )
+            if result.rowcount != 1:
+                raise KeyError(retrieval_id)
+            connection.commit()
+
+    def record_retrieval_execution(
+        self,
+        retrieval_id: str,
+        *,
+        safety_action: str,
+        safety_allowed: bool,
+        outcome: str,
+        recommendation_id: str | None,
+    ) -> None:
+        """Record the Python safety controller's disposition of a model plan."""
+
+        now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        with self._connection() as connection:
+            result = connection.execute(
+                """
+                UPDATE navigation_retrieval_events SET
+                  safety_action = ?, safety_allowed = ?, outcome = ?,
+                  recommendation_id = ?, completed_at = ?
+                WHERE retrieval_id = ?
+                """,
+                (
+                    sanitize_text(safety_action),
+                    1 if safety_allowed else 0,
+                    sanitize_text(outcome),
+                    sanitize_text(recommendation_id or ""),
+                    now,
+                    retrieval_id,
+                ),
+            )
+            if result.rowcount != 1:
+                raise KeyError(retrieval_id)
+            connection.commit()
+
+    def retrieval_trace(self, retrieval_id: str) -> dict[str, object]:
+        """Return a decoded trace for tests, audit tooling, and evaluation."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM navigation_retrieval_events WHERE retrieval_id = ?",
+                (retrieval_id,),
+            ).fetchone()
+        if row is None:
+            raise KeyError(retrieval_id)
+        return {
+            "retrieval_id": str(row["retrieval_id"]),
+            "request_id": str(row["request_id"]),
+            "session_id": str(row["session_id"]),
+            "screen_fingerprint": str(row["screen_fingerprint"]),
+            "goal_text": str(row["goal_text"]),
+            "target_function": str(row["target_function"]),
+            "operation_mode": str(row["operation_mode"]),
+            "candidates": json.loads(str(row["candidate_json"])),
+            "evidence_sources": json.loads(str(row["evidence_sources_json"])),
+            "evidence": json.loads(str(row["evidence_json"])),
+            "planner_input_sha256": str(row["planner_input_sha256"]),
+            "planner_model": str(row["planner_model"]),
+            "planner_command": str(row["planner_command"]),
+            "selected_element_id": str(row["selected_element_id"]),
+            "confidence": float(row["confidence"]),
+            "risk_level": str(row["risk_level"]),
+            "outcome": str(row["outcome"]),
+            "safety_action": str(row["safety_action"]),
+            "safety_allowed": bool(row["safety_allowed"]),
+            "recommendation_id": str(row["recommendation_id"]),
+            "created_at": str(row["created_at"]),
+            "completed_at": row["completed_at"],
+        }
 
     def mark_goal_completed(self, session_id: str, goal_text: str) -> None:
         goal_key = fingerprint_goal(goal_text)
@@ -1218,12 +1584,15 @@ class UniversalNavigationGraphRepository:
         return None if row is None else _stored_route(row)
 
     def approve_route(self, route_id: str) -> StoredRoute:
-        """Explicitly approve an eligible shadow route after lifecycle review.
+        """Legacy compatibility alias for the final ``trusted`` promotion.
 
-        Performance validation alone never calls this method.  Keeping this as
-        a separate graph action prevents benchmark or human-gold measurements
-        from silently promoting newly discovered routes into the serving set.
+        Trust still requires the full clean-evidence gate.  The old
+        ``approved`` lifecycle name is never written by new code.
         """
+        return self.trust_route(route_id)
+
+    def trust_route(self, route_id: str) -> StoredRoute:
+        """Promote a repeatedly validated route to trusted evidence."""
         now = _utc_now()
         with self._connection() as connection:
             row = connection.execute(
@@ -1243,25 +1612,26 @@ class UniversalNavigationGraphRepository:
                 raise ValueError(f"Unknown universal navigation route: {route_id}")
             if not str(row["app_version"] or "").strip():
                 raise ValueError("Approved route requires a non-empty app version")
-            already_approved = str(row["status"]) == "approved"
-            if not already_approved and str(row["status"]) not in {
+            already_trusted = str(row["status"]) in {"trusted", "approved"}
+            if not already_trusted and str(row["status"]) not in {
                 "shadow",
                 "verified_candidate",
+                "verified",
             }:
                 raise ValueError(
-                    "Only a shadow or verified candidate route can be explicitly approved"
+                    "Only a shadow or verified route can become trusted"
                 )
-            if not already_approved and (
+            if not already_trusted and (
                 row["eligible"] is None
                 or not bool(row["eligible"])
                 or bool(row["under_sampled"])
                 or int(row["trusted_sample_count"] or 0) < self.performance.minimum_samples
             ):
-                raise ValueError("Route requires sufficient clean trusted evidence before approval")
-            if not already_approved:
+                raise ValueError("Route requires sufficient clean trusted evidence before trust")
+            if not already_trusted:
                 connection.execute(
                     """
-                    UPDATE universal_routes SET status = 'approved', provisional = 0,
+                    UPDATE universal_routes SET status = 'trusted', provisional = 0,
                       last_seen_at = ? WHERE route_id = ?
                     """,
                     (now, route_id),
@@ -1270,8 +1640,112 @@ class UniversalNavigationGraphRepository:
                 connection.commit()
         route = self.route(route_id)
         if route is None:
-            raise RuntimeError("Failed to approve universal navigation route")
+            raise RuntimeError("Failed to trust universal navigation route")
         return route
+
+    def verify_route(self, route_id: str) -> StoredRoute:
+        """Promote a route after two independent clean trusted validations."""
+
+        now = _utc_now()
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT route.status, apps.app_version,
+                  performance.trusted_sample_count,
+                  performance.success_count, performance.failure_count,
+                  performance.destination_accuracy, performance.safe_stop_rate,
+                  performance.unsafe_click_count, performance.wrong_click_count
+                FROM universal_routes AS route
+                JOIN universal_apps AS apps ON apps.app_key = route.app_key
+                LEFT JOIN route_performance AS performance
+                  ON performance.route_id = route.route_id
+                WHERE route.route_id = ?
+                """,
+                (route_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Unknown universal navigation route: {route_id}")
+            status = str(row["status"])
+            if not str(row["app_version"] or "").strip():
+                raise ValueError("Verified route requires a non-empty app version")
+            if status in {"verified", "trusted", "approved"}:
+                route = self.route(route_id)
+                if route is None:
+                    raise RuntimeError("Verified route disappeared")
+                return route
+            if status not in {"shadow", "verified_candidate"}:
+                raise ValueError("Only a shadow or verified candidate route can become verified")
+            if (
+                int(row["trusted_sample_count"] or 0) < 2
+                or int(row["success_count"] or 0) < 2
+                or int(row["failure_count"] or 0) != 0
+                or float(row["destination_accuracy"] or 0.0) < 1.0
+                or float(row["safe_stop_rate"] or 0.0) < 1.0
+                or int(row["unsafe_click_count"] or 0) != 0
+                or int(row["wrong_click_count"] or 0) != 0
+            ):
+                raise ValueError(
+                    "Verified route requires two clean trusted destination validations"
+                )
+            connection.execute(
+                """
+                UPDATE universal_routes
+                SET status = 'verified', provisional = 1, last_seen_at = ?
+                WHERE route_id = ?
+                """,
+                (now, route_id),
+            )
+            self._sync_app_function_route(connection, route_id)
+            connection.commit()
+        route = self.route(route_id)
+        if route is None:
+            raise RuntimeError("Failed to verify universal navigation route")
+        return route
+
+    def promote_route_from_evidence(self, route_id: str) -> StoredRoute:
+        """Advance one route to the highest lifecycle justified by evidence.
+
+        Only independently trusted validation rows count. Runtime-inferred
+        success therefore cannot promote itself. This method is safe to call
+        after every controlled validation and never creates Human Gold.
+        """
+
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT route.status, performance.trusted_sample_count,
+                  performance.success_count, performance.failure_count,
+                  performance.destination_accuracy, performance.safe_stop_rate,
+                  performance.unsafe_click_count, performance.wrong_click_count,
+                  performance.eligible, performance.under_sampled
+                FROM universal_routes AS route
+                LEFT JOIN route_performance AS performance
+                  ON performance.route_id = route.route_id
+                WHERE route.route_id = ?
+                """,
+                (route_id,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"Unknown universal navigation route: {route_id}")
+        status = str(row["status"])
+        if status in {"rejected", "stale"}:
+            raise ValueError("Rejected or stale routes cannot be promoted")
+        clean = (
+            int(row["trusted_sample_count"] or 0) > 0
+            and int(row["success_count"] or 0) == int(row["trusted_sample_count"] or 0)
+            and int(row["failure_count"] or 0) == 0
+            and float(row["destination_accuracy"] or 0.0) == 1.0
+            and float(row["safe_stop_rate"] or 0.0) == 1.0
+            and int(row["unsafe_click_count"] or 0) == 0
+            and int(row["wrong_click_count"] or 0) == 0
+        )
+        if not clean:
+            raise ValueError("Route does not have clean trusted promotion evidence")
+        if bool(row["eligible"]) and not bool(row["under_sampled"]):
+            return self.trust_route(route_id)
+        if int(row["trusted_sample_count"] or 0) >= 2:
+            return self.verify_route(route_id)
+        return self.verify_route_candidate(route_id)
 
     def verify_route_candidate(self, route_id: str) -> StoredRoute:
         """Mark one independently validated route as a serving candidate.
@@ -1677,11 +2151,15 @@ class UniversalNavigationGraphRepository:
               route.target_function, route.start_screen_fingerprint,
               route.destination_screen_fingerprint, route.status,
               CASE route.status
-                WHEN 'approved' THEN 2
+                WHEN 'trusted' THEN 3
+                WHEN 'approved' THEN 3
+                WHEN 'verified' THEN 2
                 WHEN 'verified_candidate' THEN 1
                 ELSE 0
               END,
-              CASE WHEN route.status IN ('approved', 'verified_candidate') THEN 1 ELSE 0 END,
+              CASE WHEN route.status IN (
+                'trusted', 'approved', 'verified', 'verified_candidate'
+              ) THEN 1 ELSE 0 END,
               CASE
                 WHEN json_valid(route.steps_json) THEN json_array_length(route.steps_json)
                 ELSE 0
@@ -1728,7 +2206,7 @@ class UniversalNavigationGraphRepository:
             start_screen_fingerprint=screen_fingerprint,
         )
         if not ranked_route_ids:
-            # A user may resume on an approved route's intermediate or
+            # A user may resume on a trusted route's intermediate or
             # destination screen. The broader lookup still returns only
             # eligible trusted routes; it is not the former unranked fallback.
             ranked_route_ids = self.performance.ranked_route_ids(
@@ -1746,14 +2224,16 @@ class UniversalNavigationGraphRepository:
                 JOIN route_performance performance ON performance.route_id = route.route_id
                 WHERE serving.app_key = ? AND serving.target_function = ?
                   AND serving.is_serving = 1
-                  AND route.status = 'verified_candidate' AND route.provisional = 1
+                  AND route.status IN ('verified_candidate', 'verified')
+                  AND route.provisional = 1
                   AND performance.trusted_sample_count >= 1
                   AND performance.success_count >= 1 AND performance.failure_count = 0
                   AND performance.destination_accuracy = 1.0
                   AND performance.safe_stop_rate = 1.0
                   AND performance.unsafe_click_count = 0
                   AND performance.wrong_click_count = 0
-                ORDER BY performance.p90_controllable_time_ms ASC,
+                ORDER BY CASE route.status WHEN 'verified' THEN 0 ELSE 1 END,
+                  performance.p90_controllable_time_ms ASC,
                   performance.p90_time_to_destination_ms ASC, route.last_seen_at DESC,
                   route.route_id
                 """,
@@ -1769,7 +2249,7 @@ class UniversalNavigationGraphRepository:
                 JOIN route_performance performance ON performance.route_id = route.route_id
                 WHERE serving.app_key = ? AND serving.target_function = ?
                   AND serving.is_serving = 1
-                  AND route.status = 'approved' AND route.provisional = 0
+                  AND route.status IN ('trusted', 'approved') AND route.provisional = 0
                   AND performance.eligible = 1 AND performance.under_sampled = 0
                   AND performance.trusted_sample_count >= ?
                   AND route.route_id IN ({placeholders})
@@ -1790,7 +2270,7 @@ class UniversalNavigationGraphRepository:
                 (screen_fingerprint,),
             ).fetchall()
         approved_by_id = {str(row["route_id"]): row for row in approved_rows}
-        # Formally approved routes always outrank provisional serving
+        # Trusted routes always outrank provisional serving
         # candidates. The latter remain an immediate, guarded fallback while
         # additional trusted samples are collected.
         rows = [
@@ -2306,6 +2786,31 @@ class UniversalNavigationGraphRepository:
                     REFERENCES universal_screens(screen_fingerprint) ON DELETE SET NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS navigation_retrieval_events (
+                  retrieval_id TEXT PRIMARY KEY,
+                  request_id TEXT NOT NULL,
+                  session_id TEXT NOT NULL,
+                  screen_fingerprint TEXT NOT NULL,
+                  goal_text TEXT NOT NULL,
+                  target_function TEXT NOT NULL,
+                  operation_mode TEXT NOT NULL,
+                  candidate_json TEXT NOT NULL,
+                  evidence_sources_json TEXT NOT NULL,
+                  evidence_json TEXT NOT NULL,
+                  planner_input_sha256 TEXT NOT NULL,
+                  planner_model TEXT NOT NULL,
+                  planner_command TEXT NOT NULL,
+                  selected_element_id TEXT NOT NULL,
+                  confidence REAL NOT NULL,
+                  risk_level TEXT NOT NULL,
+                  outcome TEXT NOT NULL,
+                  safety_action TEXT NOT NULL DEFAULT '',
+                  safety_allowed INTEGER NOT NULL DEFAULT 0,
+                  recommendation_id TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  completed_at TEXT
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_universal_screens_app
                   ON universal_screens(app_key, last_seen_at);
                 CREATE INDEX IF NOT EXISTS idx_universal_actions_screen
@@ -2334,17 +2839,29 @@ class UniversalNavigationGraphRepository:
                   ON navigation_gold_recordings(status, app_package, target_function, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_navigation_gold_steps
                   ON navigation_gold_steps(recording_id, ordinal);
+                CREATE INDEX IF NOT EXISTS idx_navigation_retrieval_session
+                  ON navigation_retrieval_events(session_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_navigation_retrieval_screen
+                  ON navigation_retrieval_events(screen_fingerprint, target_function, created_at);
                 """
             )
             # Legacy ``active`` routes were runtime-inferred and therefore do
             # not have enough provenance to be served. Migrate them into the
             # non-serving shadow lifecycle until trusted validation promotes
             # them.
+            # ``approved`` was the historical final lifecycle name. Keep
+            # reads compatible but migrate persisted rows to the product
+            # contract's explicit ``trusted`` state.
+            connection.execute(
+                "UPDATE universal_routes SET status = 'trusted', provisional = 0 "
+                "WHERE status = 'approved'"
+            )
             connection.execute(
                 """
                 UPDATE universal_routes SET status = 'shadow', provisional = 1
                 WHERE status = 'active' OR status NOT IN (
-                  'shadow', 'verified_candidate', 'approved', 'rejected', 'stale'
+                  'shadow', 'verified_candidate', 'verified', 'trusted',
+                  'rejected', 'stale'
                 )
                 """
             )
@@ -2365,11 +2882,15 @@ class UniversalNavigationGraphRepository:
                   route.target_function, route.start_screen_fingerprint,
                   route.destination_screen_fingerprint, route.status,
                   CASE route.status
-                    WHEN 'approved' THEN 2
+                    WHEN 'trusted' THEN 3
+                    WHEN 'approved' THEN 3
+                    WHEN 'verified' THEN 2
                     WHEN 'verified_candidate' THEN 1
                     ELSE 0
                   END,
-                  CASE WHEN route.status IN ('approved', 'verified_candidate') THEN 1 ELSE 0 END,
+                  CASE WHEN route.status IN (
+                    'trusted', 'approved', 'verified', 'verified_candidate'
+                  ) THEN 1 ELSE 0 END,
                   CASE
                     WHEN json_valid(route.steps_json) THEN json_array_length(route.steps_json)
                     ELSE 0
@@ -2470,12 +2991,285 @@ def element_key(candidate: UniversalNavigationCandidate) -> str:
 
 
 def sanitize_text(value: str | None) -> str:
-    text = " ".join((value or "").strip().split())
+    # Android and WebView accessibility trees sometimes insert U+FEFF or
+    # other zero-width format controls between every visible character (for
+    # example ``로\ufeff그\ufeff인``). They are not UI meaning and materially
+    # degrade both retrieval and K-EXAONE prompts, so remove Unicode Cf code
+    # points before whitespace normalization and privacy redaction.
+    without_format_controls = "".join(
+        character
+        for character in (value or "")
+        if unicodedata.category(character) != "Cf"
+    )
+    text = " ".join(without_format_controls.strip().split())
     text = EMAIL_PATTERN.sub("[email]", text)
     text = PHONE_PATTERN.sub("[phone]", text)
     text = LONG_NUMBER_PATTERN.sub("[number]", text)
     text = TOKEN_PATTERN.sub("[secret]", text)
     return text[:500]
+
+
+def _sanitize_trace_value(value: object, *, depth: int = 0) -> object:
+    """Bound and sanitize planner evidence before it enters telemetry."""
+
+    if depth >= 7:
+        return "[depth-limited]"
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return sanitize_text(value)
+    if isinstance(value, bytes):
+        return "[binary-omitted]"
+    if isinstance(value, Mapping):
+        sanitized: dict[str, object] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= 100:
+                sanitized["_truncated"] = True
+                break
+            normalized_key = sanitize_text(str(key))[:120]
+            lowered = normalized_key.lower()
+            if any(token in lowered for token in ("image", "screenshot", "base64", "password", "token")):
+                sanitized[normalized_key] = "[omitted]"
+            else:
+                sanitized[normalized_key] = _sanitize_trace_value(item, depth=depth + 1)
+        return sanitized
+    if isinstance(value, Iterable):
+        sanitized_items: list[object] = []
+        for index, item in enumerate(value):
+            if index >= 100:
+                sanitized_items.append("[truncated]")
+                break
+            sanitized_items.append(_sanitize_trace_value(item, depth=depth + 1))
+        return sanitized_items
+    return sanitize_text(str(value))
+
+
+def _trace_json(value: object) -> str:
+    return json.dumps(
+        _sanitize_trace_value(value),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _gold_screen_change_is_distinct(
+    stored_screen_context: object,
+    destination_screen: UniversalNavigationScreen,
+    *,
+    maximum_similarity: float = 0.72,
+) -> bool:
+    """Reject dynamic same-screen refreshes before inferring a missing click."""
+
+    try:
+        context = json.loads(str(stored_screen_context or "{}"))
+    except json.JSONDecodeError:
+        return False
+    prior_elements = context.get("elements", []) if isinstance(context, dict) else []
+    try:
+        destination_elements = json.loads(_screen_structure_json(destination_screen))
+    except json.JSONDecodeError:
+        return False
+    prior_features = _gold_structure_features(prior_elements)
+    destination_features = _gold_structure_features(destination_elements)
+    if len(prior_features) < 3 or len(destination_features) < 3:
+        return False
+    similarity = len(prior_features & destination_features) / max(
+        1,
+        len(prior_features | destination_features),
+    )
+    return similarity < maximum_similarity
+
+
+def _gold_structure_features(raw_elements: object) -> set[str]:
+    if not isinstance(raw_elements, list):
+        return set()
+    features: set[str] = set()
+    for item in raw_elements:
+        if not isinstance(item, dict) or str(item.get("view_id", "")) == "exitguide:ocr":
+            continue
+        role = _semantic_token(item.get("role")) or "unknown"
+        state = "".join(
+            (
+                "c" if bool(item.get("clickable")) else "-",
+                "s" if bool(item.get("scrollable")) else "-",
+            )
+        )
+        # Counts, timers, prices, and rotating promotion numbers are not screen
+        # identity. Removing digits keeps an idle app from inventing Gold clicks.
+        label = re.sub(r"[0-9]+", "", _semantic_token(item.get("label")))
+        view_id = re.sub(r"[0-9]+", "", _semantic_token(item.get("view_id")))
+        features.add(f"shape:{role}:{state}")
+        if label:
+            features.add(f"label:{role}:{state}:{label}")
+        elif view_id:
+            features.add(f"view:{role}:{state}:{view_id}")
+    return features
+
+
+def _infer_gold_row_click(
+    stored_candidates: object,
+    destination_elements: list[UniversalNavigationElement],
+    *,
+    target_function: str = "",
+) -> dict[str, object] | None:
+    """Recover a custom list-row click exposed by Android as a scroll event.
+
+    A few RecyclerView and Compose implementations omit TYPE_VIEW_CLICKED for
+    a tapped row. Recovery is intentionally conservative: the new screen's
+    first semantic title must identify exactly one low-risk clickable
+    candidate on the preceding screen. Ordinary list scrolling has no unique
+    match and is kept as ``scroll_forward``.
+    """
+
+    chrome_labels = {
+        "back",
+        "bottom sheet",
+        "external link",
+        "go back",
+        "navigate up",
+        "뒤로",
+        "뒤로 가기",
+        "위로 이동",
+        "하단 시트",
+        "외부 링크",
+    }
+    destination_titles: list[str] = []
+    overlay_labels = {
+        "rec",
+        "recording",
+        "saving",
+        "기록 준비",
+        "저장 중",
+    }
+    for element in destination_elements:
+        if sanitize_text(element.view_id).casefold() == "exitguide:ocr":
+            continue
+        label = sanitize_text(element.content_description or element.text)
+        if (
+            label
+            and label.casefold() not in chrome_labels
+            and label.casefold() not in overlay_labels
+            and label not in destination_titles
+        ):
+            destination_titles.append(label)
+        if len(destination_titles) >= 160:
+            break
+    if not destination_titles or not isinstance(stored_candidates, list):
+        return None
+
+    scored_matches: list[tuple[int, dict[str, object]]] = []
+    for candidate in stored_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        label = sanitize_text(str(candidate.get("label", "")))
+        label_token = _semantic_token(label)
+        if (
+            not label_token
+            or str(candidate.get("role", "")) not in {"button", "image", "link"}
+            or str(candidate.get("risk_level", "blocked")) != "low"
+        ):
+            continue
+        candidate_core = _gold_navigation_core_token(label)
+        candidate_has_chrome = candidate_core != label_token
+        score = 0
+        for destination_title in destination_titles:
+            destination_token = _semantic_token(destination_title)
+            destination_core = _gold_navigation_core_token(destination_title)
+            if label.casefold() == destination_title.casefold():
+                score += 4
+            elif (
+                candidate_core
+                and candidate_core == destination_core
+                and candidate_has_chrome
+                and destination_core == destination_token
+            ):
+                # A destination often exposes the selected bottom-tab name as
+                # a plain heading while the source calls it "bottom navigation
+                # ... tab". This extra evidence distinguishes the activated
+                # tab from the other persistent tabs still present on screen.
+                score += 6
+            elif candidate_core and candidate_core == destination_core:
+                score += 3
+            elif (
+                len(destination_token) >= 2
+                and (destination_token in label_token or label_token in destination_token)
+            ):
+                score += 1
+        if score > 0:
+            scored_matches.append((score, candidate))
+    accessible_matches = sorted(
+        (
+            (score, candidate)
+            for score, candidate in scored_matches
+            if not str(candidate.get("element_id", "")).startswith("ocr_")
+        ),
+        key=lambda item: item[0],
+        reverse=True,
+    )
+    if accessible_matches:
+        best_score, best_candidate = accessible_matches[0]
+        runner_up_score = accessible_matches[1][0] if len(accessible_matches) > 1 else 0
+        if best_score >= runner_up_score + 2:
+            return best_candidate
+        if len(accessible_matches) == 1:
+            return best_candidate
+    # Destination sheets sometimes describe the operation instead of repeating
+    # the tapped row verbatim (for example, "가입하고 혜택받기" opens a sheet
+    # titled "지금 신규가입 하면"). Fall back only when the requested function,
+    # the settled destination, and exactly one accessible low-risk candidate
+    # all share the same narrow intent term.
+    intent_terms = _gold_target_intent_terms(target_function)
+    destination_blob = " ".join(_semantic_token(title) for title in destination_titles)
+    if not intent_terms or not any(term in destination_blob for term in intent_terms):
+        return None
+    intent_matches: list[dict[str, object]] = []
+    for candidate in stored_candidates:
+        if not isinstance(candidate, dict):
+            continue
+        element_id = str(candidate.get("element_id", ""))
+        label_token = _semantic_token(candidate.get("label", ""))
+        if (
+            not element_id.startswith("ocr_")
+            and any(term in label_token for term in intent_terms)
+            and str(candidate.get("role", "")) in {"button", "image", "link"}
+            and str(candidate.get("risk_level", "blocked")) == "low"
+        ):
+            intent_matches.append(candidate)
+    return intent_matches[0] if len(intent_matches) == 1 else None
+
+
+def _gold_navigation_core_token(value: object) -> str:
+    token = _semantic_token(value)
+    for decoration in (
+        "bottomnavigation",
+        "bottomnav",
+        "하단탭바",
+        "navigation",
+        "button",
+        "메뉴버튼",
+        "탭버튼",
+        "tab",
+        "탭",
+        "버튼",
+    ):
+        token = token.replace(decoration, "")
+    return token
+
+
+def _gold_target_intent_terms(target_function: str) -> tuple[str, ...]:
+    normalized = sanitize_text(target_function).casefold()
+    if normalized == "auth.signup.entry":
+        return ("회원가입", "신규가입", "가입", "signup", "register")
+    if normalized == "account.delete.entry":
+        return ("회원탈퇴", "계정삭제", "탈퇴", "deleteaccount")
+    if normalized == "subscription.cancel.entry":
+        return ("구독해지", "멤버십해지", "해지", "cancel")
+    if normalized == "subscription.change":
+        return ("구독변경", "멤버십변경", "변경", "change")
+    if normalized == "marketing.settings":
+        return ("마케팅알림", "혜택알림", "알림", "notification")
+    return ()
 
 
 def _semantic_token(value: object) -> str:

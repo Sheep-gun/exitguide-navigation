@@ -16,6 +16,13 @@ from app.services.universal_navigation_graph import sanitize_text
 
 
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
+PAGE_INDICATOR_PATTERN = re.compile(
+    r"^(?:page\s*)?\d+(?:\s*/\s*\d+)?\s*(?:페이지|pages?)$",
+    re.IGNORECASE,
+)
+NON_ACTIONABLE_CHROME_LABELS = frozenset(
+    {"<", ">", "‹", "›", "〈", "〉", "top", "appmountpoint"}
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +65,15 @@ class CandidateContext:
             "android_control_support": round(self.demonstration_support, 4),
             "independent_semantic_score": round(self.semantic_score, 4),
         }
+
+
+def is_navigation_candidate_noise(label: str) -> bool:
+    """Reject implementation chrome and carousel metadata as click targets."""
+
+    normalized = sanitize_text(label).casefold()
+    if normalized in NON_ACTIONABLE_CHROME_LABELS:
+        return True
+    return bool(PAGE_INDICATOR_PATTERN.fullmatch(normalized))
 
 
 def infer_goal_plan(

@@ -10,10 +10,16 @@ from app.schemas import UniversalNavigationObserveRequest
 from app.services import universal_navigation_agent as agent_module
 from app.services.android_control_index import AndroidControlIndex, read_normalized_jsonl
 from app.services.universal_navigation_agent import extract_navigation_candidates, observe_universal_navigation
-from app.services.universal_navigation_graph import UniversalNavigationGraphRepository, fingerprint_screen
+from app.services.universal_navigation_graph import (
+    UniversalNavigationGraphRepository,
+    fingerprint_screen,
+    sanitize_text,
+)
 
 
 def main() -> None:
+    assert_unicode_format_controls_are_removed()
+    assert_non_actionable_chrome_is_not_a_navigation_candidate()
     assert_unknown_app_is_guided_without_prebuilt_route()
     assert_subscription_feed_is_not_confused_with_billing()
     assert_native_label_beats_corrupted_ocr_of_same_control()
@@ -33,10 +39,15 @@ def main() -> None:
     assert_risky_action_requires_user_confirmation()
     assert_sensitive_labels_are_redacted_before_storage()
     assert_exaone_uses_hermes_tool_contract()
+    assert_exaone_planner_uses_strict_bounded_hermes_actions()
+    assert_exaone_planner_repairs_one_malformed_hermes_call()
+    assert_planner_accepts_exact_hermes_content_wrapper_only()
+    assert_exaone_must_confirm_terminal_destination()
     assert_exaone_total_deadline_stops_trickle_style_active_call()
     assert_hermes_actual_tool_call_has_priority_and_known_wrappers_are_accepted()
     assert_hermes_rejects_ambiguous_or_malformed_calls_and_strict_types()
     assert_failed_exaone_attempt_records_model_decision_time()
+    assert_exploration_fails_closed_when_exaone_planner_is_unavailable()
     assert_invalid_model_action_falls_back_safely()
     assert_semantically_weaker_model_choice_is_guarded()
     assert_low_confidence_matching_model_choice_uses_independent_score()
@@ -45,6 +56,27 @@ def main() -> None:
     assert_ocr_geometry_does_not_fragment_screen_identity()
     assert_transition_cannot_reuse_another_session_recommendation()
     print("universal navigation agent checks ok")
+
+
+def assert_unicode_format_controls_are_removed() -> None:
+    assert sanitize_text("로\ufeff그\u200b인") == "로그인"
+
+
+def assert_non_actionable_chrome_is_not_a_navigation_candidate() -> None:
+    candidates = extract_navigation_candidates(
+        request(
+            request_id="req_candidate_noise",
+            session_id="session_candidate_noise",
+            elements=[
+                element("page", "4페이지"),
+                element("back-symbol", "<"),
+                element("top-anchor", "TOP"),
+                element("mount", "appMountPoint"),
+                element("settings", "설정"),
+            ],
+        )
+    )
+    assert [candidate.element_id for candidate in candidates] == ["settings"]
 
 
 def assert_visible_ocr_label_overrides_stale_accessibility_description() -> None:
@@ -86,7 +118,7 @@ def assert_profile_action_description_beats_visible_account_name() -> None:
     )
 
     assert candidates[0].element_id == "profile-gateway"
-    assert candidates[0].label.startswith("프\ufeff로\ufeff필")
+    assert candidates[0].label == "프로필을 변경 또는 관리하세요."
 
 
 def assert_native_label_beats_corrupted_ocr_of_same_control() -> None:
@@ -636,6 +668,221 @@ def assert_exaone_uses_hermes_tool_contract() -> None:
         assert selected_enum == ["", "settings", "profile"]
 
 
+def assert_exaone_planner_uses_strict_bounded_hermes_actions() -> None:
+    captured: dict = {}
+    original_post = agent_module.httpx.post
+
+    def fake_post(url, *, headers, json, timeout):
+        captured.update({"payload": json, "timeout": timeout})
+        return FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "plan_navigation_step",
+                                        "arguments": json_module_dumps(
+                                            {
+                                                "target_function": "settings.notifications",
+                                                "command": "click",
+                                                "selected_element_id": "settings",
+                                                "reason": "알림 설정으로 이어지는 저위험 메뉴입니다.",
+                                                "expected_next_screen": "설정 화면",
+                                                "instruction": "설정을 확인합니다.",
+                                                "confidence": 0.91,
+                                            }
+                                        ),
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    agent_module.httpx.post = fake_post
+    try:
+        settings = Settings(
+            navigation_agent_provider="exaone",
+            navigation_agent_timeout_seconds=8.0,
+            exaone_api_key="test-key",
+            exaone_model="test-model",
+            exaone_base_url="https://example.invalid/v1",
+        )
+        payload = request(
+            request_id="req_exaone_planner",
+            session_id="session_exaone_planner",
+            goal_text="마케팅 알림을 끄고 싶어",
+            elements=[element("settings", "설정"), element("feed", "추천 영상")],
+        )
+        candidates = extract_navigation_candidates(payload)
+        result = agent_module.ExaoneNavigationDecisionProvider(settings).plan_exploration_step(
+            goal_text=payload.goal_text,
+            request=payload,
+            candidates=candidates,
+            graph_hints=[
+                {
+                    "source": "current_session_history",
+                    "steps": [{"selected_label": "내 페이지", "outcome": "navigated"}],
+                },
+                {"source": "human_gold", "evidence_only": True},
+            ],
+            demonstrations=[],
+            allow_scroll=True,
+            allow_back=False,
+        )
+    finally:
+        agent_module.httpx.post = original_post
+
+    assert result["command"] == "click"
+    assert result["selected_element_id"] == "settings"
+    tool = captured["payload"]["tools"][0]["function"]
+    assert tool["name"] == "plan_navigation_step"
+    assert tool["parameters"]["properties"]["command"]["enum"] == [
+        "scroll_forward",
+        "click",
+        "stop_for_user",
+        "wait_and_observe",
+    ]
+    assert captured["payload"]["max_tokens"] == 800
+    assert tool["parameters"]["properties"]["reason"]["maxLength"] == 240
+    prompt = json.loads(captured["payload"]["messages"][1]["content"])
+    assert prompt["current_session_history"] == [
+        {"selected_label": "내 페이지", "outcome": "navigated"}
+    ]
+    assert all(
+        item.get("source") != "current_session_history"
+        for item in prompt["human_gold_and_app_graph_evidence"]
+    )
+    assert prompt["human_gold_and_app_graph_evidence"][0]["evidence_only"] is True
+    assert prompt["allowed_commands"] == [
+        "scroll_forward",
+        "click",
+        "stop_for_user",
+        "wait_and_observe",
+    ]
+    invalid = dict(result, command="back", selected_element_id="settings")
+    try:
+        agent_module._validate_planner_arguments(
+            invalid,
+            candidate_ids=[candidate.element_id for candidate in candidates],
+            allowed_commands=["click", "back"],
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("non-click planner action accepted a coordinate candidate")
+
+
+def assert_exaone_planner_repairs_one_malformed_hermes_call() -> None:
+    original_post = agent_module.httpx.post
+    calls: list[dict] = []
+
+    def fake_post(url, *, headers, json, timeout):
+        calls.append({"payload": json, "timeout": timeout})
+        if len(calls) == 1:
+            arguments = '{"target_function":"notification.settings","command":"click"'
+        else:
+            arguments = json_module_dumps(
+                {
+                    "target_function": "notification.settings",
+                    "command": "click",
+                    "selected_element_id": "settings",
+                    "reason": "현재 화면의 설정 관문입니다.",
+                    "expected_next_screen": "설정 화면",
+                    "instruction": "설정을 엽니다.",
+                    "confidence": 0.87,
+                }
+            )
+        return FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "type": "function",
+                                    "function": {
+                                        "name": "plan_navigation_step",
+                                        "arguments": arguments,
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        )
+
+    agent_module.httpx.post = fake_post
+    try:
+        settings = Settings(
+            navigation_agent_provider="exaone",
+            navigation_agent_timeout_seconds=10.0,
+            exaone_api_key="test-key",
+            exaone_model="test-model",
+            exaone_base_url="https://example.invalid/v1",
+        )
+        payload = request(
+            request_id="req_exaone_planner_repair",
+            session_id="session_exaone_planner_repair",
+            goal_text="알림 설정을 열고 싶어",
+            elements=[element("settings", "설정")],
+        )
+        result = agent_module.ExaoneNavigationDecisionProvider(settings).plan_exploration_step(
+            goal_text=payload.goal_text,
+            request=payload,
+            candidates=extract_navigation_candidates(payload),
+            graph_hints=[],
+            demonstrations=[],
+            allow_scroll=False,
+            allow_back=False,
+        )
+    finally:
+        agent_module.httpx.post = original_post
+
+    assert result["selected_element_id"] == "settings"
+    assert len(calls) == 2
+    assert all(call["timeout"] == 5.0 for call in calls)
+    assert len(calls[1]["payload"]["messages"]) == 2
+    assert "schema-repair retry" in calls[1]["payload"]["messages"][0]["content"]
+    assert calls[1]["payload"]["temperature"] == 0.0
+    assert calls[1]["payload"]["max_tokens"] == 1200
+    assert calls[1]["payload"]["tool_choice"]["function"]["name"] == "plan_navigation_step"
+
+
+def assert_planner_accepts_exact_hermes_content_wrapper_only() -> None:
+    arguments = {
+        "target_function": "notification.settings",
+        "command": "click",
+        "selected_element_id": "settings",
+        "reason": "설정 관문",
+        "expected_next_screen": "설정",
+        "instruction": "설정을 엽니다.",
+        "confidence": 0.8,
+    }
+    wrapped = {
+        "name": "plan_navigation_step",
+        "arguments": arguments,
+    }
+    parsed = agent_module._planner_arguments(
+        {"content": "<tool_call>\n" + json_module_dumps(wrapped) + "\n</tool_call>"}
+    )
+    assert parsed == arguments
+    try:
+        agent_module._planner_arguments(
+            {"content": json_module_dumps(wrapped) + "\n" + json_module_dumps(wrapped)}
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("multiple planner pseudo calls were accepted")
+
+
 def assert_exaone_total_deadline_stops_trickle_style_active_call() -> None:
     """A continuously active sync transport must not extend total API time.
 
@@ -854,6 +1101,165 @@ def assert_failed_exaone_attempt_records_model_decision_time() -> None:
         assert response.performance is not None
         assert response.performance.model_decision_ms >= 8.0
         assert any("폴백" in warning for warning in response.warnings)
+
+
+def assert_exploration_fails_closed_when_exaone_planner_is_unavailable() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        repository = repository_at(temporary_directory)
+        original_post = agent_module.httpx.post
+        observed_timeouts: list[float] = []
+
+        def fake_post(url, *, headers, json, timeout):
+            observed_timeouts.append(float(timeout))
+            return FakeResponse({"choices": [{"message": {"content": "not-a-tool-call"}}]})
+
+        agent_module.httpx.post = fake_post
+        try:
+            android_control_path = Path(temporary_directory) / "android-control.sqlite"
+            AndroidControlIndex(android_control_path).build(
+                read_normalized_jsonl(ANDROID_CONTROL_SAMPLE)
+            )
+            settings = Settings(
+                navigation_agent_provider="exaone",
+                navigation_agent_allow_fallback=True,
+                android_control_index_path=str(android_control_path),
+                exaone_api_key="test-key",
+                exaone_model="test-model",
+                navigation_agent_timeout_seconds=35.0,
+            )
+            payload = request(
+                request_id="req_exaone_explore_fail_closed",
+                session_id="session_exaone_explore_fail_closed",
+                elements=[
+                    element("membership", "구매 항목 및 멤버십"),
+                    element("settings", "설정"),
+                ],
+            ).model_copy(update={"operation_mode": "explore"})
+            response = observe_universal_navigation(
+                payload,
+                settings=settings,
+                repository=repository,
+            )
+        finally:
+            agent_module.httpx.post = original_post
+
+        assert response.phase == "stopped", response.model_dump()
+        assert response.runtime_state == "FINISHED"
+        assert response.runtime_state_trace == [
+            "OBSERVING",
+            "RETRIEVING",
+            "PLANNING",
+            "SAFETY_CHECK",
+            "FINISHED",
+        ]
+        assert response.automation.action == "stop", response.model_dump()
+        assert response.automation.safe_to_execute is False, response.model_dump()
+        assert "K-EXAONE" in response.automation.reason, response.model_dump()
+        assert observed_timeouts == [17.5, 17.5], observed_timeouts
+        connection = sqlite3.connect(repository.database_path)
+        connection.row_factory = sqlite3.Row
+        try:
+            clicks = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM universal_exploration_attempts WHERE command = 'click'"
+                ).fetchone()[0]
+            )
+            trace = connection.execute(
+                """
+                SELECT planner_command, candidate_json, evidence_sources_json,
+                       evidence_json, planner_input_sha256, outcome,
+                       safety_action, safety_allowed
+                FROM navigation_retrieval_events
+                WHERE request_id = ?
+                """,
+                (payload.request_id,),
+            ).fetchone()
+        finally:
+            connection.close()
+        assert clicks == 0
+        assert trace is not None
+        assert trace["planner_command"] == "stop_for_user"
+        assert len(json.loads(trace["candidate_json"])) == 2
+        assert "android_control" in json.loads(trace["evidence_sources_json"])
+        assert json.loads(trace["evidence_json"])["android_control"]
+        assert len(trace["planner_input_sha256"]) == 64
+        assert str(trace["outcome"]).startswith(response.status), dict(trace)
+        assert trace["safety_action"] == "stop"
+        assert int(trace["safety_allowed"]) == 0
+
+
+def assert_exaone_must_confirm_terminal_destination() -> None:
+    with TemporaryDirectory() as temporary_directory:
+        repository = repository_at(temporary_directory)
+        original_post = agent_module.httpx.post
+        observed_allowed_commands: list[str] = []
+
+        def fake_post(url, *, headers, json, timeout):
+            schema = json["tools"][0]["function"]["parameters"]
+            observed_allowed_commands.extend(schema["properties"]["command"]["enum"])
+            return FakeResponse(
+                {
+                    "choices": [
+                        {
+                            "message": {
+                                "tool_calls": [
+                                    {
+                                        "type": "function",
+                                        "function": {
+                                            "name": "plan_navigation_step",
+                                            "arguments": json_module_dumps(
+                                                {
+                                                    "target_function": "subscription.cancel.entry",
+                                                    "command": "mark_destination",
+                                                    "selected_element_id": "",
+                                                    "alternative_candidate_ids": [],
+                                                    "reason": "해지 최종 버튼과 화면 문맥이 함께 보입니다.",
+                                                    "expected_next_screen": "사용자 최종 확인",
+                                                    "instruction": "최종 해지는 직접 눌러 주세요.",
+                                                    "confidence": 0.93,
+                                                }
+                                            ),
+                                        },
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            )
+
+        agent_module.httpx.post = fake_post
+        try:
+            settings = Settings(
+                navigation_agent_provider="exaone",
+                android_control_index_path="",
+                exaone_api_key="test-key",
+                exaone_model="test-model",
+            )
+            payload = request(
+                request_id="req_exaone_terminal_confirmation",
+                session_id="session_exaone_terminal_confirmation",
+                elements=[element("cancel-final", "구독 해지")],
+            ).model_copy(update={"operation_mode": "explore"})
+            response = observe_universal_navigation(
+                payload,
+                settings=settings,
+                repository=repository,
+            )
+        finally:
+            agent_module.httpx.post = original_post
+
+        assert "mark_destination" in observed_allowed_commands
+        assert response.phase == "destination_reached", response.model_dump()
+        assert response.runtime_state == "WAITING_FOR_USER_FINAL_ACTION"
+        assert response.runtime_state_trace[-2:] == [
+            "DESTINATION_REACHED",
+            "WAITING_FOR_USER_FINAL_ACTION",
+        ]
+        assert response.automation.action == "stop", response.model_dump()
+        assert response.automation.safe_to_execute is False, response.model_dump()
+        assert response.recommendation is not None
+        assert response.recommendation.selected_element_id == "cancel-final"
 
 
 def assert_invalid_model_action_falls_back_safely() -> None:

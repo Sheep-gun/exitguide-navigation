@@ -86,25 +86,29 @@ The response is the same `FlowAnalysisResponse` shape as `/v1/analyze/flow`.
 
 ### `POST /v1/navigation/agent/observe`
 
-Accepts the current Android AccessibilityService tree without requiring a prebuilt app route. In default `guide` mode the endpoint only returns manual guidance. User-started `explore` mode may return a device-executable click/back command for low-risk graph discovery. A newly discovered `shadow` route is never trusted automatically. An independently reviewed `verified_candidate` may be reused only for the same app/version/locale/target and only for visible, enabled, low-risk, non-checkable intermediate controls. The endpoint invalidates a mismatching candidate within at most two observations and falls back to generic exploration. Terminal or state-changing actions always remain user-owned.
+Accepts the current Android AccessibilityService tree without requiring a prebuilt app route. In default `guide` mode the endpoint only returns manual guidance. User-started `explore` mode may return a device-executable click/back command for low-risk graph discovery. Human Gold and reviewed graph transitions are evidence, not executable routes: the endpoint observes the current screen and asks K-EXAONE for a new Hermes action at every executed step. Python never substitutes a heuristic click when the model fails. Terminal or state-changing actions always remain user-owned.
 
 Request fields:
 
 - `request_id`, `session_id`, `app_package`, `app_version`, `locale`, free-form `goal_text`, and `operation_mode` (`guide` or `explore`)
 - `screen.activity_name`, `screen.window_title`, `screen.event_type`, `screen.captured_at`, and `screen.elements[]`
 - each element can include hierarchy, text/description, Android view ID, role, state, clickability, and bounds
+- optional privacy-masked `visual_context` for ambiguity-only EXAONE 4.5 VLM analysis; raw images are not persisted
 - optional `transition` describing the preceding user or exploration click and its observed outcome; this teaches the graph an edge and records failed automation safely
 
 Response fields:
 
 - `screen_fingerprint`, normalized `goal_interpretation`, `phase`, and `decision_mode` (`exaone`, `graph_cache`, `route_cache`, `function_graph_exploration`, or `deterministic_fallback`)
+- `runtime_state` and `runtime_state_trace`, which expose the canonical `OBSERVING → RETRIEVING → PLANNING → SAFETY_CHECK` sequence and its terminal state
 - sanitized actionable `candidates[]` and one optional `recommendation`
 - `recommendation.selected_element_id`, instruction, reason, expected next screen, confidence, risk, and user-confirmation requirement
 - `automation.action`, `automation.safe_to_execute`, selected element, reason, and current time/action budget. APK execution requires all fields plus its own low-risk guard.
-- optional `discovered_route` with the canonical target function, lifecycle, and ordered route steps; only reviewed `verified_candidate` or fully approved routes can drive guarded intermediate automation
+- optional `discovered_route` with the canonical target function, lifecycle, and observed route steps; these steps become ranked evidence but are never replayed by the default runtime
 - `graph_update` counts plus `transition_recorded`, and non-fatal `warnings[]`
 
-The endpoint stores sanitized structure and transition metadata in local SQLite. Password nodes are excluded and likely email, phone, long-number, session, and token values are redacted before persistence.
+The endpoint stores sanitized structure and transition metadata in local SQLite. Password nodes are excluded and likely email, phone, long-number, session, and token values are redacted before persistence. Retrieval traces store candidate/evidence summaries, model/input hashes, Hermes output and Python safety outcome, not screenshots, authorization headers, or raw provider prompts.
+
+The Android client owns the outer states `IDLE` and `WAITING_FOR_TARGET_APP`. A destination response advances through `DESTINATION_REACHED` to `WAITING_FOR_USER_FINAL_ACTION`; a safe intermediate command becomes `EXECUTING_SAFE_ACTION` and starts a fresh observation after the UI settles. A failed or exhausted search becomes `FINISHED`.
 
 ### `GET /v1/navigation/agent/graph`
 

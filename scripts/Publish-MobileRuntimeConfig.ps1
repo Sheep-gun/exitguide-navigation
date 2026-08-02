@@ -39,7 +39,11 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $RawUrl = "https://gist.githubusercontent.com/Sheep-gun/$GistId/raw/mobile-runtime.json"
-$Published = Invoke-RestMethod -Uri $RawUrl -TimeoutSec 20
+$CacheBuster = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$Published = Invoke-RestMethod `
+  -Uri "$RawUrl`?exitguide_ts=$CacheBuster" `
+  -Headers @{ "Cache-Control" = "no-cache" } `
+  -TimeoutSec 20
 if ($Published.api_base_url -ne $Config.api_base_url -or -not $Published.active) {
   throw "Published runtime configuration does not match the local active API URL."
 }

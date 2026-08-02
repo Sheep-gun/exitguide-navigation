@@ -4,7 +4,7 @@
   "minimum_totals": {
     "function_count": 2866,
     "intent_count": 2660,
-    "alias_count": 53016,
+    "alias_count": 53017,
     "context_count": 109230,
     "intent_pattern_count": 67092,
     "goal_rule_count": 98737,

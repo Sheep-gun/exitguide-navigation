@@ -46,6 +46,13 @@ required = [
 missing = [item for item in required if item not in step_text]
 if missing:
     raise AssertionError(f"workflow is missing required step(s): {', '.join(missing)}")
+
+checkout = next(
+    (step for step in steps if step.get("uses") == "actions/checkout@v4"),
+    None,
+)
+if checkout is None or checkout.get("with", {}).get("lfs") is not True:
+    raise AssertionError("actions/checkout must fetch the Git LFS function catalog")
 '@
 
 $Script | & $Python - $WorkflowPath

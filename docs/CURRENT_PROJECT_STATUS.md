@@ -1,160 +1,153 @@
 # ExitGuide Navigation 현재 프로젝트 현황
 
-기준일: 2026-08-01
+기준일: 2026-08-02
+기준 저장소: `Sheep-gun/exitguide-navigation`, `agent/gold-recorder`
+운영 API: A100 서버의 FastAPI와 공개 HTTPS 터널
 
-이 문서는 현재 개인 Navigation 저장소에 반영된 코드와 운영 서버의 DB 스냅샷을 기준으로, 완료된 기반과 아직 구현해야 하는 목표를 구분한다.
+## 현재 제품 정의
 
-## 현재 방향
-
-초기의 앱별 좌표 경로 또는 텍스트 안내 중심 MVP에서 다음 구조로 발전했다.
+ExitGuide Navigation은 앱별 좌표나 Gold 클릭 배열을 재생하는 매크로가 아니다. 처음 보는 Android 앱에서도 현재 화면을 AccessibilityService·OCR·필요 시 EXAONE 4.5 VLM으로 해석하고, K-EXAONE이 매 화면에서 현재 후보 ID 중 다음 Hermes 행동을 결정하는 목적 기반 Navigation Agent다.
 
 ```text
-사용자 목적
-  → 현재 화면 접근성·OCR·시각 정보 수집
-  → 선택 가능한 후보 구성
-  → Gold·앱 기능 그래프·범용 기능·AndroidControl 검색
-  → K-EXAONE의 의미 기반 다음 행동 선택
-  → 안전 실행기 검사
-  → 저위험 중간 행동 실행
-  → 화면 재관찰과 결과 축적
-  → 최종 상태 변경은 사용자 수행
+목적 입력
+→ 대상 앱 대기
+→ 현재 화면 관찰
+→ Gold·기능 그래프·AndroidControl 검색
+→ K-EXAONE Hermes 계획
+→ Python 안전 검사
+→ 저위험 중간 행동만 실행
+→ 새 화면을 다시 관찰
+→ 최종 목적지에서 자동 종료
+→ 최종 상태 변경은 사용자가 직접 실행
 ```
 
-Gold의 목적은 좌표 매크로 재생이 아니라 K-EXAONE의 후보 선택을 지도하는 정답·검색 데이터다. 동일 앱에서도 현재 화면의 실제 후보 의미가 맞는지 다시 확인하며, UI가 바뀌면 동적 탐색으로 복귀해야 한다.
+운영 상태 머신은 다음 계약을 따른다.
 
-## 완료된 기반
+```text
+IDLE → WAITING_FOR_TARGET_APP → OBSERVING → RETRIEVING → PLANNING
+→ SAFETY_CHECK → EXECUTING_SAFE_ACTION → OBSERVING
+→ DESTINATION_REACHED → WAITING_FOR_USER_FINAL_ACTION → FINISHED
+```
 
-### Android 앱과 UX
+## 구현 완료 범위
 
-- AccessibilityService 기반 현재 화면 노드 수집
-- 플로팅 아이콘과 목적 입력 화면
-- 대상 앱을 사용자가 연 뒤 플로팅 시작 버튼으로 탐색을 시작하는 흐름
-- 탐색 중 로딩 애니메이션과 목적지 발견 표시
-- 클릭, 화면 단위 스크롤, 뒤로가기와 자동 탐색 종료
-- 목적 비우기, 오버레이 표시 상태와 시작 버튼 관련 UI 수정
-- 최종 목적지에서 상태 변경 버튼을 누르지 않는 사용자 확인 경계
+### Android 앱
 
-### 범용 탐색 엔진
+- AccessibilityService의 텍스트·contentDescription·resource ID·역할·상태·계층·bounds 수집
+- 접근성에서 빠진 문구를 위한 OCR 후보와 좌표 매핑
+- 목적 입력 후 대상 앱을 열고 플로팅 시작 아이콘을 누르는 대기 UX
+- 클릭, 화면 단위 스크롤, 뒤로가기, 화면 변화 재관찰
+- 무한 피드·반복 화면·동일 행동·과도한 스크롤·앱 이탈 차단
+- 로그인·프로필 선택·CAPTCHA·본인 인증과 위험 경계에서 사용자 요청
+- 목적지 도착 즉시 자동 탐색을 끝내고 최종 버튼명만 안내
+- 결제·구독 신청/해지 확정·회원 탈퇴·삭제·환불 제출·동의 확정 자동 실행 금지
+- USB 포트 역방향 연결 없이 공개 HTTPS API를 사용하는 배포 설정
 
-- 최종 목적 기능을 먼저 정규화하는 목적 resolver
-- 현재 화면 후보의 텍스트, 역할, 계층, OCR 좌표와 위험도 분석
-- 앱별 사전 경로가 없을 때의 기능 그래프 탐색
-- 무한 피드, 재방문, 화면 무변화, 앱 외부 이탈과 잘못된 분기 제어
-- 안전한 중간 클릭, 스크롤, 뒤로가기와 탐색 예산 제한
-- `shadow`, `verified_candidate`, `stale` 경로 생명주기
-- 동일 앱·버전·locale·목적의 검증 후보 재사용과 화면 불일치 시 폐기
+### K-EXAONE Navigation Policy
 
-### DB와 평가 도구
+- 현재 화면에서 실제로 발견된 후보 ID만 허용하는 Hermes `plan_navigation_step`
+- `click`, `scroll_forward`, `back`, `wait_and_observe`, `mark_destination`, `stop_for_user` 제한 행동
+- 최종 목적지를 먼저 만들고 현재 단계·이력·예상 다음 기능을 함께 판단
+- Human Gold·기능 그래프·AndroidControl을 명령이 아닌 근거로 입력
+- 매 화면 재관찰과 K-EXAONE 재판단; production 경로 replay 기본값 `false`
+- 잘못된 후보 ID, 임의 좌표, 다중 호출, 스키마 불일치 거부
+- Hermes 전송 형식의 정확한 단일 `<tool_call>` 래퍼 호환과 1회 구조 교정 재요청
+- 모델 장애 시 휴리스틱 클릭으로 바꾸지 않는 fail-closed 기본값
+- 모든 검색 근거·후보·입력 해시·모델 행동·안전 판정을 남기는 retrieval trace
 
-- 범용 기능 카탈로그와 기능 동의어·문맥·의도·간선
-- SQLite 화면·행동·전이·세션·경로 그래프
-- 앱·기능별 경량 서빙 인덱스와 성능 통계
-- Navigation DB Gym, development·holdout·adversarial·real-device-gold 분할
-- 실기기와 에뮬레이터 관찰 수집기
-- 관찰 개인정보 제거와 안전성 검사
-- 오프라인 화면 재생, 그래프 병합 후보와 세션 보고서
-- 앱별 목표 후보 생성과 실기기 awake 유지 도구
-
-### 현재 데이터 규모
-
-운영 서버 스냅샷:
-
-| 데이터 | 수량 |
-| --- | ---: |
-| 범용 기능 | 2,866 |
-| 기능 별칭 | 53,017 |
-| 기능 맥락 | 109,230 |
-| 기능 간 연결 | 3,033 |
-| 사용자 의도 | 2,660 |
-| 목적 문장 패턴 | 67,092 |
-| 관찰 앱 | 39 |
-| 관찰 화면 | 824 |
-| 화면 행동 후보 | 15,325 |
-| 실제 화면 전환 | 434 |
-| 탐색 단계 기록 | 917 |
-| 전체 발견 경로 | 56 |
-| 검증 후보 경로 | 6 |
-| Human Gold 세션 | 7 |
-
-검증 후보 경로에는 유튜브 구독 해지·알림 설정, 넷플릭스 구독 해지, 배민 구독 해지·알림 설정·회원탈퇴가 포함된다. 이 수치는 앱 전체 기능을 검증했다는 의미가 아니라 특정 앱 버전과 목적에서 독립 확인된 후보 수다.
-
-## 아직 완료되지 않은 항목
+제공된 K-EXAONE endpoint에는 공개된 가중치 학습/fine-tuning job API가 확인되지 않았다. 따라서 현재 구현은 K-EXAONE을 파인튜닝했다고 주장하지 않으며, 검색 기반 in-context learning과 별도 후보 재랭커를 사용한다. 향후 학습 가능한 SFT·선호 자료는 이미 생성한다.
 
 ### EXAONE 4.5 VLM
 
-EXAONE 4.5를 화면 인식기로 사용하는 목표 구조와 DB 필드는 설계했지만 실제 런타임 VLM 호출은 아직 연결되지 않았다. 다음 항목이 필요하다.
+- A100의 `EXAONE-4.5-33B` OpenAI 호환 비전 endpoint 연결
+- 이름 없는 아이콘, WebView/Canvas, OCR 충돌, 시각 중심 팝업, 정체 화면에서만 선택 호출
+- 후보 bounds 기반 crop과 element ID를 유지하는 구조화 시각 라벨
+- 화면 지문·모델 버전 기반 SQLite 캐시
+- 원본 이미지 대신 라벨·신뢰도·모델 버전을 보존하고 이미지 비저장
+- redacted YouTube 상단 도구 모음 실호출에서 알림·검색 아이콘 2/2 식별
 
-- 이름 없는 아이콘과 후보 crop 분석 API
-- Accessibility·OCR·VLM 결과를 같은 후보 ID로 병합
-- 화면 지문별 시각 분석 캐시
-- 개인정보 마스킹과 이미지 provenance
-- 모델 신뢰도와 사람 검증 상태 저장
-- 저신뢰·WebView·무진행 상황에만 호출하는 게이트
+### 학습·검색 데이터
 
-### K-EXAONE 후보 선택 Agent
+- Human Gold 21개를 화면 선택 예제 92개와 선호 쌍 1,871개로 변환
+- 앱 누수 방지 분할: train 64개/5개 앱, validation 23개/Netflix, test 5개/Google Play Store
+- SFT JSONL, positive/negative 선호학습 자료, 실패·무변화·복구 표본
+- FTS 기반 Human Gold 검색과 train-only 기능 전이 검색
+- Human Gold로 학습한 작은 pairwise 후보 재랭커
+- 런타임 학습 큐: `runtime → shadow → 자동 품질 검사 → verified_candidate`
+- 기능 그래프: `shadow → verified_candidate → verified → trusted`; Human Gold는 자동 생성하지 않음
 
-Hermes 도구 계약과 모델 판단 경로가 존재하지만 현재 런타임의 모든 선택을 K-EXAONE이 수행하는 상태는 아니다. 기능 그래프 탐색, 결정적 fallback과 route cache가 상당 부분을 담당한다. 목표는 다음과 같다.
+### AndroidControl v3
 
-- 현재 화면의 전체 후보와 검색 근거를 K-EXAONE에 전달
-- K-EXAONE은 후보 ID 기반 `click`, `scroll`, `back`, `stop_for_user`만 반환
-- Python은 판단을 대신하지 않고 안전 정책과 실행을 담당
-- Gold가 없는 화면에서 모델이 실제로 개입하는 제로샷 평가
-- 동일 Gold의 좌표 재생이 아니라 현재 후보 의미 재검증
+- 공식 20/20 shard, 성공 시연 15,283개에서 행동 단계 83,848개 정규화
+- 목적·화면·행동·다음 화면, terminal, back, 위험도와 기능 태그 복원
+- FTS5 83,848행과 bilingual function-cue 64차원 벡터 83,848개
+- portable SQLite 1,242,562,560 bytes, `PRAGMA integrity_check=ok`
+- SHA-256 `96d3d47e5e707da66cd5b57f1cc32ab2bade62b647e09d9a28a2b7a6d2875e71`
+- 원본은 서버 영구 작업공간, 런타임은 같은 체크섬의 `/tmp` 로컬 SSD 읽기 전용 복사본 사용
+- 현재 화면·목적 Top-K가 K-EXAONE 입력에 실제 포함됨
+- 과거 사례의 target이 현재 후보에 없으면 미래 기능 방향으로만 표시해 잘못된 현재 버튼 매핑 방지
 
-### AndroidControl 전체 인덱스
+## 운영 DB 스냅샷
 
-공식 데이터 변환·검색 코드와 작은 계약 검증 fixture는 구현되어 있다. 하지만 공식 AndroidControl 전체 성공 시연 인덱스는 현재 운영 서버에 적재되지 않았다. 전체 원본 다운로드, 정규화, 검색 인덱스 빌드와 런타임 경로 확인이 필요하다.
+SQLite `quick_check=ok`, 2026-08-02 기준이다.
 
-### 학습 데이터 품질
+| 데이터 | 수량 |
+| --- | ---: |
+| 앱 | 42 |
+| 화면 | 988 |
+| 행동 후보 | 19,266 |
+| 실제 전이 | 451 |
+| 탐색 세션/단계 | 136 / 917 |
+| 탐색 시도/frontier | 440 / 884 |
+| 발견 경로 | 56 |
+| shadow / verified_candidate / stale | 43 / 6 / 7 |
+| Gold 기록/단계 | 40 / 202 |
+| Human Gold / rejected / cancelled | 21 / 7 / 11 |
+| 학습 예제 | 92 |
 
-범용 의미 DB는 크지만 Human Gold는 아직 적다. 기존 세션을 다음 단위로 변환해야 한다.
+현재 trusted 경로가 0개인 것은 오류가 아니다. 기존 6개는 독립 검증 1회의 `verified_candidate`이며, 충분한 반복 검증 없이 높은 등급을 만들어내지 않는다. 등급은 K-EXAONE 검색 근거의 강도일 뿐 고정 클릭 명령이 아니다.
 
-```text
-목적 + 화면 + 전체 후보 + 정답 후보 + 오답 후보
-     + 행동 결과 + 다음 화면 + 검증 수준
-```
+## 평가 원칙과 현재 결과
 
-실패, 화면 무변화, 잘못된 메뉴, 무한 스크롤과 복구 사례도 부정 표본으로 포함한다. DB 접근은 모델 가중치 학습과 다르므로 초기에는 RAG·few-shot으로 사용하고, 충분한 검증 데이터 이후에만 파인튜닝을 검토한다.
+- source recording을 항상 검색에서 제외
+- 기본 test 평가는 평가 앱 전체를 제외하는 leave-one-app-out
+- Gold/verified route/좌표 replay 0
+- 버튼 순서 변경, 동의어, 이름 없는 목표, 위험 decoy를 동일 정책에 적용
+- 최우선 기준: 위험 행동 0 → 목적지 정확도 → 오클릭 → 복구 → 시간
 
-## 다음 구현 순서
+상세 구성별 수치와 실패 사례는 [Navigation Agent 평가 보고서](NAVIGATION_AGENT_EVALUATION.md)에 기록한다. 현재 완료된 누수 방지 기준선은 휴리스틱 Top-1 48%, 전체 K-EXAONE 구성 Top-1 72%로 **24%p 개선**, 목적지 판별 100%, 위험 행동 자동 실행 0건이다. VLM은 이미지가 없는 25개 policy 사례에 허위로 합산하지 않고 2개 실화면 아이콘 subset으로 별도 보고한다. Netflix 연속 경로의 평균 진행률은 후보 잡음 제거 전 14.1429%에서 29.1429%로 개선됐지만 목적지 도달은 아직 0%다. Google Play Store 연속 평가는 이름 없는 첫 아이콘 단계에서 외부 K-EXAONE inference timeout으로 종료됐다. 연속 경로 완주가 현재의 가장 큰 성능 한계다.
 
-1. 기존 Gold·세션을 후보 선택 학습 JSONL로 변환한다.
-2. 관찰 DB에 VLM 라벨, 아이콘 유형, 신뢰도와 모델 버전을 추가한다.
-3. A100의 EXAONE 4.5를 선택적 시각 인식 서비스로 연결한다.
-4. 같은 화면과 아이콘 분석을 캐시하고 구조화 결과를 반출한다.
-5. AndroidControl 전체 성공 시연을 다운로드하고 운영 인덱스를 구축한다.
-6. K-EXAONE Hermes planner가 매 의미 결정에서 후보를 선택하도록 연결한다.
-7. 실기기 Human Gold와 실패·복구 표본을 확대한다.
-8. 앱을 통째로 분리한 테스트에서 제로샷 목적지 도달률을 측정한다.
+## portable 백업
 
-## 핵심 평가 지표
+백업 도구는 다음을 checksum manifest가 있는 하나의 archive로 만든다.
 
-- Gold가 없는 앱에서의 목적지 도달률
-- 현재 화면 후보 중 올바른 다음 기능 선택률
-- 잘못된 클릭과 잘못된 안내 횟수
-- 최종 위험 행동 자동 실행 0건
-- UI 변경 후 경로 복구율
-- 화면 또는 분기 재방문 횟수
-- 목적지까지 걸린 시간, 클릭과 스크롤 횟수
-- 새 Human Gold 추가 전후의 성능 개선폭
-- Accessibility 단독과 `Accessibility + OCR + VLM` 성능 차이
+- 일관된 Navigation SQLite snapshot
+- AndroidControl portable v3 index
+- SFT·선호·학습 큐·평가·VLM label·재랭커·APK 산출물
+- 재생성 코드, 계약, fixture와 운영 문서
 
-탐색 시간은 중요한 지표지만 정확도와 안전성을 희생해 줄이면 안 된다. 평가는 `안전 위반 0 → 목적지 정확도 → 잘못된 클릭 → 복구 → 시간` 순으로 우선한다.
+다음은 제외한다.
 
-## 데이터와 보안
+- `.env`, API 키와 credentials
+- AndroidControl 원본 20개 shard
+- 원본 스크린샷·이미지
+- 모델 가중치, venv, node_modules와 빌드 캐시
 
-- 실제 키와 Endpoint ID는 로컬 `.env`에만 둔다.
-- `.env`, 운영 SQLite, 원본 스크린샷과 개인 식별 정보는 Git에 올리지 않는다.
-- Git에는 코드, 정규화된 fixture, 검증 정책, 합성·비식별 평가 자료와 문서만 보관한다.
-- EXAONE 4.5 분석 결과는 가능한 한 원본 이미지보다 작은 구조화 라벨로 보존한다.
-- A100 지원 종료 전에 필요한 모델 설정, 구조화 DB와 redacted 평가 자료를 별도로 반출한다.
+`Create-NavigationPortableBackup.py`와 `Restore-NavigationPortableBackup.py`는 archive 생성, 체크섬 검증, 경로 탈출 방지, 실제 복원과 SQLite 검증을 자동화한다.
+
+## 남은 최종 게이트
+
+1. 최종 Agent-only·trajectory 보고서 고정
+2. portable archive를 서버에서 생성하고 별도 위치에 복사한 뒤 실제 복원 검증
+3. 전체 API 검사, TypeScript, Android 설정 검사와 APK 재빌드
+4. Git 비밀값 검사, 커밋·푸시와 GitHub Actions 확인
+5. 마지막에만 실기기 APK smoke test
 
 ## 관련 문서
 
-- [Navigation Agent 학습 아키텍처](NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)
-- [범용 Navigation Agent](UNIVERSAL_NAVIGATION_AGENT.md)
+- [학습 아키텍처](NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)
+- [범용 Agent 런타임](UNIVERSAL_NAVIGATION_AGENT.md)
 - [AndroidControl](ANDROID_CONTROL.md)
-- [Navigation DB Gym](NAVIGATION_DB_GYM.md)
-- [Navigation 시간 최적화](NAVIGATION_TIME_OPTIMIZATION.md)
-- [실기기 E2E 세션 보고서](EG_E2E_SESSION_REPORT.md)
-- [개발 로그](DEVELOPMENT_LOG.md)
+- [Agent 평가](NAVIGATION_AGENT_EVALUATION.md)
+- [K-EXAONE 기능 확인](K_EXAONE_CAPABILITY_AUDIT.md)
+- [API 계약](API_CONTRACT.md)

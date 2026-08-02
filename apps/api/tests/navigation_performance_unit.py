@@ -539,8 +539,8 @@ def assert_route_lifecycle_requires_explicit_review() -> None:
             screen_fingerprint="us_1111111111111111",
         ) is None
 
-        # Even after enough clean benchmark-gold evidence makes the route
-        # performance-eligible, validation must not promote its lifecycle.
+        # Performance collection and lifecycle promotion are deliberately
+        # separate operations so an evaluator cannot mutate serving truth.
         _record_route(
             repository.performance,
             route.route_id,
@@ -642,18 +642,20 @@ def assert_route_lifecycle_requires_explicit_review() -> None:
         assert corrected is not None
         assert corrected.lifecycle_status == "shadow" and corrected.provisional is True
 
-        # Lifecycle serving requires a separate, explicit approval action.
-        approved = repository.approve_route(route.route_id)
-        assert approved.lifecycle_status == "approved" and approved.provisional is False
+        # The controlled promotion gate maps sufficient clean evidence to the
+        # product contract's final trusted state. ``approve_route`` remains a
+        # compatibility alias, but it no longer writes the legacy value.
+        trusted = repository.approve_route(route.route_id)
+        assert trusted.lifecycle_status == "trusted" and trusted.provisional is False
         with sqlite3.connect(database_path) as connection:
-            approved_index = connection.execute(
+            trusted_index = connection.execute(
                 """
                 SELECT lifecycle_status, lifecycle_priority, is_serving
                 FROM universal_app_function_routes WHERE route_id = ?
                 """,
                 (route.route_id,),
             ).fetchone()
-        assert approved_index == ("approved", 2, 1)
+        assert trusted_index == ("trusted", 3, 1)
         assert repository.route_action(
             app_package=app_package,
             app_version=app_version,
@@ -750,6 +752,29 @@ def assert_verified_candidate_is_provisional_and_version_scoped() -> None:
             target_function="subscription.cancel.entry",
             screen_fingerprint="us_1111111111111111",
         ) is None
+
+        # A second independent clean validation advances the reusable
+        # evidence to verified; the minimum sample gate advances it to
+        # trusted. These grades influence retrieval strength only—the
+        # production runtime still asks K-EXAONE on every screen.
+        _record_route(
+            repository.performance,
+            route.route_id,
+            [950.0],
+            correct=True,
+            start_index=1,
+        )
+        verified = repository.promote_route_from_evidence(route.route_id)
+        assert verified.lifecycle_status == "verified" and verified.provisional is True
+        _record_route(
+            repository.performance,
+            route.route_id,
+            [1000.0],
+            correct=True,
+            start_index=2,
+        )
+        trusted = repository.promote_route_from_evidence(route.route_id)
+        assert trusted.lifecycle_status == "trusted" and trusted.provisional is False
 
 
 def assert_missing_app_version_can_only_be_filled_once_for_clean_session() -> None:

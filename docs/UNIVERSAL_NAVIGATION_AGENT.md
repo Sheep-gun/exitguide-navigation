@@ -2,7 +2,7 @@
 
 > 범용 기능 DB의 자동 생성 벤치마크, frozen holdout, adversarial 검사, 실패 분류와 K-EXAONE 검토 후보 생성은 [Navigation DB Gym](NAVIGATION_DB_GYM.md)을 기준으로 운영한다.
 
-이 브랜치의 Navigation Agent는 앱별 모범 경로를 미리 요구하지 않습니다. 처음 보는 Android 앱을 제한 시간 안에서 탐색해 **최종 목적 기능을 먼저 확정**하고, 발견한 화면·메뉴·전이를 SQLite 기능 그래프로 축적합니다. 탐색 중에는 상태를 바꾸지 않는 저위험 메뉴만 자동으로 열 수 있습니다. 최종 기능이 있는 화면을 찾으면 최종 버튼은 누르지 않고 탐색과 플로팅 서비스를 자동 종료합니다. 처음 발견한 경로는 곧바로 재사용하지 않으며, 독립 검토로 목적지와 안전 정지가 확인된 `verified_candidate`만 같은 앱·버전·locale·목적에서 저위험 중간 메뉴를 자동 재사용합니다. 최종 버튼은 항상 사용자가 직접 누릅니다. AndroidControl의 목적·단계·행동 시연은 앱 간 기능 판단의 사전 근거로 사용하며 Rico·MobileViews는 사용하지 않습니다.
+이 브랜치의 Navigation Agent는 앱별 모범 경로를 미리 요구하지 않습니다. 처음 보는 Android 앱을 제한 시간 안에서 탐색해 **최종 목적 기능을 먼저 확정**하고, 발견한 화면·메뉴·전이를 SQLite 기능 그래프로 축적합니다. 탐색 중에는 상태를 바꾸지 않는 저위험 메뉴만 자동으로 열 수 있습니다. 최종 기능이 있는 화면을 찾으면 최종 버튼은 누르지 않고 탐색과 플로팅 서비스를 자동 종료합니다. 검증된 전이는 빠른 검색 근거로 사용하되 현재 후보를 다시 관찰한 K-EXAONE이 매 단계 행동을 결정합니다. 최종 버튼은 항상 사용자가 직접 누릅니다. AndroidControl의 목적·단계·행동 시연은 앱 간 기능 판단의 사전 근거로 사용하며 Rico·MobileViews는 사용하지 않습니다.
 
 전체 흐름은 [EGL Navigation 파이프라인 SVG](EGL_NAVIGATION_PIPELINE.svg)에서 볼 수 있습니다.
 
@@ -14,14 +14,14 @@
 - 버튼 이름뿐 아니라 화면 위치, 부모·주변 문맥, 기능 라벨, AndroidControl 유사 시연을 함께 전달합니다.
 - K-EXAONE은 Hermes/OpenAI 도구 `recommend_navigation_action`을 반드시 호출합니다.
 - 서버는 모델이 허용목록 밖의 ID를 반환하면 거부합니다. 빈 선택·근거 없는 완료 판정·현재 화면 의미 점수와 크게 충돌하는 선택도 가드레일이 교정합니다.
-- K-EXAONE이 늦거나 불안정하면 결정론적 폴백으로 현재 화면의 안전한 후보를 계속 안내합니다.
+- K-EXAONE이 늦거나 스키마에 맞는 Hermes 행동을 내놓지 못하면 **fail closed**로 중단합니다. Python이 다른 후보를 골라 대신 클릭하지 않습니다.
 - 앱 본체의 `탐색 시작`은 자동 조작을 곧바로 실행하지 않고, 안내 말풍선과 원형 `▶` 버튼을 표시하는 대기 상태만 엽니다. 사용자가 대상 앱을 직접 연 뒤 `▶`를 눌러야 `operation_mode=explore`가 활성화됩니다.
 - `operation_mode=explore`를 사용자가 명시적으로 시작한 동안에만 저위험 탐색 메뉴의 자동 클릭·스크롤·뒤로가기를 허용합니다.
 - 자동 클릭은 기능 DB의 `safe_navigation`, API의 `safe_to_execute`, 현재 후보의 `low` 위험도, 비체크박스·비스위치·비입력창 조건을 모두 통과해야 합니다.
 - 해지·삭제·결제·환불·동의·권한 변경 등 `never_auto` 또는 상태 변경 기능은 탐색의 최종 목적 후보로만 인식하며 자동으로 누르지 않습니다.
 - 경로 발견, 탐색 중단, 목적 화면 도착 중 하나가 발생하면 APK의 탐색 활성 상태를 해제합니다. 목적 화면 도착 시 플로팅 서비스도 자동 종료되며, 늦게 도착한 이전 응답은 추가 클릭을 실행할 수 없습니다.
-- 새 경로는 `shadow`로 저장합니다. 독립 검토를 통과한 `verified_candidate`만 저위험 중간 메뉴에 한해 자동 재사용하며, 형식상 `approved` 승격은 별도의 명시적 검토와 충분한 표본 없이는 수행하지 않습니다.
-- 검증 후보 재사용 중 버튼·화면 의미가 달라지면 최대 두 번의 관찰 안에 해당 경로를 `stale`로 폐기하고 같은 세션에서 범용 탐색으로 복귀합니다.
+- 새 경로는 `shadow`로 저장합니다. 독립 검토를 통과한 `verified_candidate`와 반복 검증된 `trusted` 전이는 강한 검색 근거가 되지만, 클릭 배열을 재생하지 않습니다. 매 화면에서 실제 후보를 다시 만들고 K-EXAONE이 다음 Hermes 행동을 새로 결정합니다.
+- 검증 전이를 근거로 사용하던 중 버튼·화면 의미가 달라지면 최대 두 번의 관찰 안에 해당 근거를 `stale`로 낮추고 같은 세션에서 범용 근거로 재계획합니다.
 
 ## 실행 흐름
 
@@ -33,13 +33,13 @@
 기능 사전에서 최종 기능 ID 확정
     ↓
 현재 앱·버전·locale의 저장 경로 조회
-    ├─ 검증 후보 있음 → 저위험 중간 메뉴만 최대 2회 자동 재사용
+    ├─ 검증 근거 있음 → 현재 후보와 결합해 K-EXAONE에 우선 제공
     │                    ├─ 화면 의미 일치 → 다음 검증 단계 진행
     │                    └─ 불일치 → 최대 2회 관찰 안에 폐기 후 범용 탐색
     └─ 검증 후보 없음 → 최대 55초/16회/깊이 9의 안전 탐색
                        ├─ 접근성 트리에서 버튼·부모·주변 문맥 분석
                        ├─ 기능 사전 + AndroidControl 의미 점수 계산
-                       ├─ 안전 후보가 비슷할 때만 K-EXAONE Hermes로 재판단
+                       ├─ 매 화면에서 K-EXAONE이 Hermes 행동 하나를 결정
                        ├─ 저위험 탐색 메뉴만 자동 클릭
                        ├─ 화면에 후보가 없으면 최대 4회 자동 스크롤
                        └─ 막힌 분기는 자동 뒤로가기로 DFS 백트래킹
@@ -48,7 +48,7 @@
     ↓
 경로 저장 → 자동 터치 OFF → 플로팅 서비스 종료
     ↓
-다음 실행부터 검증된 동일 버전 경로의 저위험 중간 메뉴만 빠르게 재사용
+다음 실행부터 검증된 동일 버전 전이를 검색 근거로 제공하되 K-EXAONE이 현재 후보에서 다시 선택
     ↓
 성공·실패 전이 통계를 업데이트하고 앱 업데이트 시 경로를 재검증
 ```
@@ -96,16 +96,16 @@
 - `universal_explorations`: 시간·행동·깊이 예산, 현재 탐색 상태, 시작·목적 화면, 현재 DFS 경로
 - `universal_exploration_attempts`: 자동 탐색에서 시도한 메뉴, 기능 분류, 성공·실패·다음 화면
 - `universal_routes`: 앱 패키지·버전·locale·최종 기능별 발견 경로와 신뢰도
-- `universal_app_function_routes`: 앱·버전·기능 도메인(`account`, `subscription`, `notification` 등)별 경로를 분류한 경량 서빙 인덱스. `verified_candidate`와 `approved`만 서빙 대상으로 표시
+- `universal_app_function_routes`: 앱·버전·기능 도메인(`account`, `subscription`, `notification` 등)별 의미 전이를 분류한 경량 검색 인덱스. 검증 등급은 근거 점수에만 반영
 - `navigation_sessions`, `navigation_stage_timings`: 목적지 확정 시간과 단계별 서버·OCR·조작·외부 대기 시간
 - `graph_edge_performance`, `route_performance`: 간선·경로별 성공·안전·p50·p90 성능
 - `app_version_signatures`, `route_rankings`: 앱 버전 경계와 안전 우선 최적·예비 경로 순위
 
 화면 fingerprint는 변동하기 쉬운 Android 노드 ID가 아니라 순서가 있는 라벨·역할·상태를 사용합니다. 앱 업데이트로 resource ID가 바뀌어도 같은 의미의 화면과 버튼을 텍스트·역할 유사도로 다시 연결합니다. 유사한 버튼이 둘 이상이라 안전하게 구분되지 않으면 캐시를 사용하지 않고 다시 판단합니다.
 
-경로 생명주기는 `shadow → verified_candidate → approved`로 분리됩니다. `shadow`는 탐색으로 발견됐을 뿐 정답으로 간주하지 않습니다. `verified_candidate`는 사람이 목적지와 안전 정지를 독립 확인한 임시 재사용 단계이며, 앱 버전이 달라지거나 현재 화면 의미가 어긋나면 사용하지 않습니다. 자동 재사용 대상은 보이고 활성화된 저위험·비체크·비입력 중간 메뉴뿐이고, 해지 확정·알림 토글·결제·삭제 등 최종 상태 변경은 경로에 있더라도 실행하지 않습니다.
+경로 생명주기는 `runtime → shadow → 자동 품질 검사 → verified_candidate → verified → trusted`로 분리됩니다. `shadow`는 탐색으로 발견됐을 뿐 정답으로 간주하지 않습니다. 독립 검증 1회는 `verified_candidate`, 깨끗한 독립 검증 2회는 `verified`, 최소 표본 수를 충족한 반복 검증은 `trusted` 승격 조건이 됩니다. 런타임 자체 성공 추정은 승격 근거로 인정하지 않습니다. 상위 등급은 검색·재랭킹 근거의 신뢰도를 높일 뿐 실행 명령이 아닙니다. 앱 버전이나 현재 화면 의미가 어긋나면 근거 점수를 낮추거나 `stale`로 전환합니다. 해지 확정·알림 토글·결제·삭제 등 최종 상태 변경은 어떤 등급의 경로에 있더라도 자동 실행하지 않습니다. `human_gold`는 사람의 명시적 기록과 검토를 거친 별도 최상위 출처이며 자동 승격하지 않습니다. 과거 DB의 `approved` 값은 마이그레이션 시 `trusted`로 정규화합니다.
 
-온라인 조회 우선순위는 `승인된 앱별 기능 경로 → 검증 후보 앱별 기능 경로 → 같은 앱의 관찰 그래프 → 범용 기능 카탈로그 → AndroidControl → K-EXAONE 의미 동률 해소`입니다. K-EXAONE이 원시 SQLite 전체를 직접 검색하는 구조가 아니라, 백엔드가 앱·버전·목적 기능으로 먼저 정밀 조회한 작은 후보만 모델에 전달합니다. 검증 경로가 현재 화면에 맞으면 AndroidControl 검색과 모델 호출을 모두 생략합니다.
+온라인 근거 우선순위는 `Human Gold → 같은 앱 trusted/verified 기능 그래프 → 다른 앱의 동일 기능 전이 → 범용 기능 카탈로그 → AndroidControl → 순수 신규 추론`입니다. 이것은 실행 순서가 아니라 근거의 우선순위입니다. 백엔드가 원시 SQLite에서 작은 Top-K 근거를 검색해 전달하고, K-EXAONE은 현재 화면의 실제 후보 ID 중 하나를 매 단계 Hermes 행동으로 선택합니다. 고신뢰 근거가 있어도 현재 화면 재관찰과 K-EXAONE 판단을 생략하지 않습니다.
 
 실패·중복·미검증 관찰은 서빙 인덱스에서 제외하지만 즉시 삭제하지 않습니다. 이것들은 같은 오답 분기를 반복하지 않게 하는 학습 근거이기 때문입니다. 다음 명령은 원본 DB를 먼저 백업한 뒤 앱별 기능 서빙 인덱스를 재구축하고 SQLite 통계를 최적화합니다.
 
@@ -124,7 +124,7 @@
   --confirm-reviewed I_REVIEWED_THE_DESTINATION_AND_SAFETY
 ```
 
-이 명령은 클릭·Back·목적지 정지를 모두 포함한 경로를 다시 구성하고 `verified_candidate`까지만 설정합니다. 정식 `approved` 승격은 수행하지 않습니다.
+이 명령은 클릭·Back·목적지 정지를 포함한 기록을 회귀·검색용 의미 전이로 구성하고 `verified_candidate`까지만 설정합니다. 기본 Navigation 런타임에 재생 경로를 연결하거나 `trusted`로 자동 승격하지 않습니다.
 
 ## API
 
@@ -160,7 +160,7 @@ GET /v1/navigation/agent/performance?measurement_source=real_device
 
 ```dotenv
 NAVIGATION_AGENT_PROVIDER=exaone
-NAVIGATION_AGENT_ALLOW_FALLBACK=true
+NAVIGATION_AGENT_ALLOW_FALLBACK=false
 NAVIGATION_AGENT_TIMEOUT_SECONDS=10
 NAVIGATION_GRAPH_DB_PATH=
 NAVIGATION_FUNCTION_DB_PATH=
@@ -174,7 +174,7 @@ NAVIGATION_AGENT_MIN_CONFIDENCE=0.55
 NAVIGATION_AGENT_MIN_CANDIDATE_MARGIN=0.07
 ```
 
-K-EXAONE 키·모델·endpoint는 기존 `EXAONE_*` 환경 변수를 사용합니다. 키는 APK에 넣지 않고 FastAPI 서버에만 둡니다. 로컬 기본 제한은 10초이며, 공개 서버 배포는 네트워크 지연을 고려해 35초를 사용합니다. 제한 안에 응답하지 않으면 안전 폴백으로 전환합니다.
+K-EXAONE 키·모델·endpoint는 기존 `EXAONE_*` 환경 변수를 사용합니다. 키는 APK에 넣지 않고 FastAPI 서버에만 둡니다. 로컬 기본 제한은 10초이며, 공개 서버 배포는 네트워크 지연을 고려해 35초를 사용합니다. 제한 안에 유효한 Hermes 행동을 받지 못하면 **fail closed**로 중단하며 Python이 다른 후보를 대신 선택하지 않습니다. 구조가 깨진 Hermes JSON만 전체 제한 시간 안에서 K-EXAONE에 한 번 교정 재요청합니다.
 
 AndroidControl 원본·변환·인덱스 절차는 [ANDROID_CONTROL](ANDROID_CONTROL.md)을 참고합니다. API 인덱스에는 스크린샷을 넣지 않고 목적, 단계 설명, 행동 유형, 대상 UI 문구, 정리된 화면 문맥만 보관합니다.
 
@@ -196,7 +196,7 @@ AndroidControl 원본·변환·인덱스 절차는 [ANDROID_CONTROL](ANDROID_CON
 5. `탐색 시작`을 누르면 자동 탐색 대신 안내 말풍선과 원형 `▶` 버튼이 나타납니다.
 6. 사용자가 대상 앱을 직접 열고 `▶`를 누르면 로딩 아이콘으로 바뀌며 저위험 메뉴의 자동 탐색이 시작됩니다.
 7. 화면에 목적 후보가 없으면 접근성 스크롤을 우선 실행하고, 지원하지 않는 화면에서는 실제 위쪽 스와이프 제스처를 사용합니다.
-8. 최종 목적 후보를 찾으면 해당 버튼을 자동으로 누르지 않고 탐색과 플로팅 서비스를 종료합니다. 독립 검토를 통과한 경로는 같은 앱 버전에서 저위험 중간 메뉴만 빠르게 재사용하며 최종 동작은 계속 사용자에게 맡깁니다.
+8. 최종 목적 후보를 찾으면 해당 버튼을 자동으로 누르지 않고 탐색과 플로팅 서비스를 종료합니다. 독립 검토를 통과한 전이는 같은 앱 버전에서 높은 검색 근거가 되지만, 다음 행동은 현재 화면을 본 K-EXAONE이 다시 결정하며 최종 동작은 계속 사용자에게 맡깁니다.
 
 로컬 빌드는 JDK 17과 Android 36 SDK, Build Tools 35/36, NDK 27.1.12297006을 사용합니다. Windows에서는 NDK의 `clang++.exe`가 정상 동작하도록 SDK 경로에 공백을 두지 않습니다. 기본 탐색 위치는 `%USERPROFILE%\ExitGuideAndroidSdk`입니다.
 
@@ -208,23 +208,11 @@ cd apps\mobile
 npm run typecheck
 ```
 
-테스트는 기능 사전 적재와 문맥 동음이의어 분리, 처음 보는 패키지의 안전 탐색, 최종 버튼 자동 클릭 금지, 탐색 예산 중단, 시작 화면 복귀, 검증 후보의 저위험 경로 재사용, 두 관찰 이내 stale 폐기와 범용 탐색 복귀, 위험 동작 확인, 개인정보 마스킹, Hermes 도구 계약, 잘못된 모델 ID 폴백, 앱 업데이트로 노드 ID가 바뀐 경우의 의미 재연결, 실제 FastAPI JSON 계약을 확인합니다.
+테스트는 기능 사전 적재와 문맥 동음이의어 분리, 처음 보는 패키지의 안전 탐색, 최종 버튼 자동 클릭 금지, 탐색 예산 중단, 고신뢰 전이를 증거로 주더라도 현재 후보와 Hermes 판단을 생략하지 않는지, 화면 불일치 시 stale 처리와 재계획, 위험 동작 확인, 개인정보 마스킹, 검색 추적 로그, 잘못된 모델 ID의 fail-closed 처리, 앱 업데이트로 노드 ID가 바뀐 경우의 의미 재연결, 실제 FastAPI JSON 계약을 확인합니다.
 
 `fixtures/navigation/cross-app-menu-benchmark.v1.json`은 앱별 경로 없이 공통 메뉴 DB만으로 판단하는 10개 목적군·33개 화면 단계의 소규모 회귀 기준선입니다. 현재 v15도 33개 단계를 계속 통과해야 하며, 새 별칭이나 기능 연결을 추가할 때 하나라도 회귀하면 전체 API 검사도 실패합니다. 이 고정 합성 기준선의 통과는 독립 resolver 정확도나 실기기 성능 주장이 아니며, 더 넓은 분할별 평가는 [Navigation DB Gym](NAVIGATION_DB_GYM.md)이 담당합니다.
 
-2026-07-27 합성 미지 앱 화면 10건의 최신 실측값:
-
-- 결정론적 폴백 Top-1: 10/10
-- 실제 K-EXAONE + 의미 가드레일 + 폴백 최종 Top-1: 10/10
-- 현재 후보 허용목록 준수: 10/10
-- 10초 안 K-EXAONE 판단을 그대로 채택: 4/10
-- 폴백 포함 평균 응답 시간: 8.10초
-
-같은 날 가드레일 적용 전 별도 실행에서는 최종 Top-1이 6/10까지 흔들렸습니다. 따라서 위 10/10은 모델 단독 성능이 아니라 **현재 화면 허용목록, 결정론적 의미 점수, 타임아웃 폴백을 합친 전체 시스템 결과**입니다. 이 수치는 고정 합성 화면의 연결·안전 기준선이며 실제 앱 일반화 정확도를 의미하지 않습니다. 같은 평가를 다시 실행하려면 로컬 `.env` 설정 후 다음 명령을 사용합니다.
-
-```powershell
-.\apps\api\.venv\Scripts\python.exe .\scripts\Evaluate-UniversalNavigationLive.py
-```
+현재 비교 평가는 Human Gold의 원 경로와 좌표 재생을 차단하고, 테스트 앱 전체를 검색 근거에서 제외하는 Agent-only leave-one-app-out 방식으로 수행합니다. 구성별 수치, 실패 사례, VLM 별도 실화면 검사는 [Navigation Agent 평가 보고서](NAVIGATION_AGENT_EVALUATION.md)에 기록합니다. 과거의 폴백 포함 10건 합성 수치는 K-EXAONE 자체 판단 성능과 구분되지 않으므로 현재 성능 주장에 사용하지 않습니다.
 
 ## 알려진 한계
 

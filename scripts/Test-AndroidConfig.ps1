@@ -54,6 +54,20 @@ required_overlay_contracts = [
     "ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION",
     "pendingTransitionSequence = ++transitionSequenceCounter",
     "clearPendingTransition(submittedTransitionSequence)",
+    "lastRecordingSemanticSignature",
+    "recordingSemanticSignature(elements)",
+    'pendingPerformedElementId = "__semantic_screen_change__"',
+    "bounded semantic Gold transition awaiting settled destination",
+    "GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS = 1800L",
+    "scheduleSemanticGoldTransitionTimeout(pendingTransitionSequence)",
+    "expired unresolved semantic Gold transition before accepting another click",
+    "probableGoldScreenChange",
+    "semantic Gold change awaiting server confirmation",
+    "showGoldSavedAcknowledgement()",
+    "isRecordableGoldScrollEvent(event, source)",
+    "ignored non-vertical or non-container Gold scroll event",
+    'graphUpdate.optBoolean("transition_discarded", false)',
+    "isRecorderOverlayOcrLabel(label)",
     "elementIdForEvent(event)",
     "indexClickableElements(elements)",
     "ambiguousClickableKeys",
@@ -87,6 +101,8 @@ required_overlay_contracts = [
     '"record".equals(activeOperationMode)',
     '"recording".equals(phase)',
     'bubbleView.setText("REC")',
+    'public static boolean isRunning()',
+    'public void getOverlayState(Promise promise)',
     'PREF_START_NONCE',
     'PREF_EXPLORATION_ACTIVE',
     'startNonce = Long.toString(System.currentTimeMillis())',
@@ -145,6 +161,11 @@ required_overlay_contracts = [
     "markObservationRequestFailed(treeSignature)",
     "clearObservationRequestFailure()",
     "REQUEST_FAILURE_RETRY_DELAY_MS = 2500L",
+    'state.putString("runtimeState", prefs.getString("runtimeState", "IDLE"))',
+    'STATE_WAITING_FOR_TARGET_APP = "WAITING_FOR_TARGET_APP"',
+    'STATE_WAITING_FOR_USER_FINAL_ACTION = "WAITING_FOR_USER_FINAL_ACTION"',
+    'response.optString("runtime_state", "SAFETY_CHECK")',
+    'setRuntimeState("EXECUTING_SAFE_ACTION")',
 ]
 for contract in required_overlay_contracts:
     if contract not in overlay_plugin:
@@ -160,6 +181,22 @@ for contract in [
     "REQUEST_FAILURE_RETRY_DELAY_MS = 2500L",
     'request.put("app_version", appVersion(packageName))',
     'getPackageManager().getPackageInfo(packageName, 0)',
+    "lastRecordingSemanticSignature",
+    "recordingSemanticSignature(elements)",
+    'pendingPerformedElementId = "__semantic_screen_change__"',
+    "bounded semantic Gold transition awaiting settled destination",
+    "GOLD_SEMANTIC_TRANSITION_TIMEOUT_MS = 1800L",
+    "scheduleSemanticGoldTransitionTimeout(pendingTransitionSequence)",
+    "expired unresolved semantic Gold transition before accepting another click",
+    "probableGoldScreenChange",
+    "semantic Gold change awaiting server confirmation",
+    "showGoldSavedAcknowledgement()",
+    "isRecordableGoldScrollEvent(event, source)",
+    "ignored non-vertical or non-container Gold scroll event",
+    'graphUpdate.optBoolean("transition_discarded", false)',
+    "isRecorderOverlayOcrLabel(label)",
+    'response.optString("runtime_state", "SAFETY_CHECK")',
+    'setRuntimeState("EXECUTING_SAFE_ACTION")',
 ]:
     if contract not in generated_accessibility:
         raise AssertionError(
@@ -174,11 +211,39 @@ event_handler_end = overlay_plugin.find("public void onInterrupt()", event_handl
 event_handler = overlay_plugin[event_handler_start:event_handler_end]
 event_filter = event_handler.find("isRelevantAccessibilityEventPackage(packageName)")
 event_metadata = event_handler.find("lastActivityName =")
-event_schedule = event_handler.rfind("scheduleAnalysis(false)")
+event_schedule = event_handler.rfind("scheduleAnalysis(urgentGoldTransition)")
 if event_handler_start < 0 or min(event_filter, event_metadata, event_schedule) < 0:
     raise AssertionError("accessibility event filtering contract is incomplete")
 if not event_filter < event_metadata < event_schedule:
     raise AssertionError("irrelevant package events must be rejected before metadata or queue mutation")
+click_priority_guard = (
+    '&& "record".equals(activeOperationMode) && lastScreenFingerprint.length() > 0\n'
+    '        && pendingPerformedElementId.length() == 0)'
+)
+if click_priority_guard not in overlay_plugin or click_priority_guard not in generated_accessibility:
+    raise AssertionError(
+        "recording scroll events must not overwrite an unsubmitted human click transition"
+    )
+for gold_pacing_contract in (
+    "boolean urgentGoldTransition",
+    "boolean queuedGoldObservation",
+    "scheduleAnalysis(urgentGoldTransition)",
+    "scheduleAnalysis(queuedGoldObservation)",
+):
+    if gold_pacing_contract not in overlay_plugin or gold_pacing_contract not in generated_accessibility:
+        raise AssertionError(
+            f"Gold recording must expose and prioritize per-click persistence: {gold_pacing_contract}"
+        )
+if 'typeViewFocused|typeViewAccessibilityFocused|typeViewSelected' not in overlay_plugin:
+    raise AssertionError("Accessibility config must subscribe to Compose focus/selection events")
+for compose_gold_contract in (
+    'performedElementId = "__screen_change__";',
+    'semantic click fallback matched eventType=',
+):
+    if compose_gold_contract not in overlay_plugin or compose_gold_contract not in generated_accessibility:
+        raise AssertionError(
+            f"Compose Gold recording fallback is missing: {compose_gold_contract}"
+        )
 duplicate_failure_guard = (
     'if (!force && pendingPerformedElementId.length() == 0\n'
     '          && treeSignature.equals(lastFailedTreeSignature))'
@@ -213,6 +278,9 @@ for contract in [
     'releaseOperation("start");',
     'releaseOperation("stop");',
     '.catch((error: unknown)',
+    'reconcileGoldRecording()',
+    'getExitGuideOverlayState()',
+    'cancelNavigationGoldRecording(stored.apiBaseUrl, stored.recordingId)',
 ]:
     if contract not in overlay_controller:
         raise AssertionError(f"overlay controller is missing immediate busy/error contract: {contract}")

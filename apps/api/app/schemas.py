@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 RiskLevel = Literal["low", "medium", "high"]
@@ -920,6 +920,18 @@ UniversalNavigationPhase = Literal[
     "stopped",
     "recording",
 ]
+UniversalNavigationRuntimeState = Literal[
+    "IDLE",
+    "WAITING_FOR_TARGET_APP",
+    "OBSERVING",
+    "RETRIEVING",
+    "PLANNING",
+    "SAFETY_CHECK",
+    "EXECUTING_SAFE_ACTION",
+    "DESTINATION_REACHED",
+    "WAITING_FOR_USER_FINAL_ACTION",
+    "FINISHED",
+]
 UniversalNavigationAutomationAction = Literal["none", "click", "scroll_forward", "back", "stop"]
 UniversalNavigationMeasurementSource = Literal[
     "server_runtime",
@@ -930,6 +942,9 @@ UniversalNavigationMeasurementSource = Literal[
 UniversalNavigationRouteLifecycle = Literal[
     "shadow",
     "verified_candidate",
+    "verified",
+    "trusted",
+    # Legacy read compatibility; new writes use ``trusted``.
     "approved",
     "rejected",
     "stale",
@@ -981,6 +996,16 @@ class UniversalNavigationClientTiming(BaseModel):
     external_wait_ms: float = Field(default=0.0, ge=0.0, le=300_000.0)
 
 
+class UniversalNavigationVisualContext(BaseModel):
+    """Privacy-masked, downscaled screen context for ambiguity-only VLM use."""
+
+    content_type: Literal["image/jpeg", "image/png", "image/webp"] = "image/jpeg"
+    image_base64: str = Field(min_length=16, max_length=1_500_000)
+    width: int = Field(gt=0, le=2048)
+    height: int = Field(gt=0, le=4096)
+    redacted: Literal[True] = True
+
+
 class UniversalNavigationObserveRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=120)
     session_id: str = Field(min_length=1, max_length=120)
@@ -990,6 +1015,7 @@ class UniversalNavigationObserveRequest(BaseModel):
     goal_text: str = Field(min_length=1, max_length=500)
     operation_mode: UniversalNavigationOperationMode = "guide"
     screen: UniversalNavigationScreen
+    visual_context: UniversalNavigationVisualContext | None = None
     transition: UniversalNavigationTransition | None = None
     client_timing: UniversalNavigationClientTiming | None = None
 
@@ -1021,6 +1047,7 @@ class UniversalNavigationGraphUpdate(BaseModel):
     screen_created: bool
     actions_created: int = Field(ge=0)
     transition_recorded: bool
+    transition_discarded: bool = False
     known_screen_count: int = Field(ge=0)
     known_transition_count: int = Field(ge=0)
 
@@ -1139,6 +1166,8 @@ class UniversalNavigationObserveResponse(BaseModel):
     goal_interpretation: str
     decision_mode: UniversalNavigationDecisionMode
     phase: UniversalNavigationPhase = "guide"
+    runtime_state: UniversalNavigationRuntimeState = "OBSERVING"
+    runtime_state_trace: list[UniversalNavigationRuntimeState] = Field(default_factory=list)
     candidates: list[UniversalNavigationCandidate] = Field(default_factory=list)
     recommendation: UniversalNavigationRecommendation | None = None
     graph_update: UniversalNavigationGraphUpdate
@@ -1151,6 +1180,28 @@ class UniversalNavigationObserveResponse(BaseModel):
         pattern=r"^[a-z0-9_]+$",
     )
     warnings: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def derive_runtime_state_trace(self) -> "UniversalNavigationObserveResponse":
+        if self.phase == "recording":
+            trace: list[UniversalNavigationRuntimeState] = ["OBSERVING"]
+        else:
+            trace = ["OBSERVING", "RETRIEVING", "PLANNING", "SAFETY_CHECK"]
+            if self.phase == "destination_reached":
+                trace.extend(["DESTINATION_REACHED", "WAITING_FOR_USER_FINAL_ACTION"])
+            elif self.phase == "stopped" or self.automation.action == "stop":
+                trace.append("FINISHED")
+            elif self.automation.safe_to_execute and self.automation.action in {
+                "click",
+                "scroll_forward",
+                "back",
+            }:
+                trace.append("EXECUTING_SAFE_ACTION")
+            elif self.phase in {"guide", "guiding"}:
+                trace.append("WAITING_FOR_USER_FINAL_ACTION")
+        self.runtime_state_trace = trace
+        self.runtime_state = trace[-1]
+        return self
 
 
 class NavigationFunctionCatalogResponse(BaseModel):
