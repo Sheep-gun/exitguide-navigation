@@ -175,7 +175,14 @@ public final class MainActivity extends Activity {
                 return true;
             }
         }
-        return false;
+        return enabledSettingContains(
+                getPackageName(),
+                serviceName,
+                Settings.Secure.getString(
+                        getContentResolver(),
+                        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+                )
+        );
     }
 
     static boolean matchesAccessibilityService(
@@ -196,6 +203,31 @@ public final class MainActivity extends Activity {
             normalizedClass = actualPackage + "." + actualClass;
         }
         return expectedClass.equals(normalizedClass);
+    }
+
+    static boolean enabledSettingContains(
+            String expectedPackage,
+            String expectedClass,
+            String enabledServices
+    ) {
+        if (enabledServices == null || enabledServices.trim().isEmpty()) {
+            return false;
+        }
+        for (String component : enabledServices.split(":")) {
+            int separator = component.indexOf('/');
+            if (separator <= 0 || separator == component.length() - 1) {
+                continue;
+            }
+            if (matchesAccessibilityService(
+                    expectedPackage,
+                    expectedClass,
+                    component.substring(0, separator),
+                    component.substring(separator + 1)
+            )) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isValidHttpUrl(String value) {

@@ -32,4 +32,17 @@ public final class MainActivityTest {
                 PACKAGE, SERVICE, PACKAGE, null
         ));
     }
+
+    @Test
+    public void readsExactServiceFromSecureSettingFallback() {
+        String enabled = "com.openai.chatgpt/.ScreenService:"
+                + PACKAGE + "/.ExitGuideAccessibilityService";
+        assertTrue(MainActivity.enabledSettingContains(PACKAGE, SERVICE, enabled));
+        assertFalse(MainActivity.enabledSettingContains(
+                PACKAGE,
+                SERVICE,
+                "com.exitguide.ai/.ExitGuideAccessibilityService"
+        ));
+        assertFalse(MainActivity.enabledSettingContains(PACKAGE, SERVICE, null));
+    }
 }
