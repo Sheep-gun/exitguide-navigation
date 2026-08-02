@@ -62,7 +62,8 @@ def main() -> None:
                 "after": _inventory(database),
                 "policy": (
                     "Raw screens, transitions, failures, and shadow routes were retained as "
-                    "learning evidence; only verified_candidate and approved routes are serving."
+                    "learning evidence; verified_candidate, verified, and trusted routes are "
+                    "ranked evidence. Production route replay remains disabled."
                 ),
             },
             indent=2,

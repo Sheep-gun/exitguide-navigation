@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "artifact_kind": "portable_android_control_navigation_index",
+  "source": {
+    "project": "google-research/android_control",
+    "url": "https://storage.googleapis.com/gresearch/android_control/",
+    "license": "Apache-2.0",
+    "official_shards": 20,
+    "official_success_episodes": 15283
+  },
+  "normalization": {
+    "records": 83848,
+    "fts_records": 83848,
+    "transition_metadata_records": 83848,
+    "terminal_steps": 15274,
+    "failure_steps": 0,
+    "raw_screenshots_included": false,
+    "raw_input_text_included": false
+  },
+  "semantic_index": {
+    "kind": "signed-feature-hash-bilingual-function-cues",
+    "dimensions": 64,
+    "vectors": 83848,
+    "external_embedding_service_required": false
+  },
+  "artifact": {
+    "relative_path": ".artifacts/android-control/navigation-examples.sqlite",
+    "bytes": 1242562560,
+    "sha256": "96d3d47e5e707da66cd5b57f1cc32ab2bade62b647e09d9a28a2b7a6d2875e71",
+    "built_at": "2026-08-02T01:06:55+00:00",
+    "sqlite_integrity_check": "ok",
+    "git_tracked": false,
+    "portable_backup_required": true
+  },
+  "runtime_contract": {
+    "retrieval_adapter": "app.services.android_control_index.AndroidControlIndex",
+    "top_k_default": 5,
+    "evidence_only": true,
+    "never_replay_as_macro": true
+  }
+}

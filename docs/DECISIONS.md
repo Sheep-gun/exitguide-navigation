@@ -50,7 +50,7 @@ Tradeoff: AndroidControl does not guarantee robust behavior on unseen apps. EGL 
 
 ## D007: Final-Destination-First Function Graph Exploration
 
-Decision: Convert the user's purpose to a canonical terminal function before navigation. If an exact app/version/locale verified route is absent, explore safe menu branches under a strict time/action/depth budget and persist the discovered route as untrusted `shadow` evidence. Independently reviewed clean evidence may promote it only to provisional `verified_candidate`; formal `approved` status still requires its own explicit review and performance sample gate.
+Decision: Convert the user's purpose to a canonical terminal function before navigation. If an exact app/version/locale verified route is absent, explore safe menu branches under a strict time/action/depth budget and persist the discovered route as untrusted `shadow` evidence. Independent clean validations promote it through `verified_candidate` and `verified`; only the configured repeated performance gate may promote it to `trusted`. Every grade remains retrieval evidence rather than a replay command.
 
 Reason: Greedy next-button prediction can drift without knowing the destination. A terminal function and explicit DFS path let EGL compare branches, backtrack, reuse discoveries, and detect UI changes while keeping the user's original purpose stable.
 

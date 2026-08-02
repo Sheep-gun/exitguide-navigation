@@ -26,7 +26,14 @@ from app.schemas import (
 )
 from app.services.provider_errors import compact_text, response_error_detail
 from app.services.android_control_index import AndroidControlEvidence, AndroidControlIndex
-from app.services.navigation_semantics import candidate_contexts, infer_goal_plan, rank_candidates
+from app.services.navigation_gold_retrieval import HumanGoldEvidenceIndex
+from app.services.navigation_policy_reranker import NavigationPolicyReranker
+from app.services.navigation_semantics import (
+    candidate_contexts,
+    infer_goal_plan,
+    is_navigation_candidate_noise,
+    rank_candidates,
+)
 from app.services.navigation_function_catalog import (
     GOAL_CONCRETE_SCORE_FLOOR,
     GOAL_GOVERNANCE_BLOCKED_INTENT,
@@ -34,6 +41,7 @@ from app.services.navigation_function_catalog import (
     get_navigation_function_catalog,
 )
 from app.services.navigation_performance import StageMeasurement
+from app.services.navigation_vlm import ExaoneNavigationVlm, apply_visual_hints
 from app.services.universal_navigation_explorer import (
     _looks_like_reauthentication_candidate,
     explore_universal_navigation,
@@ -51,6 +59,14 @@ from app.services.universal_navigation_graph import (
 
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 RECOMMEND_NAVIGATION_TOOL = "recommend_navigation_action"
+PLAN_NAVIGATION_STEP_TOOL = "plan_navigation_step"
+PLANNER_COMMANDS = (
+    "click",
+    "scroll_forward",
+    "back",
+    "wait_and_observe",
+    "stop_for_user",
+)
 DECISION_STRING_FIELDS = (
     "goal_interpretation",
     "target_function",
@@ -411,6 +427,120 @@ class ExaoneNavigationDecisionProvider(NavigationDecisionProvider):
         except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise RuntimeError(f"K-EXAONE returned an invalid navigation decision: {compact_text(str(exc))}") from exc
 
+    def plan_exploration_step(
+        self,
+        *,
+        goal_text: str,
+        request: UniversalNavigationObserveRequest,
+        candidates: list[UniversalNavigationCandidate],
+        graph_hints: list[dict[str, object]],
+        demonstrations: list[AndroidControlEvidence],
+        allow_scroll: bool,
+        allow_back: bool,
+        allow_mark_destination: bool = False,
+    ) -> dict[str, object]:
+        """Use one strict Hermes call to choose the next bounded exploration action.
+
+        Gold, app-graph transitions, the function catalog, and AndroidControl
+        are evidence.  None of them are replayed as a macro.  Python supplies
+        the allowlist and remains the final safety/execution boundary.
+        """
+        if not self.settings.exaone_api_key or not self.settings.exaone_model:
+            raise RuntimeError("K-EXAONE API configuration is unavailable")
+        candidate_ids = [candidate.element_id for candidate in candidates]
+        allowed_commands = ["stop_for_user", "wait_and_observe"]
+        if candidate_ids:
+            allowed_commands.insert(0, "click")
+        if allow_scroll:
+            allowed_commands.insert(0, "scroll_forward")
+        if allow_back:
+            allowed_commands.insert(0, "back")
+        if allow_mark_destination:
+            allowed_commands.insert(0, "mark_destination")
+        payload = {
+            "model": self.settings.exaone_model,
+            "messages": [
+                {"role": "system", "content": _planner_system_prompt()},
+                {
+                    "role": "user",
+                    "content": _build_planner_prompt(
+                        goal_text=goal_text,
+                        request=request,
+                        candidates=candidates,
+                        graph_hints=graph_hints,
+                        demonstrations=demonstrations,
+                        allowed_commands=allowed_commands,
+                    ),
+                },
+            ],
+            "tools": [_planner_tool(candidate_ids, allowed_commands)],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": PLAN_NAVIGATION_STEP_TOOL},
+            },
+            "parallel_tool_calls": False,
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "max_tokens": 800,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        response = None
+        invalid_error: Exception | None = None
+        per_attempt_timeout = max(
+            2.0,
+            float(self.settings.navigation_agent_timeout_seconds) / 2.0,
+        )
+        for attempt in range(2):
+            try:
+                response = _post_with_total_deadline(
+                    f"{self.settings.exaone_base_url.rstrip('/')}/chat/completions",
+                    headers=_exaone_headers(self.settings),
+                    payload=payload,
+                    timeout_seconds=per_attempt_timeout,
+                )
+                response.raise_for_status()
+                message = response.json()["choices"][0]["message"]
+                plan = _planner_arguments(message)
+                _validate_planner_arguments(
+                    plan,
+                    candidate_ids=candidate_ids,
+                    allowed_commands=allowed_commands,
+                )
+                return plan
+            except httpx.HTTPStatusError as exc:
+                raise RuntimeError(
+                    f"K-EXAONE HTTP {exc.response.status_code}: {response_error_detail(exc.response)}"
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise RuntimeError(f"K-EXAONE connection failed: {compact_text(str(exc))}") from exc
+            except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+                invalid_error = exc
+                if attempt == 0:
+                    payload["messages"] = [
+                        {
+                            "role": "system",
+                            "content": (
+                                _planner_system_prompt()
+                                + " This is a schema-repair retry: emit exactly one "
+                                "plan_navigation_step tool call with complete JSON arguments."
+                            ),
+                        },
+                        payload["messages"][1],
+                    ]
+                    payload["temperature"] = 0.0
+                    # A small minority of K-EXAONE Hermes responses end in a
+                    # syntactically truncated string even though the action
+                    # itself is otherwise valid. Keep a single model-owned
+                    # repair attempt, but give that repair enough output room
+                    # to finish the complete schema instead of falling back to
+                    # a Python guess.
+                    payload["max_tokens"] = 1200
+                    continue
+        raise RuntimeError(
+            "K-EXAONE returned an invalid planner action after one schema repair: "
+            f"{compact_text(str(invalid_error))}"
+        ) from invalid_error
+
 
 class DeterministicNavigationDecisionProvider(NavigationDecisionProvider):
     mode = "deterministic_fallback"
@@ -482,6 +612,19 @@ def observe_universal_navigation(
     repository = repository or get_universal_navigation_repository(settings)
     screen_started = time.perf_counter()
     candidates = extract_navigation_candidates(request)
+    visual_hint = None
+    visual_warning = ""
+    try:
+        visual_hint = ExaoneNavigationVlm(settings).analyze(
+            request=request,
+            candidates=candidates,
+        )
+        candidates = apply_visual_hints(candidates, visual_hint)
+    except RuntimeError as exc:
+        # Visual reasoning is an ambiguity-only supplement. Accessibility and
+        # on-device OCR remain sufficient for a safe fallback when the local
+        # VLM is stopped or still loading.
+        visual_warning = f"EXAONE 4.5 시각 보조를 사용할 수 없어 구조·OCR 정보만 사용합니다: {compact_text(str(exc), 140)}"
     timing["screen_analysis_ms"] += (time.perf_counter() - screen_started) * 1000
     db_started = time.perf_counter()
     observation = repository.observe(request, candidates)
@@ -572,8 +715,12 @@ def observe_universal_navigation(
             observation=observation,
             target_function=target_function,
         )
-        if bool(gold_update.get("transition_recorded", False)):
-            graph_update = graph_update.model_copy(update={"transition_recorded": True})
+        graph_update = graph_update.model_copy(
+            update={
+                "transition_recorded": bool(gold_update.get("transition_recorded", False)),
+                "transition_discarded": bool(gold_update.get("transition_discarded", False)),
+            }
+        )
         timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
         response = UniversalNavigationObserveResponse(
             request_id=request.request_id,
@@ -731,43 +878,204 @@ def observe_universal_navigation(
             screen_fingerprint=observation.screen_fingerprint,
         )
         timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
-    if serving_route_match is None:
-        # AndroidControl is a cold-start prior only.  It never outranks an
-        # independently validated app-specific function graph.
+    # Every planner call receives the same evidence hierarchy. A verified
+    # route is represented as strong evidence, never silently replayed by the
+    # model-facing path. AndroidControl remains the weakest cold-start prior.
+    if serving_route_match is None or not settings.navigation_verified_route_replay_enabled:
         db_started = time.perf_counter()
         demonstrations = _android_control_demonstrations(settings, request, candidates)
         graph_hints = repository.graph_hints(observation.screen_fingerprint)
+        runtime_state = repository.exploration(request.session_id)
+        if runtime_state is not None and runtime_state.path:
+            graph_hints.insert(
+                0,
+                {
+                    "source": "current_session_history",
+                    "evidence_only": True,
+                    "never_replay_as_macro": True,
+                    "steps": [
+                        {
+                            "screen_fingerprint": sanitize_text(
+                                str(step.get("from_screen_fingerprint", ""))
+                            ),
+                            "selected_label": sanitize_text(str(step.get("label", ""))),
+                            "selected_role": sanitize_text(str(step.get("role", ""))),
+                            "semantic_functions": [
+                                sanitize_text(str(value))
+                                for value in step.get("function_ids", [])
+                                if value
+                            ],
+                            "outcome": "pending" if step.get("pending") else "navigated",
+                            "next_screen_fingerprint": sanitize_text(
+                                str(step.get("expected_to_screen_fingerprint", ""))
+                            ),
+                        }
+                        for step in runtime_state.path[-8:]
+                    ],
+                },
+            )
+        if settings.navigation_gold_retrieval_enabled:
+            gold_evidence = HumanGoldEvidenceIndex(repository.database_path).search(
+                goal_text=request.goal_text,
+                target_function=goal_plan.terminal_function,
+                app_package=request.app_package,
+                app_version=request.app_version,
+                locale=request.locale,
+                screen_text=" ".join(
+                    part
+                    for part in (request.screen.window_title, request.screen.activity_name)
+                    if part
+                ),
+                candidate_labels=(candidate.label for candidate in candidates),
+                top_k=settings.navigation_gold_retrieval_top_k,
+            )
+            graph_hints[0:0] = [item.prompt_payload() for item in gold_evidence]
+        if visual_hint is not None:
+            graph_hints.insert(0, visual_hint.prompt_payload())
+        if serving_route_match is not None:
+            route, step = serving_route_match
+            graph_hints.insert(
+                0,
+                {
+                    "source": "human_gold_or_verified_route",
+                    "evidence_only": True,
+                    "route_id": route.route_id,
+                    "lifecycle_status": route.lifecycle_status,
+                    "target_function": route.target_function,
+                    "candidate_label": str(step.get("label", "")),
+                    "candidate_element_key": str(step.get("element_key", "")),
+                    "function_ids": list(step.get("function_ids", [])),
+                },
+            )
         timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
     if request.operation_mode == "explore":
-        def semantic_tiebreaker(allowed_candidates: list[UniversalNavigationCandidate]) -> str | None:
-            # The model is only a last-resort tie-breaker here.  A slow model
-            # call must not consume most of the physical-device exploration
-            # budget before deterministic graph search gets another screen.
-            tiebreaker_settings = settings.model_copy(
-                update={
-                    "exaone_timeout_seconds": min(
-                        settings.exaone_timeout_seconds,
-                        5.0,
-                    )
-                }
-            )
-            provider = _provider_for(tiebreaker_settings)
-            if provider.mode != "exaone":
-                return None
-            model_started = time.perf_counter()
-            try:
-                tie_decision = provider.decide(
-                    goal_text=request.goal_text,
-                    request=request,
-                    candidates=allowed_candidates,
-                    graph_hints=graph_hints,
-                    demonstrations=demonstrations,
+        semantic_planner = None
+        planner_trace_ids: list[str] = []
+        planner_settings = settings.model_copy(
+            update={
+                "navigation_agent_timeout_seconds": min(
+                    settings.navigation_agent_timeout_seconds,
+                    35.0,
                 )
-            except RuntimeError:
-                return None
-            finally:
-                timing["model_decision_ms"] += (time.perf_counter() - model_started) * 1000
-            return tie_decision.selected_element_id
+            }
+        )
+        planner_provider = _provider_for(planner_settings)
+        policy_reranker = _policy_reranker(planner_settings)
+        if isinstance(planner_provider, ExaoneNavigationDecisionProvider):
+            def semantic_planner(
+                allowed_candidates: list[UniversalNavigationCandidate],
+                allow_scroll: bool,
+                allow_back: bool,
+                allow_mark_destination: bool,
+            ) -> dict[str, object] | None:
+                model_started = time.perf_counter()
+                retrieval_id: str | None = None
+                try:
+                    planner_candidates = allowed_candidates
+                    planner_hints = graph_hints
+                    if policy_reranker is not None and allowed_candidates:
+                        ranked_policy = policy_reranker.rank(
+                            goal_text=request.goal_text,
+                            request=request,
+                            candidates=allowed_candidates,
+                            graph_hints=graph_hints,
+                            demonstrations=demonstrations,
+                        )
+                        planner_candidates = policy_reranker.shortlist(
+                            ranked_policy,
+                            max_candidates=max(
+                                1,
+                                planner_settings.navigation_policy_reranker_max_candidates,
+                            ),
+                            decisive_score=planner_settings.navigation_policy_reranker_decisive_score,
+                            decisive_margin=planner_settings.navigation_policy_reranker_decisive_margin,
+                        )
+                        planner_hints = [
+                            {
+                                "source": "learned_policy_reranker",
+                                "evidence_only": True,
+                                "never_executes_actions": True,
+                                "trained_from_human_gold_preferences": True,
+                                "shortlisted_candidate_ids": [
+                                    candidate.element_id for candidate in planner_candidates
+                                ],
+                                "candidate_scores": [
+                                    item.prompt_payload() for item in ranked_policy[:10]
+                                ],
+                            },
+                            *graph_hints,
+                        ]
+                    retrieval_id = repository.record_retrieval_trace(
+                        request_id=request.request_id,
+                        session_id=request.session_id,
+                        screen_fingerprint=observation.screen_fingerprint,
+                        goal_text=request.goal_text,
+                        target_function=goal_plan.terminal_function or goal_plan.intent,
+                        operation_mode=request.operation_mode,
+                        candidates=planner_candidates,
+                        evidence_hints=planner_hints,
+                        android_control_examples=demonstrations,
+                        planner_model=planner_settings.exaone_model,
+                    )
+                    planner_trace_ids.append(retrieval_id)
+                    plan = planner_provider.plan_exploration_step(
+                        goal_text=request.goal_text,
+                        request=request,
+                        candidates=planner_candidates,
+                        graph_hints=planner_hints,
+                        demonstrations=demonstrations,
+                        allow_scroll=allow_scroll,
+                        allow_back=allow_back,
+                        allow_mark_destination=allow_mark_destination,
+                    )
+                    selected_id = str(plan.get("selected_element_id", "") or "")
+                    selected = next(
+                        (
+                            candidate
+                            for candidate in planner_candidates
+                            if candidate.element_id == selected_id
+                        ),
+                        None,
+                    )
+                    repository.finalize_retrieval_trace(
+                        retrieval_id,
+                        planner_command=str(plan.get("command", "")),
+                        selected_element_id=selected_id or None,
+                        confidence=float(plan.get("confidence", 0.0) or 0.0),
+                        risk_level="low" if selected is None else selected.risk_level,
+                        outcome="planner_validated_pending_safety",
+                    )
+                    return plan
+                except RuntimeError as exc:
+                    # Production exploration is model-owned.  Falling back
+                    # to an automatic heuristic click here would violate the
+                    # contract that K-EXAONE decides every executed step.
+                    # Fail closed and hand control to the user instead.
+                    failed_plan = {
+                        "command": "stop_for_user",
+                        "selected_element_id": "",
+                        "alternative_candidate_ids": [],
+                        "target_function": goal_plan.terminal_function or "",
+                        "reason": (
+                            "K-EXAONE Planner 응답을 검증하지 못해 자동 탐색을 "
+                            f"중단했습니다: {compact_text(str(exc))}"
+                        ),
+                        "expected_next_screen": "",
+                        "instruction": "잠시 후 다시 시도하거나 현재 화면에서 직접 선택해 주세요.",
+                        "confidence": 0.0,
+                    }
+                    if retrieval_id is not None:
+                        repository.finalize_retrieval_trace(
+                            retrieval_id,
+                            planner_command="stop_for_user",
+                            selected_element_id=None,
+                            confidence=0.0,
+                            risk_level="low",
+                            outcome="planner_error_fail_closed",
+                        )
+                    return failed_plan
+                finally:
+                    timing["model_decision_ms"] += (time.perf_counter() - model_started) * 1000
 
         response = explore_universal_navigation(
             request=request,
@@ -778,8 +1086,25 @@ def observe_universal_navigation(
             observation=observation,
             graph_update=graph_update,
             demonstrations=demonstrations,
-            semantic_tiebreaker=semantic_tiebreaker,
+            semantic_planner=semantic_planner,
         )
+        if visual_warning:
+            response = response.model_copy(update={"warnings": [*response.warnings, visual_warning]})
+        if planner_trace_ids:
+            recommendation_id = (
+                None if response.recommendation is None else response.recommendation.recommendation_id
+            )
+            repository.record_retrieval_execution(
+                planner_trace_ids[-1],
+                safety_action=response.automation.action,
+                safety_allowed=response.automation.safe_to_execute,
+                outcome=(
+                    f"{response.status}:{response.failure_reason}"
+                    if response.failure_reason
+                    else response.status
+                ),
+                recommendation_id=recommendation_id,
+            )
         return _attach_performance(
             request=request,
             response=response,
@@ -810,7 +1135,7 @@ def observe_universal_navigation(
     db_started = time.perf_counter()
     cached = repository.cached_action(observation.screen_fingerprint, request.goal_text)
     timing["db_lookup_ms"] += (time.perf_counter() - db_started) * 1000
-    warnings: list[str] = []
+    warnings: list[str] = [visual_warning] if visual_warning else []
 
     decision_mode = "graph_cache"
     decision = _decision_from_cache(cached, candidates, request.goal_text)
@@ -1091,6 +1416,8 @@ def extract_navigation_candidates(
             structural_only = True
         if not label:
             continue
+        if is_navigation_candidate_noise(label):
+            continue
         key = _element_key(
             element.view_id,
             element.role,
@@ -1322,6 +1649,24 @@ def _provider_for(settings: Settings) -> NavigationDecisionProvider:
     return DeterministicNavigationDecisionProvider()
 
 
+def _policy_reranker(settings: Settings) -> NavigationPolicyReranker | None:
+    raw_path = settings.navigation_policy_reranker_path.strip()
+    if not raw_path:
+        return None
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = get_resource_root() / path
+    if not path.is_file():
+        return None
+    try:
+        return NavigationPolicyReranker.load(path)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        # A missing or corrupt optional helper must never turn into an
+        # unvalidated click. K-EXAONE receives the ordinary safe candidate set
+        # and the downstream safety controller still applies.
+        return None
+
+
 def _apply_confidence_gate(
     decision: AgentDecision,
     *,
@@ -1487,6 +1832,243 @@ def _guard_exaone_decision(
             f"'{selected_candidate.label}'보다 명확히 높습니다."
         )
     return decision, None
+
+
+def _planner_system_prompt() -> str:
+    return (
+        "You are K-EXAONE, the step planner for ExitGuideLab's Android Navigation Agent. "
+        "Call plan_navigation_step exactly once; never answer in ordinary text. "
+        "First infer the final destination and the intermediate function that should advance toward it. "
+        "Human Gold and app graph records are strong demonstrations, not macros or coordinates to replay. "
+        "AndroidControl is only a cross-app prior. Choose only a command and candidate explicitly allowed "
+        "by the input. Prefer reversible, read-only navigation. Never execute payment, deletion, cancellation "
+        "confirmation, consent, credential submission, or another irreversible action. At such a boundary use "
+        "mark_destination when the full screen proves the requested final action is now visible, then let the "
+        "user press that final button. Use stop_for_user for login, profile selection, CAPTCHA, uncertainty, or "
+        "another user-owned boundary. Use scroll_forward only for bounded menu discovery, not an infinite content feed."
+    )
+
+
+def _build_planner_prompt(
+    *,
+    goal_text: str,
+    request: UniversalNavigationObserveRequest,
+    candidates: list[UniversalNavigationCandidate],
+    graph_hints: list[dict[str, object]],
+    demonstrations: list[AndroidControlEvidence],
+    allowed_commands: list[str],
+) -> str:
+    plan = infer_goal_plan(goal_text)
+    contexts = candidate_contexts(
+        request=request,
+        candidates=candidates,
+        demonstrations=demonstrations,
+        plan=plan,
+    )
+    visible_text = [
+        sanitize_text(element.text or element.content_description)
+        for element in request.screen.elements
+        if element.visible and not element.password and (element.text or element.content_description)
+    ][:100]
+    current_session_history: list[dict[str, object]] = []
+    retrieval_hints: list[dict[str, object]] = []
+    for hint in graph_hints:
+        if hint.get("source") == "current_session_history":
+            steps = hint.get("steps", [])
+            if isinstance(steps, list):
+                current_session_history.extend(
+                    dict(step) for step in steps if isinstance(step, dict)
+                )
+        else:
+            retrieval_hints.append(hint)
+    payload = {
+        "user_goal": sanitize_text(goal_text),
+        "goal_plan": plan.prompt_payload(),
+        "app": {
+            "package": request.app_package,
+            "version": request.app_version,
+            "locale": request.locale,
+            "activity": sanitize_text(request.screen.activity_name),
+            "window_title": sanitize_text(request.screen.window_title),
+        },
+        "visible_text": visible_text,
+        "safe_action_candidates": [
+            contexts[candidate.element_id].prompt_payload(candidate)
+            for candidate in candidates
+        ],
+        "current_session_history": current_session_history[-8:],
+        "human_gold_and_app_graph_evidence": retrieval_hints,
+        "android_control_cross_app_priors": [
+            item.prompt_payload() for item in demonstrations
+        ],
+        "allowed_commands": allowed_commands,
+        "rules": [
+            "The final destination must be inferred before choosing the next action.",
+            "A click must select exactly one ID from safe_action_candidates.",
+            "A non-click command must use an empty selected_element_id.",
+            "Gold is evidence for semantic choice, never permission to replay a route.",
+            "Use current_session_history to identify which intermediate stage has already been reached.",
+            "Prefer a currently visible label whose meaning matches a stage-aligned historical choice; IDs and coordinates never transfer across screens.",
+            "For AndroidControl evidence with target_present_on_current_screen=false, use only its future-function direction; do not map its historical target onto any current candidate.",
+            "When mark_destination is allowed and the whole current screen already is the requested functional surface, choose mark_destination instead of another row.",
+            "Do not choose a content item, video, post, product, or feed row for an account/settings goal.",
+            "Stop for the user at all state-changing or credential-entry boundaries.",
+        ],
+    }
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def _planner_tool(candidate_ids: list[str], allowed_commands: list[str]) -> dict[str, Any]:
+    selected_schema: dict[str, Any] = {
+        "type": "string",
+        "enum": ["", *candidate_ids],
+        "description": (
+            "Required target ID for command=click. It MUST be the empty string for "
+            "scroll_forward, back, wait_and_observe, mark_destination, or stop_for_user."
+        ),
+    }
+    return {
+        "type": "function",
+        "function": {
+            "name": PLAN_NAVIGATION_STEP_TOOL,
+            "description": "Select one bounded next action from the server-provided safety allowlist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "target_function": {"type": "string", "maxLength": 120},
+                    "command": {
+                        "type": "string",
+                        "enum": allowed_commands,
+                        "description": (
+                            "Choose exactly one allowed action. mark_destination means the current "
+                            "screen itself is the requested final functional surface; it never clicks "
+                            "the final control."
+                        ),
+                    },
+                    "selected_element_id": selected_schema,
+                    "alternative_candidate_ids": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": candidate_ids},
+                        "maxItems": 2,
+                        "uniqueItems": True,
+                    },
+                    "reason": {"type": "string", "maxLength": 240},
+                    "expected_next_screen": {"type": "string", "maxLength": 160},
+                    "instruction": {"type": "string", "maxLength": 160},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                "required": [
+                    "target_function",
+                    "command",
+                    "selected_element_id",
+                    "reason",
+                    "expected_next_screen",
+                    "instruction",
+                    "confidence",
+                ],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def _planner_arguments(message: dict[str, Any]) -> dict[str, object]:
+    tool_calls = message.get("tool_calls")
+    raw_arguments: object
+    if tool_calls is not None and tool_calls != []:
+        if not isinstance(tool_calls, list) or len(tool_calls) != 1:
+            raise ValueError("K-EXAONE planner must return exactly one tool call")
+        function = tool_calls[0].get("function") if isinstance(tool_calls[0], dict) else None
+        if not isinstance(function, dict) or function.get("name") != PLAN_NAVIGATION_STEP_TOOL:
+            raise ValueError("unexpected planner tool function")
+        raw_arguments = function.get("arguments")
+    else:
+        # Some Hermes deployments serialize the sole call into the exact
+        # <tool_call> content wrapper even when tool_choice names a function.
+        # Accept that transport representation, but still reject ordinary
+        # prose, multiple JSON objects, unknown tool names, and extra wrappers.
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("K-EXAONE planner must return exactly one tool call")
+        parsed = _parse_single_json_object(content)
+        raw_arguments = _unwrap_planner_wrapper(parsed)
+    if isinstance(raw_arguments, str):
+        payload = _parse_single_json_object(raw_arguments)
+    elif isinstance(raw_arguments, dict):
+        payload = raw_arguments
+    else:
+        raise ValueError("planner tool arguments are missing")
+    return {str(key): value for key, value in payload.items()}
+
+
+def _unwrap_planner_wrapper(payload: dict[str, Any]) -> dict[str, Any]:
+    keys = set(payload)
+    if keys == {PLAN_NAVIGATION_STEP_TOOL}:
+        arguments = payload[PLAN_NAVIGATION_STEP_TOOL]
+        if not isinstance(arguments, dict):
+            raise ValueError("planner wrapper must contain an object")
+        return arguments
+    if keys == {"name", "arguments"}:
+        if payload["name"] != PLAN_NAVIGATION_STEP_TOOL:
+            raise ValueError(f"unexpected planner tool function: {payload['name']!r}")
+        arguments = payload["arguments"]
+        if isinstance(arguments, str):
+            return _parse_single_json_object(arguments)
+        if not isinstance(arguments, dict):
+            raise ValueError("wrapped planner arguments must be an object or encoded object")
+        return arguments
+    if keys & {"name", "arguments", "function", "tool", "tool_calls"}:
+        raise ValueError("unsupported or non-exact planner tool-call wrapper")
+    return payload
+
+
+def _validate_planner_arguments(
+    plan: dict[str, object],
+    *,
+    candidate_ids: list[str],
+    allowed_commands: list[str],
+) -> None:
+    required = {
+        "target_function",
+        "command",
+        "selected_element_id",
+        "reason",
+        "expected_next_screen",
+        "instruction",
+        "confidence",
+    }
+    allowed = required | {"alternative_candidate_ids"}
+    if not required <= set(plan) or not set(plan) <= allowed:
+        raise ValueError("planner arguments do not match the strict Hermes schema")
+    for field in required - {"confidence"}:
+        if type(plan[field]) is not str:
+            raise ValueError(f"planner field {field} must be a string")
+    confidence = plan["confidence"]
+    if type(confidence) not in {int, float} or not math.isfinite(float(confidence)):
+        raise ValueError("planner confidence must be finite")
+    if not 0.0 <= float(confidence) <= 1.0:
+        raise ValueError("planner confidence is outside the 0-1 range")
+    command = str(plan["command"])
+    selected = str(plan["selected_element_id"]).strip()
+    if command not in allowed_commands:
+        raise ValueError("planner command is outside the server allowlist")
+    if command == "click" and selected not in candidate_ids:
+        raise ValueError("planner click target is outside the candidate allowlist")
+    if command != "click" and selected:
+        raise ValueError("non-click planner commands cannot select an element")
+    alternatives = plan.get("alternative_candidate_ids", [])
+    if not isinstance(alternatives, list) or len(alternatives) > 2:
+        raise ValueError("planner alternatives must contain at most two candidate IDs")
+    if any(type(item) is not str or item not in candidate_ids for item in alternatives):
+        raise ValueError("planner alternative is outside the candidate allowlist")
+    normalized_alternatives = list(dict.fromkeys(str(item) for item in alternatives if item != selected))
+    if len(normalized_alternatives) != len(alternatives):
+        raise ValueError("planner alternatives must be unique and exclude the primary target")
+    for field in ("target_function", "reason", "expected_next_screen", "instruction"):
+        plan[field] = sanitize_text(str(plan[field]))
+    plan["selected_element_id"] = selected
+    plan["alternative_candidate_ids"] = normalized_alternatives
+    plan["confidence"] = float(confidence)
 
 
 def _system_prompt() -> str:

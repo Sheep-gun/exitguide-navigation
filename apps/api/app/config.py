@@ -7,7 +7,9 @@ class Settings(BaseSettings):
     ocr_provider: str = "mock"
     llm_provider: str = "mock"
     navigation_agent_provider: str = "mock"
-    navigation_agent_allow_fallback: bool = True
+    # Production navigation is model-owned. If K-EXAONE cannot return a valid
+    # Hermes action, fail closed instead of silently issuing a heuristic click.
+    navigation_agent_allow_fallback: bool = False
     navigation_agent_timeout_seconds: float = 10.0
     navigation_graph_db_path: str = ""
     navigation_function_db_path: str = ""
@@ -17,8 +19,20 @@ class Settings(BaseSettings):
     navigation_exploration_max_depth: int = 9
     android_control_index_path: str = ".artifacts/android-control/navigation-examples.sqlite"
     android_control_retrieval_top_k: int = 5
+    navigation_gold_retrieval_enabled: bool = True
+    navigation_gold_retrieval_top_k: int = 5
+    navigation_policy_reranker_path: str = ""
+    navigation_policy_reranker_max_candidates: int = 5
+    navigation_policy_reranker_decisive_score: float = 0.62
+    navigation_policy_reranker_decisive_margin: float = 0.07
     navigation_agent_min_confidence: float = 0.55
     navigation_agent_min_candidate_margin: float = 0.07
+    navigation_verified_route_replay_enabled: bool = False
+    navigation_vlm_enabled: bool = True
+    navigation_vlm_base_url: str = "http://127.0.0.1:8000/v1"
+    navigation_vlm_model: str = "EXAONE-4.5-33B"
+    navigation_vlm_timeout_seconds: float = 20.0
+    navigation_vlm_cache_path: str = ".artifacts/navigation-vlm/cache.sqlite"
     max_upload_bytes: int = 8_000_000
     allowed_image_content_types: str = "image/jpeg,image/png,image/webp"
     naver_clova_ocr_url: str = ""

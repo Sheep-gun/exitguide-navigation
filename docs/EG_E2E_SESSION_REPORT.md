@@ -26,9 +26,10 @@ If multiple physical sessions for the package were created after the baseline,
 pass the exact client session ID with `--session-id`.  The ID is used only for
 selection and is represented in output by a SHA-256-derived `session_ref`.
 
-The report distinguishes approved route reuse (`route_cache`), learned graph
-cache use, function-graph exploration, deterministic fallback, and EXAONE
-fallback.  A newly discovered route is counted only when its app/version,
+The report distinguishes legacy trusted-route telemetry (`route_cache`), learned graph
+evidence, function-graph exploration, deterministic fallback, and EXAONE
+fallback. Production route replay is disabled; the legacy label is retained
+only so old session rows remain reportable. A newly discovered route is counted only when its app/version,
 goal key, target function, and creation interval match the selected session;
 the output also confirms whether it remains shadow/provisional.
 

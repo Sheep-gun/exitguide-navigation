@@ -9,7 +9,7 @@ EGL Universal Navigation은 공개 UI 화면 모음인 Rico·MobileViews를 사�
 
 ## EGL에서 사용하는 정보
 
-원본 약 50GB를 API 요청 때 직접 읽지 않습니다. 변환 시 스크린샷과 입력 문자열을 버리고 다음 필드만 작은 SQLite FTS5 인덱스에 저장합니다.
+원본 약 50GB를 API 요청 때 직접 읽지 않습니다. 변환 시 스크린샷과 실제 입력 문자열을 버리고 다음 필드를 portable SQLite 인덱스에 저장합니다.
 
 ```text
 episode_id
@@ -21,9 +21,38 @@ target_text
 screen_text
 app_name
 source_split
+screen_function
+action_function
+next_screen_text
+success
+went_back
+terminal
+risk_level
+failure_reason
 ```
 
-`goal → step_instruction → target_text`를 현재 사용자 목적과 화면 후보에 검색해 K-EXAONE 프롬프트에 최대 5개 시연을 제공합니다. 시연은 특정 앱의 고정 경로가 아니라 `계정 진입 → 결제/멤버십 관리 → 해지` 같은 앱 간 공통 기능 순서를 판단하는 참고 근거입니다.
+같은 episode에서 다음 step의 `screen_text`를 현재 행동의 `next_screen_text`로 연결해 `screen → action → next_screen` 전이를 복원합니다. 성공 시연의 마지막 step은 `terminal=1`, back 행동은 `went_back=1`로 표시하며 결제·삭제·해지·토글 등은 위험도를 별도 기록합니다. AndroidControl 원본은 성공 시연 모음이므로 원본에 없는 실패를 임의로 만들지 않고 `failure_reason`은 비워 둡니다. EGL 런타임에서 발생한 실제 실패는 기능 그래프와 학습 큐에 별도로 쌓입니다.
+
+`goal → screen/function → action → next_screen/function`을 현재 사용자 목적과 화면 후보에 검색해 K-EXAONE 프롬프트에 최대 5개 시연을 제공합니다. 시연은 특정 앱의 고정 경로가 아니라 `계정 진입 → 결제/멤버십 관리 → 해지` 같은 앱 간 공통 기능 순서를 판단하는 참고 근거입니다.
+
+검색은 FTS5 키워드 점수와 64차원 bilingual function-cue 의미 벡터를 결합합니다. 벡터는 외부 서비스 없이 재생성 가능하며, 현재 후보의 기능 태그와 맞지 않는 시연은 점수를 제한합니다.
+
+## 운영 인덱스 현황
+
+2026-08-02 A100 서버 기준:
+
+- 공식 shard: 20/20
+- 정규화 행동 단계: 83,848
+- FTS 행: 83,848
+- 의미 벡터: 83,848 × 64차원
+- 스키마: v3
+- SQLite `quick_check`: `ok`
+- 인덱스 SHA-256: `96d3d47e5e707da66cd5b57f1cc32ab2bade62b647e09d9a28a2b7a6d2875e71`
+- 생성 시각: `2026-08-02T01:06:55+00:00`
+- 재현·검증 manifest: `fixtures/android-control/official-index-manifest.v3.json`
+- 원본 shard는 서버에만 보존하고 Git에는 넣지 않음
+
+API 검색 경로는 실제 운영 설정의 `ANDROID_CONTROL_INDEX_PATH`를 사용한다. retrieval trace에는 AndroidControl 검색 실행 여부, Top-K 근거, K-EXAONE 입력 해시와 최종 Hermes 행동이 함께 남는다.
 
 ## 노트북 개발 기준선
 
@@ -85,6 +114,22 @@ NAVIGATION_AGENT_MIN_CANDIDATE_MARGIN=0.07
 ```
 
 변환기는 `input_text`의 실제 입력값을 인덱스에 복사하지 않으며 `text input`으로 치환합니다. 클릭 행동은 좌표를 포함하는 가장 작은 접근성 노드를 찾아 `target_text`로 변환합니다. 이메일·전화번호·토큰 패턴도 SQLite 적재 전에 마스킹합니다.
+
+전체 서버 다운로드·변환은 다음 재현 스크립트로 수행합니다.
+
+```bash
+scripts/Get-AndroidControl.sh --all --destination .artifacts/android-control/raw
+scripts/Build-AndroidControlServer.sh
+```
+
+`Build-AndroidControlServer.sh`는 전이 메타데이터와 의미 벡터를 함께 만들고 최종 파일의 SHA-256과 생성 시각 sidecar를 기록합니다. 기존 v1/v2 인덱스만 승격할 때에는 원본 shard 재다운로드 없이 다음 명령을 사용합니다.
+
+```bash
+python scripts/Build-AndroidControlSemanticVectors.py \
+  --index .artifacts/android-control/navigation-examples.sqlite
+```
+
+서버 종료 전 `Create-NavigationPortableBackup.py`가 이 인덱스, Navigation DB snapshot, 학습 JSONL/SQLite, 평가 결과, 재랭커와 재생성 코드를 하나의 checksum manifest archive로 묶습니다. 20개 원본 shard와 원본 화면 이미지는 archive에서 제외합니다.
 
 ## 정확도 가드레일
 

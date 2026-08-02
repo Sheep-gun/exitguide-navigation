@@ -416,6 +416,71 @@ def assert_automatic_click_requires_candidate_and_action_to_be_low_risk() -> Non
         assert response.recommendation is not None
         assert response.recommendation.risk_level == "low"
 
+        original_planner = agent_module.ExaoneNavigationDecisionProvider.plan_exploration_step
+
+        class PlannerActionRiskRepository(UniversalNavigationGraphRepository):
+            def observe(self, request, candidates):
+                planner_observation = super().observe(request, candidates)
+                self.last_observation = planner_observation
+                return planner_observation
+
+        def choose_rejected_settings(self, **kwargs):
+            planner_candidates = kwargs["candidates"]
+            assert planner_candidates
+            selected_id = planner_candidates[0].element_id
+            selected_action = production_repository.last_observation.actions_by_element_id[
+                selected_id
+            ]
+            production_repository.last_observation.actions_by_element_id[selected_id] = replace(
+                selected_action,
+                risk_level="medium",
+            )
+            return {
+                "command": "click",
+                "selected_element_id": selected_id,
+                "alternative_candidate_ids": [
+                    candidate.element_id for candidate in planner_candidates[1:]
+                ],
+                "target_function": "notification.marketing.disable",
+                "reason": "test planner selected Settings",
+                "expected_next_screen": "Settings",
+                "instruction": "Open Settings",
+                "confidence": 0.9,
+            }
+
+        agent_module.ExaoneNavigationDecisionProvider.plan_exploration_step = (
+            choose_rejected_settings
+        )
+        try:
+            production_repository = PlannerActionRiskRepository(root / "production-graph.sqlite")
+            production_response = observe_universal_navigation(
+                request_value.model_copy(
+                    update={
+                        "request_id": "dual-low-risk-model-boundary",
+                        "session_id": "dual-low-risk-model-boundary",
+                        "goal_text": "Turn off marketing notifications",
+                    }
+                ),
+                settings=settings.model_copy(
+                    update={
+                        "navigation_agent_provider": "exaone",
+                        "navigation_agent_allow_fallback": False,
+                        "exaone_api_key": "test-key",
+                        "exaone_model": "test-model",
+                    }
+                ),
+                repository=production_repository,
+            )
+        finally:
+            agent_module.ExaoneNavigationDecisionProvider.plan_exploration_step = original_planner
+
+        assert production_response.phase == "stopped", production_response.model_dump()
+        assert production_response.automation.safe_to_execute is False
+        assert production_response.automation.selected_label is None
+        assert (
+            production_response.failure_reason == "planner_action_failed_safety_check"
+        ), production_response.model_dump()
+
 
 def assert_delete_all_variants_are_destructive_final_actions() -> None:
     for label in ("전체삭제", "모두삭제", "일괄삭제", "Delete all"):
@@ -1989,9 +2054,7 @@ def assert_netflix_paid_subscription_prefers_account_over_catalog_content() -> N
         )
         assert physical.phase == "exploring", physical.model_dump()
         assert physical.automation.action == "click", physical.model_dump()
-        assert physical.automation.selected_label == (
-            "나\ufeff의 넷\ufeff플\ufeff릭\ufeff스"
-        ), physical.model_dump()
+        assert physical.automation.selected_label == "나의 넷플릭스", physical.model_dump()
 
     my_netflix_request = custom_request(
         session_id="netflix-physical-profile-gateway",
@@ -2031,7 +2094,7 @@ def assert_netflix_paid_subscription_prefers_account_over_catalog_content() -> N
         assert profile_gateway.phase == "exploring", profile_gateway.model_dump()
         assert profile_gateway.automation.action == "click", profile_gateway.model_dump()
         assert profile_gateway.automation.selected_label.startswith(
-            "프\ufeff로\ufeff필"
+            "프로필"
         ), profile_gateway.model_dump()
 
         account_menu = observe_universal_navigation(
@@ -3164,7 +3227,7 @@ def assert_netflix_signup_gateways_are_recognized() -> None:
         assert landing.phase == "destination_reached", landing.model_dump()
         assert landing.automation.action == "stop"
         assert landing.automation.selected_label is not None
-        assert landing.automation.selected_label.replace("\ufeff", "") == "시작하기"
+        assert landing.automation.selected_label == "시작하기"
 
     with TemporaryDirectory() as temporary_directory:
         repository, settings = environment(temporary_directory)
@@ -3290,6 +3353,7 @@ def environment(directory: str, *, max_actions: int = 16):
         navigation_exploration_timeout_seconds=55,
         navigation_exploration_max_actions=max_actions,
         navigation_exploration_max_depth=9,
+        navigation_verified_route_replay_enabled=True,
     )
     return repository, settings
 

@@ -275,14 +275,16 @@ K-EXAONE 제안 도구는 알려진 function ID와 실제 실패 case ID만 허�
 
 자동 탐색으로 성공해 보이는 경로도 처음부터 재사용하지 않는다.
 
-| 상태 | 의미 | 안내에 사용 |
+| 상태 | 의미 | K-EXAONE 검색 근거에 사용 |
 |---|---|---|
 | `shadow` | 새로 발견됐거나 표본이 부족한 임시 경로 | 아니요 |
-| `approved` | 신뢰 가능한 검증 표본과 안전 기준을 모두 충족 | 예 |
-| `rejected` | 사람/gold 검증에서 오답·위험·오클릭 확인 | 아니요 |
+| `verified_candidate` | 독립적인 깨끗한 목적지 검증 1회 | 약한 근거 |
+| `verified` | 독립적인 깨끗한 목적지 검증 2회 이상 | 중간 근거 |
+| `trusted` | 최소 성능 표본과 모든 안전 gate를 반복 통과 | 강한 근거 |
+| `rejected` | 사람/Gold 검증에서 오답·위험·오클릭 확인 | 아니요 |
 | `stale` | 앱 업데이트·화면 불일치로 무효화 | 아니요 |
 
-기본 승인 최소 표본은 3개다. 세 표본은 `benchmark_gold`, `human_gold` 또는 읽기 호환용 `device_gold`처럼 신뢰 가능한 verification level이어야 한다. `runtime_inferred` 성공이나 시간 측정만으로는 correctness 표본이 되지 않는다.
+기본 `trusted` 승격 최소 표본은 3개다. 표본은 `benchmark_gold`, `human_gold` 또는 읽기 호환용 `device_gold`처럼 신뢰 가능한 verification level이어야 한다. `runtime_inferred` 성공이나 시간 측정만으로는 correctness 표본이 되지 않는다. 과거 DB의 `approved`는 마이그레이션 시 `trusted`로 정규화한다.
 
 승격 조건은 다음을 모두 만족해야 한다.
 
@@ -292,7 +294,7 @@ K-EXAONE 제안 도구는 알려진 function ID와 실제 실패 case ID만 허�
 - 실패 0건, 위험 자동 클릭 0건, 잘못된 클릭 0건일 것.
 - UI 불일치로 `stale` 또는 검토 실패로 `rejected`가 된 경로는 시간 로그만으로 부활하지 않을 것.
 
-승인 후에도 사람 검증에서 한 번이라도 잘못된 목적지·오클릭·위험 실행이 확인되면 `rejected`로 내려가고 serving에서 제외된다. 앱 버전이 바뀌면 이전 버전 경로를 그대로 신뢰하지 않고 새 version signature에서 다시 검증한다.
+`trusted` 이후에도 사람 검증에서 한 번이라도 잘못된 목적지·오클릭·위험 실행이 확인되면 `rejected`로 내려가고 검색에서 제외된다. 앱 버전이 바뀌면 이전 버전 근거를 그대로 신뢰하지 않고 새 version signature에서 다시 검증한다. 어떤 상태에서도 좌표·클릭 배열을 매크로처럼 실행하지 않으며 K-EXAONE이 현재 화면 후보를 새로 판단한다.
 
 여러 승인 경로의 순위는 정확도와 안전을 속도보다 먼저 비교한다. 그 다음 충분한 표본, 성공률, 제어 가능 시간 p90·p50, 전체 TCD p90·p50, 클릭·스크롤·뒤로 가기 수, 최근 성공 시각 순으로 본다. 빠른 오답 경로는 최적 경로가 될 수 없다.
 

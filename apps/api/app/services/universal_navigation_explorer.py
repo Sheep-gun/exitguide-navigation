@@ -374,7 +374,11 @@ def explore_universal_navigation(
     observation: ObservationResult,
     graph_update: UniversalNavigationGraphUpdate,
     demonstrations: list[AndroidControlEvidence],
-    semantic_tiebreaker: Callable[[list[UniversalNavigationCandidate]], str | None] | None = None,
+    semantic_planner: Callable[
+        [list[UniversalNavigationCandidate], bool, bool, bool],
+        dict[str, object] | None,
+    ]
+    | None = None,
 ) -> UniversalNavigationObserveResponse:
     plan = infer_goal_plan(request.goal_text, catalog)
     target_function = plan.terminal_function or (
@@ -386,7 +390,27 @@ def explore_universal_navigation(
     ]
 
     state = repository.exploration(request.session_id)
-    if state is not None and state.status == "route_reusing":
+    if (
+        state is not None
+        and state.status == "route_reusing"
+        and not settings.navigation_verified_route_replay_enabled
+    ):
+        state = repository.update_exploration(
+            state.exploration_id,
+            status="exploring",
+            current_screen_fingerprint=observation.screen_fingerprint,
+            path=[],
+            clear_pending=True,
+            route_id="",
+        )
+        warnings.append(
+            "검증 경로는 K-EXAONE의 판단 근거로만 사용하며 자동 재생하지 않습니다."
+        )
+    if (
+        state is not None
+        and state.status == "route_reusing"
+        and settings.navigation_verified_route_replay_enabled
+    ):
         reused_route_id = state.route_id
         state = _reconcile_pending(
             request=request,
@@ -454,7 +478,7 @@ def explore_universal_navigation(
                 )
 
     known_route = None
-    if state is None:
+    if state is None and settings.navigation_verified_route_replay_enabled:
         known_route = repository.route_action(
             app_package=request.app_package,
             app_version=request.app_version,
@@ -568,7 +592,11 @@ def explore_universal_navigation(
     # reconciled, then join the verified candidate at the live intermediate or
     # destination screen. This keeps transient home content from preventing
     # fast reuse while preserving per-screen semantic and low-risk checks.
-    if state.status == "exploring" and state.pending is None:
+    if (
+        settings.navigation_verified_route_replay_enabled
+        and state.status == "exploring"
+        and state.pending is None
+    ):
         opportunistic_route = repository.route_action(
             app_package=request.app_package,
             app_version=request.app_version,
@@ -710,6 +738,70 @@ def explore_universal_navigation(
             warnings=warnings,
         )
 
+    def model_gated_recovery_back(extra_warning: str):
+        if semantic_planner is None:
+            return _issue_back(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                route=None,
+                warnings=warnings + [extra_warning],
+                final_return=False,
+                preserve_parent_branch_for_retry=True,
+            )
+        recovery_plan = semantic_planner([], False, True, False)
+        recovery_command = (
+            str(recovery_plan.get("command", ""))
+            if recovery_plan is not None
+            else ""
+        )
+        if recovery_command == "back":
+            return _issue_back(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                route=None,
+                warnings=warnings
+                + [extra_warning, "K-EXAONE Planner가 안전한 복구 동작을 선택했습니다."],
+                final_return=False,
+                preserve_parent_branch_for_retry=True,
+            )
+        if recovery_command == "wait_and_observe":
+            return _issue_reobserve(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                warnings=warnings
+                + [extra_warning, "K-EXAONE Planner가 화면 재관찰을 선택했습니다."],
+            )
+        return _stopped_response(
+            request=request,
+            observation=observation,
+            graph_update=graph_update,
+            candidates=candidates,
+            state=repository.update_exploration(
+                state.exploration_id,
+                status="stopped",
+                clear_pending=True,
+            ),
+            failure_reason="planner_recovery_boundary",
+            reason=(
+                str(recovery_plan.get("reason", ""))
+                if recovery_plan is not None
+                else "K-EXAONE Planner의 복구 판단이 없습니다."
+            ),
+            warnings=warnings + [extra_warning],
+        )
+
     if (
         not budget_exhausted
         and state.pending is None
@@ -719,36 +811,16 @@ def explore_universal_navigation(
             state=state,
         )
     ):
-        return _issue_back(
-            request=request,
-            repository=repository,
-            candidates=candidates,
-            observation=observation,
-            graph_update=graph_update,
-            state=state,
-            route=None,
-            warnings=warnings + [
-                "현재 화면은 오류·외부 문서·임시 오버레이로 판별되어 안전하게 이전 화면으로 돌아갑니다."
-            ],
-            final_return=False,
-            preserve_parent_branch_for_retry=True,
+        return model_gated_recovery_back(
+            "현재 화면은 오류·외부 문서·임시 오버레이로 판별되어 안전하게 이전 화면으로 돌아갑니다."
         )
 
     if _screen_is_notification_inbox_surface(
         request,
         target_function=target_function,
     ):
-        return _issue_back(
-            request=request,
-            repository=repository,
-            candidates=candidates,
-            observation=observation,
-            graph_update=graph_update,
-            state=state,
-            route=None,
-            warnings=warnings
-            + ["현재 화면은 알림 설정이 아니라 알림함이므로 이전 분기로 돌아갑니다."],
-            final_return=False,
+        return model_gated_recovery_back(
+            "현재 화면은 알림 설정이 아니라 알림함이므로 이전 분기로 돌아갑니다."
         )
 
     contexts = candidate_contexts(
@@ -820,6 +892,42 @@ def explore_universal_navigation(
         terminal = None
         screen_terminal = False
     if terminal is not None or screen_terminal:
+        if semantic_planner is not None:
+            destination_plan = semantic_planner([], False, False, True)
+            destination_command = (
+                str(destination_plan.get("command", ""))
+                if destination_plan is not None
+                else ""
+            )
+            if destination_command == "wait_and_observe":
+                return _issue_reobserve(
+                    request=request,
+                    repository=repository,
+                    candidates=candidates,
+                    observation=observation,
+                    graph_update=graph_update,
+                    state=state,
+                    warnings=warnings
+                    + ["K-EXAONE이 최종 목적지 여부를 한 번 더 관찰하도록 요청했습니다."],
+                )
+            if destination_command != "mark_destination":
+                return _stopped_response(
+                    request=request,
+                    observation=observation,
+                    graph_update=graph_update,
+                    candidates=candidates,
+                    state=repository.update_exploration(
+                        state.exploration_id,
+                        status="stopped",
+                        clear_pending=True,
+                    ),
+                    failure_reason="destination_confirmation_missing",
+                    reason=(
+                        "화면 판별기는 목적지 가능성을 찾았지만 K-EXAONE이 "
+                        "최종 목적지로 확인하지 않아 자동 탐색을 중단했습니다."
+                    ),
+                    warnings=warnings,
+                )
         steps = [
             dict(step)
             for step in state.path
@@ -1852,7 +1960,7 @@ def explore_universal_navigation(
                     geometry_score,
                 )
             )
-        elif _baemin_profile_detail_needs_bounded_reobserve(
+        elif semantic_planner is None and _baemin_profile_detail_needs_bounded_reobserve(
             state=state,
             latest_attempt=latest_attempt,
         ):
@@ -2008,7 +2116,8 @@ def explore_universal_navigation(
             )
 
     if (
-        not any(score >= 0.52 for _candidate, _function_ids, score in safe_ranked)
+        semantic_planner is None
+        and not any(score >= 0.52 for _candidate, _function_ids, score in safe_ranked)
         and _subscription_detail_needs_bounded_reobserve(
             target_function=target_function,
             request=request,
@@ -2028,6 +2137,32 @@ def explore_universal_navigation(
             ],
         )
 
+    # A deterministic/no-model fallback must inspect a scrollable active-plan
+    # detail before following an ambiguous "change/manage" summary card.  The
+    # cancellation entry is commonly below the fold, while the summary card
+    # can detour into plan changes or billing history.  Production still asks
+    # K-EXAONE on every screen; this branch only keeps mock/offline execution
+    # conservative and bounded.
+    if (
+        semantic_planner is None
+        and can_scroll
+        and _subscription_destination_requires_page_scan(
+            target_function=target_function,
+            request=request,
+        )
+        and _total_scroll_attempt_count(state) < GENERAL_SCROLL_BUDGET
+    ):
+        return _issue_scroll(
+            request=request,
+            repository=repository,
+            candidates=candidates,
+            observation=observation,
+            graph_update=graph_update,
+            state=state,
+            warnings=warnings
+            + ["활성 구독 상세의 다음 화면 단위에서 해지 진입점을 먼저 찾습니다."],
+        )
+
     # On a newly opened menu surface, inspect one additional viewport before
     # abandoning the branch for an older global frontier.  Previously the
     # Back choice happened first, so a valid below-fold menu could never be
@@ -2040,6 +2175,7 @@ def explore_universal_navigation(
         and not infinite_feed
         and _scroll_attempt_count(state, observation.screen_fingerprint) < 1
         and _total_scroll_attempt_count(state) < GENERAL_SCROLL_BUDGET
+        and semantic_planner is None
     ):
         return _issue_scroll(
             request=request,
@@ -2119,7 +2255,7 @@ def explore_universal_navigation(
     ] | None = forced_local_hypothesis
     if frontier_choice is not None:
         frontier_selected_item, frontier_local_selected = frontier_choice
-        if frontier_local_selected is None:
+        if frontier_local_selected is None and semantic_planner is None:
             return _issue_back(
                 request=request,
                 repository=repository,
@@ -2140,7 +2276,8 @@ def explore_universal_navigation(
         for _candidate, function_ids, score in safe_ranked
     )
     if (
-        can_scroll
+        semantic_planner is None
+        and can_scroll
         and _goal_or_screen_requests_below_fold(request)
         and _total_scroll_attempt_count(state) < GENERAL_SCROLL_BUDGET
     ):
@@ -2156,8 +2293,14 @@ def explore_universal_navigation(
 
     safe_ranked.sort(key=lambda item: (-item[2], item[0].label, item[0].element_id))
     selected = frontier_local_selected or (safe_ranked[0] if safe_ranked else None)
+    # Deterministic/mock deployments have no policy model. Preserve the
+    # conservative legacy behavior there: when weak candidates are nearly
+    # tied, keep exploring instead of pretending the heuristic winner is a
+    # model decision. Production K-EXAONE deployments take the planner branch
+    # below on every screen.
     if (
-        frontier_local_selected is None
+        semantic_planner is None
+        and frontier_local_selected is None
         and selected is not None
         and len(safe_ranked) > 1
     ):
@@ -2174,28 +2317,118 @@ def explore_universal_navigation(
             )
             >= 0.80
         )
-        # The catalog is more reliable than a generative tie-break when a
-        # visible control is already a strong step in the requested flow.
-        # This prevents a model from replacing "membership management" with
-        # unrelated sibling tabs such as order history on a dense account page.
-        use_model_tiebreaker = not (
+        use_ambiguity_fallback = not (
             (top_matches_goal_progress or top_has_strong_hub_alignment)
             and safe_ranked[0][2] >= 0.55
         )
         if (
-            use_model_tiebreaker
+            use_ambiguity_fallback
             and margin < settings.navigation_agent_min_candidate_margin
             and safe_ranked[0][2] < 0.70
         ):
-            selected_id = None
-            if semantic_tiebreaker is not None:
-                selected_id = semantic_tiebreaker([item[0] for item in safe_ranked])
+            selected = None
+    planner_result: dict[str, object] | None = None
+    planner_selected = False
+    planner_scroll_allowed = (
+        can_scroll
+        and _scroll_attempt_count(state, observation.screen_fingerprint) < 12
+        and _total_scroll_attempt_count(state)
+        < (INFINITE_FEED_SCROLL_BUDGET if infinite_feed else GENERAL_SCROLL_BUDGET)
+    )
+    if semantic_planner is not None:
+        planner_result = semantic_planner(
+            [item[0] for item in safe_ranked],
+            planner_scroll_allowed,
+            bool(state.path),
+            False,
+        )
+        if planner_result is None:
+            return _stopped_response(
+                request=request,
+                observation=observation,
+                graph_update=graph_update,
+                candidates=candidates,
+                state=repository.update_exploration(
+                    state.exploration_id,
+                    status="stopped",
+                    clear_pending=True,
+                ),
+                failure_reason="planner_unavailable",
+                reason="K-EXAONE Planner의 유효한 판단이 없어 자동 탐색을 중단했습니다.",
+                warnings=warnings,
+            )
+        planner_command = str(planner_result.get("command", "")) if planner_result else ""
+        if planner_command == "scroll_forward" and planner_scroll_allowed:
+            return _issue_scroll(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                warnings=warnings + ["K-EXAONE Planner가 안전한 다음 화면 탐색을 선택했습니다."],
+            )
+        if planner_command == "back" and state.path:
+            return _issue_back(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                route=None,
+                warnings=warnings + ["K-EXAONE Planner가 이전 탐색 분기로 복구하도록 선택했습니다."],
+                final_return=False,
+            )
+        if planner_command == "wait_and_observe":
+            return _issue_reobserve(
+                request=request,
+                repository=repository,
+                candidates=candidates,
+                observation=observation,
+                graph_update=graph_update,
+                state=state,
+                warnings=warnings + ["K-EXAONE Planner가 화면 안정화를 기다리도록 선택했습니다."],
+            )
+        if planner_command == "stop_for_user":
+            return _stopped_response(
+                request=request,
+                observation=observation,
+                graph_update=graph_update,
+                candidates=candidates,
+                state=repository.update_exploration(
+                    state.exploration_id,
+                    status="stopped",
+                    clear_pending=True,
+                ),
+                failure_reason="planner_requested_user_boundary",
+                reason=str(planner_result.get("reason", "사용자 판단이 필요한 경계입니다.")),
+                warnings=warnings,
+            )
+        if planner_command == "click":
+            selected_id = str(planner_result.get("selected_element_id", ""))
             model_selected = next(
                 (item for item in safe_ranked if item[0].element_id == selected_id),
                 None,
             )
             if model_selected is not None:
                 selected = model_selected
+                planner_selected = True
+        if not planner_selected:
+            return _stopped_response(
+                request=request,
+                observation=observation,
+                graph_update=graph_update,
+                candidates=candidates,
+                state=repository.update_exploration(
+                    state.exploration_id,
+                    status="stopped",
+                    clear_pending=True,
+                ),
+                failure_reason="planner_action_rejected",
+                reason="K-EXAONE Planner가 실행 가능한 안전 행동을 선택하지 못했습니다.",
+                warnings=warnings,
+            )
 
     if selected is None:
         per_screen_scrolls = _scroll_attempt_count(state, observation.screen_fingerprint)
@@ -2255,6 +2488,28 @@ def explore_universal_navigation(
     candidate, function_ids, semantic_score = selected
     action = observation.actions_by_element_id.get(candidate.element_id)
     if not _automatic_click_is_low_risk(candidate, action):
+        if semantic_planner is not None:
+            # The production contract is model-owned: Python may veto a K-EXAONE
+            # proposal, but it must never replace that proposal with a heuristic
+            # click. Re-observe/replan on a later request or hand control back to
+            # the user instead of silently executing a different candidate.
+            return _stopped_response(
+                request=request,
+                observation=observation,
+                graph_update=graph_update,
+                candidates=candidates,
+                state=repository.update_exploration(
+                    state.exploration_id,
+                    status="stopped",
+                    clear_pending=True,
+                ),
+                failure_reason="planner_action_failed_safety_check",
+                reason=(
+                    "K-EXAONE이 선택한 동작이 클릭 직전 저위험 안전 조건을 "
+                    "통과하지 못해 대체 동작 없이 자동 탐색을 중단했습니다."
+                ),
+                warnings=warnings,
+            )
         safe_alternative = next(
             (
                 item
@@ -2344,6 +2599,12 @@ def explore_universal_navigation(
         "function_ids": list(function_ids),
     }
     recommendation_id = _recommendation_id(request.session_id, observation.screen_fingerprint, candidate.element_key)
+    decision_mode = "exaone" if planner_selected else "function_graph_exploration"
+    recommendation_confidence = (
+        max(0.0, min(1.0, float(planner_result.get("confidence", bounded_semantic_score))))
+        if planner_selected and planner_result
+        else bounded_semantic_score
+    )
     repository.record_recommendation(
         recommendation_id=recommendation_id,
         session_id=request.session_id,
@@ -2353,10 +2614,10 @@ def explore_universal_navigation(
         goal_text=request.goal_text,
         goal_interpretation=plan.intent,
         target_function=target_function,
-        decision_mode="function_graph_exploration",
+        decision_mode=decision_mode,
         screen_fingerprint=observation.screen_fingerprint,
         action_id=action.action_id,
-        confidence=bounded_semantic_score,
+        confidence=recommendation_confidence,
     )
     repository.consume_transient_retry(
         state.exploration_id,
@@ -2390,10 +2651,22 @@ def explore_universal_navigation(
         selected_element_key=candidate.element_key,
         selected_label=candidate.label,
         target_function=target_function,
-        instruction=f"그래프 탐색을 위해 ‘{candidate.label}’ 메뉴를 확인합니다.",
-        reason="기능 사전에서 상태를 바꾸지 않는 저위험 탐색 메뉴로 검증됐습니다.",
-        expected_next_screen=f"{candidate.label} 관련 하위 기능 화면",
-        confidence=bounded_semantic_score,
+        instruction=(
+            str(planner_result.get("instruction", ""))
+            if planner_selected and planner_result
+            else f"그래프 탐색을 위해 ‘{candidate.label}’ 메뉴를 확인합니다."
+        ),
+        reason=(
+            str(planner_result.get("reason", ""))
+            if planner_selected and planner_result
+            else "기능 사전에서 상태를 바꾸지 않는 저위험 탐색 메뉴로 검증됐습니다."
+        ),
+        expected_next_screen=(
+            str(planner_result.get("expected_next_screen", ""))
+            if planner_selected and planner_result
+            else f"{candidate.label} 관련 하위 기능 화면"
+        ),
+        confidence=recommendation_confidence,
         risk_level=candidate.risk_level,
         requires_user_confirmation=False,
     )
@@ -2403,7 +2676,7 @@ def explore_universal_navigation(
         status="guided",
         screen_fingerprint=observation.screen_fingerprint,
         goal_interpretation=plan.intent,
-        decision_mode="function_graph_exploration",
+        decision_mode=decision_mode,
         phase="exploring",
         candidates=candidates,
         recommendation=recommendation,
@@ -4857,28 +5130,39 @@ def _target_candidate_hub_alignment(
     if target_function == "subscription.cancel.entry":
         if value in {"나의 넷플릭스", "my netflix"}:
             return 0.96
-        if (
-            ("프로필" in value and any(marker in value for marker in ("관리", "변경")))
-            or (
-                "profile" in value
-                and any(marker in value for marker in ("manage", "change", "switch"))
+        if any(
+            marker in value
+            for marker in (
+                "프로필을 변경",
+                "프로필을 관리",
+                "change or manage profile",
+                "manage or change profile",
+                "switch or manage profile",
             )
         ):
             return 0.90
+        if value in {"프로필 관리", "manage profile", "manage profiles"}:
+            # On Netflix's opened profile menu this edits viewing profiles; it
+            # is not the billing/account doorway. The longer guidance control
+            # above is still the correct reversible gateway into this menu.
+            return -0.42
         if value in {
             "멤버십 관리",
             "구독 관리",
             "구매 항목 및 멤버십",
             "구독 및 멤버십 관리",
+            "결제 및 구독",
             "manage membership",
             "manage subscription",
             "purchases and memberships",
+            "payments and subscriptions",
         }:
             return 0.92
         if value in {
             "내 페이지",
             "마이",
             "프로필",
+            "계정",
             "profile picture",
             "my page",
             "account",
@@ -8765,18 +9049,35 @@ def _is_reliable_subscription_progress(
     subscription_specific = any(
         function_id in subscription_functions for function_id in function_ids
     )
-    if (
-        _path_has_subscription_specific_progress(state)
-        and generic_gateway
-        and not subscription_specific
-    ):
-        # Once a subscription-specific screen has been reached, jumping back
-        # into My page, Settings, Home, or another global tab is regression,
-        # not progress.  Reject it so the existing scroll/frontier/backtrack
-        # policy can explore the current branch or return to a better one.
-        return False
-    if generic_gateway and not subscription_specific:
-        return True
+    if generic_gateway:
+        if _path_has_subscription_specific_progress(state):
+            # Once a subscription-specific screen has been reached, a broad
+            # catalog fuzzy match must not make My page, Settings, Home, or a
+            # global tab look subscription-specific.  Only an explicit label
+            # below is allowed to keep progressing from that point.
+            if not any(
+                token in normalized
+                for token in (
+                    "이용 중",
+                    "이용중",
+                    "현재 이용",
+                    "구독",
+                    "멤버십",
+                    "이용권",
+                    "정기 결제",
+                    "결제 관리",
+                    "subscription",
+                    "membership",
+                    "billing",
+                )
+            ):
+                return False
+        else:
+            # A cold-start account/menu/settings gateway is valid progress even
+            # when the broad ontology also assigns it a weak subscription tag.
+            # Treating the fuzzy tag as authoritative used to discard entries
+            # such as ``마이배민`` before the planner could evaluate them.
+            return True
     if not subscription_specific:
         return False
     if normalized in {"배민클럽", "마이배민클럽"}:
@@ -8893,6 +9194,58 @@ def _subscription_detail_needs_bounded_reobserve(
         for value in visible_labels
         if value
     )
+
+
+def _subscription_destination_requires_page_scan(
+    *,
+    target_function: str,
+    request: UniversalNavigationObserveRequest,
+) -> bool:
+    if target_function != "subscription.cancel.entry":
+        return False
+    visible_labels = [
+        element.text or element.content_description or ""
+        for element in request.screen.elements
+        if element.visible and not element.password
+    ]
+    if any(
+        _has_explicit_cancellation_cue(value)
+        or _is_reviewed_external_subscription_management_handoff(value, request)
+        for value in visible_labels
+        if value
+    ):
+        return False
+    screen_text = _plain_phrase(
+        " ".join([request.screen.window_title] + visible_labels)
+    )
+    has_subscription_context = any(
+        marker in screen_text
+        for marker in (
+            "구독",
+            "멤버십",
+            "멤버쉽",
+            "클럽",
+            "subscription",
+            "membership",
+            "plan",
+        )
+    )
+    has_active_detail_context = any(
+        marker in screen_text
+        for marker in (
+            "이용 중",
+            "이용중",
+            "현재 이용",
+            "다음 결제",
+            "갱신",
+            "active membership",
+            "active subscription",
+            "current plan",
+            "next billing",
+            "renews",
+        )
+    )
+    return has_subscription_context and has_active_detail_context
 
 
 def _baemin_profile_detail_needs_bounded_reobserve(

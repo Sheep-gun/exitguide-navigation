@@ -49,6 +49,42 @@ mkdir -p "$release_dir"
 tar -xf "$ARCHIVE" -C "$release_dir"
 install -m 600 "$RUNTIME_ENV" "$release_dir/.env"
 
+# The portable AndroidControl artifact is retained on persistent workspace
+# storage, but FTS queries against that network filesystem are too slow for an
+# interactive planner. Materialize one checksum-verified read-only serving
+# copy on the GPU host's local disk. A new copy is made only when the sidecar
+# checksum changes; the persistent source remains the backup authority.
+android_source="$ROOT/.artifacts/android-control/navigation-examples.sqlite"
+android_source_sidecar="$android_source.sha256"
+android_serving="/tmp/exitguide-android-control.sqlite"
+android_serving_sidecar="$android_serving.sha256"
+if [[ -f "$android_source" ]]; then
+  if [[ -s "$android_source_sidecar" ]]; then
+    android_sha="$(awk 'NR == 1 { print $1 }' "$android_source_sidecar")"
+  else
+    android_sha="$(sha256sum "$android_source" | awk '{ print $1 }')"
+  fi
+  current_android_sha=""
+  if [[ -s "$android_serving_sidecar" ]]; then
+    current_android_sha="$(tr -d '\r\n' <"$android_serving_sidecar")"
+  fi
+  if [[ ! -f "$android_serving" ]] || [[ "$current_android_sha" != "$android_sha" ]]; then
+    android_temp="$android_serving.upload-$$"
+    rm -f "$android_temp"
+    cp "$android_source" "$android_temp"
+    copied_sha="$(sha256sum "$android_temp" | awk '{ print $1 }')"
+    if [[ "$copied_sha" != "$android_sha" ]]; then
+      rm -f "$android_temp"
+      echo "AndroidControl serving-copy checksum mismatch" >&2
+      exit 1
+    fi
+    chmod 444 "$android_temp"
+    mv -f "$android_temp" "$android_serving"
+    printf '%s\n' "$android_sha" >"$android_serving_sidecar"
+    chmod 444 "$android_serving_sidecar"
+  fi
+fi
+
 if [[ ! -x "$VENV/bin/python" ]]; then
   python3 -m venv "$VENV"
 fi
@@ -105,7 +141,16 @@ if [[ -z "$public_url" ]]; then
   tmux new-session -d -s "$TUNNEL_SESSION" \
     "exec '$CLOUDFLARED' tunnel --no-autoupdate --url 'http://127.0.0.1:$API_PORT' >>'$TUNNEL_LOG' 2>&1"
 
-  for _ in $(seq 1 60); do
+  tunnel_ready_timeout_seconds="${EXITGUIDE_TUNNEL_READY_TIMEOUT_SECONDS:-180}"
+  if [[ ! "$tunnel_ready_timeout_seconds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "EXITGUIDE_TUNNEL_READY_TIMEOUT_SECONDS must be a positive integer." >&2
+    exit 1
+  fi
+  # A quick tunnel can be registered immediately while its public DNS/edge
+  # route takes longer than one minute to become reachable. Waiting here
+  # avoids reporting a failed deployment even though both uvicorn and the
+  # tunnel process are healthy a few seconds later.
+  for _ in $(seq 1 "$tunnel_ready_timeout_seconds"); do
     public_url="$(grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" | tail -1 || true)"
     if [[ -n "$public_url" ]] && curl -fsS --max-time 5 "$public_url/health" >/dev/null 2>&1; then
       break

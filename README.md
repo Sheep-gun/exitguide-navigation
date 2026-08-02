@@ -78,10 +78,13 @@ flowchart TD
 - 클릭, 화면 단위 스크롤, 뒤로가기와 탐색 종료
 - 이름 없는 후보를 보완하는 OCR 좌표 후보
 - 화면·행동·전이·경로를 저장하는 SQLite 기능 그래프
-- 앱·버전·기능별 `shadow`, `verified_candidate`, `stale` 경로 생명주기
+- 앱·버전·기능별 `shadow → verified_candidate → verified → trusted` 경로 생명주기
 - 재방문, 무한 스크롤, 무변화와 잘못된 화면에 대한 복구·중단 규칙
 - 범용 기능 카탈로그와 목적 resolver
-- AndroidControl 변환·검색 파이프라인
+- 공식 AndroidControl 20개 shard의 83,848개 단계 v3 인덱스와 런타임 Top-K 검색
+- K-EXAONE 매 화면 Hermes planner, fail-closed 실행 계약과 retrieval trace
+- EXAONE 4.5 VLM의 이름 없는 아이콘 선택 호출과 개인정보 비저장 캐시
+- Human Gold 21개를 변환한 SFT·선호학습 자료와 앱 단위 분리 평가
 - 실기기·에뮬레이터 관찰 수집, 개인정보 제거, 오프라인 재생과 평가 도구
 - 유튜브·넷플릭스·배민 실기기 탐색과 일부 Human Gold 검증
 - Windows MVP 실행 파일과 시연 영상
@@ -117,6 +120,8 @@ exitguide-navigation/
 - [휴대폰 테스트](docs/PHONE_TESTING.md)
 - [공개 APK 배포](docs/PUBLIC_APK_DEPLOYMENT.md)
 - [Navigation 시간 최적화](docs/NAVIGATION_TIME_OPTIMIZATION.md)
+- [Navigation Agent 평가 보고서](docs/NAVIGATION_AGENT_EVALUATION.md)
+- [K-EXAONE 기능 확인](docs/K_EXAONE_CAPABILITY_AUDIT.md)
 - [개발 로그](docs/DEVELOPMENT_LOG.md)
 
 ## 빠른 시작

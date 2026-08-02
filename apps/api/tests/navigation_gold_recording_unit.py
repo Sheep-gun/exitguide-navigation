@@ -6,9 +6,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from app.config import Settings
-from app.schemas import UniversalNavigationObserveRequest
+from app.schemas import UniversalNavigationElement, UniversalNavigationObserveRequest
 from app.services.universal_navigation_agent import observe_universal_navigation
-from app.services.universal_navigation_graph import UniversalNavigationGraphRepository
+from app.services.universal_navigation_graph import (
+    UniversalNavigationGraphRepository,
+    _infer_gold_row_click,
+)
 
 
 def main() -> None:
@@ -360,6 +363,153 @@ def main() -> None:
         assert idle_selected == (None,)
         repository.cancel_gold_recording("idle-session")
 
+        deep_destination = [
+            UniversalNavigationElement.model_validate(label_element(f"noise-{index}", f"Noise {index}"))
+            for index in range(30)
+        ]
+        deep_destination.append(
+            UniversalNavigationElement.model_validate(
+                label_element("my-baemin-title", "My Baemin", role="heading")
+            )
+        )
+        deep_match = _infer_gold_row_click(
+            [
+                {
+                    "element_id": "my-baemin",
+                    "element_key": "my-baemin-key",
+                    "label": "Bottom navigation My Baemin tab",
+                    "role": "button",
+                    "risk_level": "low",
+                },
+                {
+                    "element_id": "orders",
+                    "element_key": "orders-key",
+                    "label": "Orders",
+                    "role": "button",
+                    "risk_level": "low",
+                },
+            ],
+            deep_destination,
+        )
+        assert deep_match is not None
+        assert deep_match["element_id"] == "my-baemin"
+
+        baemin_start = observe(
+            repository,
+            request(
+                "baemin-1",
+                "baemin-tab-session",
+                [
+                    label_element("home-heading", "홈", role="heading"),
+                    element("promotion", "지금 신규가입하면 12,000원 할인!"),
+                    element("home-tab", "하단탭바 홈탭"),
+                    element("orders-tab", "하단탭바 주문내역탭"),
+                    element("my-baemin-tab", "하단탭바 마이배민탭"),
+                ],
+            ),
+        )
+        baemin_refresh = observe(
+            repository,
+            request(
+                "baemin-2",
+                "baemin-tab-session",
+                [
+                    label_element("home-heading", "홈", role="heading"),
+                    element("promotion", "주말 특가 쿠폰 2천원 할인!"),
+                    element("home-tab", "하단탭바 홈탭"),
+                    element("orders-tab", "하단탭바 주문내역탭"),
+                    element("my-baemin-tab", "하단탭바 마이배민탭"),
+                ],
+                transition={
+                    "from_screen_fingerprint": baemin_start.screen_fingerprint,
+                    "performed_element_id": "promotion",
+                    "action_kind": "scroll_forward",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        assert baemin_refresh.graph_update.transition_recorded is False
+        assert baemin_refresh.graph_update.transition_discarded is True
+        settled_baemin = observe(
+            repository,
+            request(
+                "baemin-3",
+                "baemin-tab-session",
+                [
+                    label_element("my-heading", "마이배민", role="heading"),
+                    element("signup", "가입하고 혜택받기"),
+                    element("settings", "환경설정"),
+                    element("home-tab", "하단탭바 홈탭"),
+                    element("orders-tab", "하단탭바 주문내역탭"),
+                    element("my-baemin-tab", "하단탭바 마이배민탭"),
+                ],
+                transition={
+                    "from_screen_fingerprint": baemin_refresh.screen_fingerprint,
+                    "performed_element_id": "__semantic_screen_change__",
+                    "action_kind": "click",
+                    "outcome": "navigated",
+                },
+            ),
+        )
+        assert settled_baemin.graph_update.transition_recorded is True
+        assert settled_baemin.graph_update.transition_discarded is False
+        connection = sqlite3.connect(database)
+        try:
+            baemin_inferred = connection.execute(
+                """
+                SELECT selected_element_id, selected_label, selected_action
+                FROM navigation_gold_steps
+                WHERE recording_id = 'baemin-tab-session' AND ordinal = 0
+                """
+            ).fetchone()
+            baemin_step_count = connection.execute(
+                """
+                SELECT COUNT(*) FROM navigation_gold_steps
+                WHERE recording_id = 'baemin-tab-session'
+                """
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        assert baemin_inferred == ("my-baemin-tab", "하단탭바 마이배민탭", "click")
+        assert baemin_step_count == 2
+        repository.cancel_gold_recording("baemin-tab-session")
+
+        signup_destination = [
+            UniversalNavigationElement.model_validate(
+                label_element("signup-title", "Register a new account", role="heading")
+            ),
+            UniversalNavigationElement.model_validate(element("google", "Continue with Google")),
+        ]
+        signup_match = _infer_gold_row_click(
+            [
+                {
+                    "element_id": "signup-benefit",
+                    "element_key": "signup-benefit-key",
+                    "label": "Sign up and get benefits",
+                    "role": "button",
+                    "risk_level": "low",
+                },
+                {
+                    "element_id": "help",
+                    "element_key": "help-key",
+                    "label": "Help Center",
+                    "role": "button",
+                    "risk_level": "low",
+                },
+                {
+                    "element_id": "ocr_signup_title",
+                    "element_key": "ocr-signup-title-key",
+                    "label": "Register a new account",
+                    "role": "button",
+                    "risk_level": "low",
+                },
+            ],
+            signup_destination,
+            target_function="auth.signup.entry",
+        )
+        assert signup_match is not None
+        assert signup_match["element_id"] == "signup-benefit"
+
         output = root / "training.jsonl"
         script = Path(__file__).resolve().parents[3] / "scripts" / "Export-NavigationGoldTraining.py"
         subprocess.run(
@@ -378,7 +528,7 @@ def main() -> None:
         assert rows[0]["provenance"] == "real_device_human_gold"
         assert rows[0]["correct_candidate"]["element_id"] == "settings"
         assert rows[0]["next_screen_fingerprint"] == second.screen_fingerprint
-        assert rows[1]["action"] == "scroll_forward"
+        assert rows[1]["action"] == "click"
         assert rows[1]["next_screen_fingerprint"] == third.screen_fingerprint
     print("navigation Gold recording checks ok")
 

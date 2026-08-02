@@ -18,7 +18,10 @@ foreach ($Fragment in @(
   "LLM_PROVIDER=exaone",
   "NAVIGATION_AGENT_PROVIDER=exaone",
   "NAVIGATION_AGENT_TIMEOUT_SECONDS=35",
-  "EXAONE_API_KEY"
+  "EXAONE_API_KEY",
+  "Publish-MobileRuntimeConfig.ps1",
+  "SkipRuntimeConfigPublish",
+  "MobileRuntime.api_base_url = `$PublicUrl"
 )) {
   if (-not $DeployScript.Contains($Fragment)) {
     throw "Public deployment script is missing required fragment: $Fragment"
@@ -47,7 +50,7 @@ if (-not $RuntimeConfig.api_base_url.StartsWith("https://")) {
 if (-not $AppConfig.expo.extra.runtimeConfigUrl.StartsWith("https://gist.githubusercontent.com/")) {
   throw "The release APK runtime configuration must be anonymously readable from the public gist."
 }
-foreach ($Fragment in @("gist edit", "mobile-runtime.json", "Invoke-RestMethod")) {
+foreach ($Fragment in @("gist edit", "mobile-runtime.json", "Invoke-RestMethod", "exitguide_ts", "Cache-Control")) {
   if (-not $PublishScript.Contains($Fragment)) {
     throw "Runtime configuration publisher is missing required fragment: $Fragment"
   }

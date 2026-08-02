@@ -333,9 +333,16 @@ export async function fetchRuntimeApiBaseUrl(): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), RUNTIME_CONFIG_TIMEOUT_MS);
   try {
-    const response = await fetch(runtimeConfigUrl, {
+    // The revisionless GitHub Gist raw URL is intentionally stable, but its
+    // CDN may briefly serve the previous tunnel address after an edit. A
+    // per-launch cache buster keeps installed APKs from replacing a fresh
+    // build fallback with an expired cached address.
+    const separator = runtimeConfigUrl.includes("?") ? "&" : "?";
+    const requestUrl = `${runtimeConfigUrl}${separator}exitguide_ts=${Date.now()}`;
+    const response = await fetch(requestUrl, {
       headers: {
         Accept: "application/vnd.github.raw+json",
+        "Cache-Control": "no-cache",
       },
       signal: controller.signal,
     });

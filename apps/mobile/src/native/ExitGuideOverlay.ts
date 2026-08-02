@@ -25,6 +25,17 @@ export type ExitGuideOverlayState = {
   running: boolean;
   operationMode: "explore" | "record";
   sessionId: string;
+  runtimeState:
+    | "IDLE"
+    | "WAITING_FOR_TARGET_APP"
+    | "OBSERVING"
+    | "RETRIEVING"
+    | "PLANNING"
+    | "SAFETY_CHECK"
+    | "EXECUTING_SAFE_ACTION"
+    | "DESTINATION_REACHED"
+    | "WAITING_FOR_USER_FINAL_ACTION"
+    | "FINISHED";
 };
 
 const nativeOverlay = NativeModules.ExitGuideOverlay as ExitGuideOverlayModule | undefined;
@@ -63,7 +74,7 @@ export async function openExitGuideAccessibilitySettings(): Promise<void> {
 
 export async function getExitGuideOverlayState(): Promise<ExitGuideOverlayState> {
   if (!nativeOverlay) {
-    return { running: false, operationMode: "explore", sessionId: "" };
+    return { running: false, operationMode: "explore", sessionId: "", runtimeState: "IDLE" };
   }
   return nativeOverlay.getOverlayState();
 }

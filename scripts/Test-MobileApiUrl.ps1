@@ -7,7 +7,7 @@ $ProviderSettingsSource = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "ap
 $OverlayNativeSource = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "apps/mobile/src/native/ExitGuideOverlay.ts")
 $StoredSource = Get-Content -Raw -LiteralPath (Join-Path $RepoRoot "apps/mobile/src/hooks/useStoredApiBaseUrl.ts")
 
-foreach ($Fragment in @('export function normalizeApiBaseUrl', 'http://${trimmed}', 'replace(/\/+$/, "")', 'ExitGuideApiError', 'fetchRuntimeApiBaseUrl', 'application/vnd.github.raw+json', 'runtimeConfigUrl')) {
+foreach ($Fragment in @('export function normalizeApiBaseUrl', 'http://${trimmed}', 'replace(/\/+$/, "")', 'ExitGuideApiError', 'fetchRuntimeApiBaseUrl', 'application/vnd.github.raw+json', 'runtimeConfigUrl', 'exitguide_ts=${Date.now()}', 'Cache-Control')) {
   if (-not $ApiSource.Contains($Fragment)) {
     throw "exitguideApi.ts is missing URL normalization fragment: $Fragment"
   }
