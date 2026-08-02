@@ -13,7 +13,10 @@ from app.navigation_contracts import (
     NavigationCandidate,
     ScreenObservation,
 )
-from app.services.navigation_decision_memory import DecisionMemoryQuery
+from app.services.navigation_decision_memory import (
+    DecisionMemoryQuery,
+    is_dangerous_final_candidate,
+)
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
@@ -36,6 +39,7 @@ DIRECT_ROLE_GUARD_FLOOR = 0.78
 UNRELATED_ROLE_CEILING = 0.50
 DIRECT_ROLE_MODEL_FLOOR = 0.50
 SEMANTIC_FAST_PATH_ROLE_FLOOR = 0.95
+SEMANTIC_FAST_PATH_LABEL_MAX_CHARS = 48
 SAFE_INTERMEDIATE_FAST_PATH_ROLES = frozenset(
     {
         "account.hub",
@@ -210,11 +214,29 @@ class AndroidWorldResearchPolicy:
             plan=plan,
             recent_history=recent_history,
         )
-        semantic_fast_path_candidate_id = self._semantic_stage_fast_path_candidate(
-            query=query,
-            plan=plan,
-            prior_values=prior_values,
-            recent_history=recent_history,
+        structural_continuation_candidate_id = (
+            self._structural_continuation_fast_path_candidate(
+                query=query,
+                plan=plan,
+                candidates=candidates,
+                recent_history=recent_history,
+            )
+        )
+        if structural_continuation_candidate_id is not None and not any(
+            item.action.name == "click"
+            and item.action.candidate_id == structural_continuation_candidate_id
+            for item in enumerated
+        ):
+            structural_continuation_candidate_id = None
+        semantic_fast_path_candidate_id = (
+            None
+            if structural_continuation_candidate_id is not None
+            else self._semantic_stage_fast_path_candidate(
+                query=query,
+                plan=plan,
+                prior_values=prior_values,
+                recent_history=recent_history,
+            )
         )
         should_invoke_planner = self._should_invoke_planner(
             query=query,
@@ -222,6 +244,7 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             recent_history=recent_history,
             semantic_fast_path_candidate_id=semantic_fast_path_candidate_id,
+            structural_continuation_candidate_id=structural_continuation_candidate_id,
         )
         if self.planner_model.configured and should_invoke_planner:
             try:
@@ -261,7 +284,9 @@ class AndroidWorldResearchPolicy:
             scored = [(item.memory_prior, item) for item in enumerated]
             updated_values = prior_values
             provider = (
-                "semantic_intermediate_role_fast_path"
+                "structural_continuation_fast_path"
+                if structural_continuation_candidate_id is not None
+                else "semantic_intermediate_role_fast_path"
                 if semantic_fast_path_candidate_id is not None
                 else "decision_memory_profile_fast_path"
                 if query.standards_profile == "exitguide.navigation-experience.v1"
@@ -270,8 +295,11 @@ class AndroidWorldResearchPolicy:
                 else "decision_memory_fallback"
             )
             fallback_used = False
-            if semantic_fast_path_candidate_id is not None:
-                selected_key = f"click:{semantic_fast_path_candidate_id}"
+            deterministic_fast_path_candidate_id = (
+                structural_continuation_candidate_id or semantic_fast_path_candidate_id
+            )
+            if deterministic_fast_path_candidate_id is not None:
+                selected_key = f"click:{deterministic_fast_path_candidate_id}"
                 scored = [
                     (
                         1.0 if _action_key(item.action) == selected_key else min(score, 0.74),
@@ -284,11 +312,15 @@ class AndroidWorldResearchPolicy:
                         update={
                             "final_score": 1.0,
                             "verifier_reason": (
+                                "python_structural_continuation_fast_path: "
+                                "successful expander revealed a same-label safe child"
+                                if structural_continuation_candidate_id is not None
+                                else
                                 "python_semantic_fast_path: unique safe intermediate role"
                             ),
                         }
                     )
-                    if value.candidate_id == semantic_fast_path_candidate_id
+                    if value.candidate_id == deterministic_fast_path_candidate_id
                     else value
                     for value in updated_values
                 ]
@@ -469,6 +501,7 @@ class AndroidWorldResearchPolicy:
         prior_values: Sequence[CandidateValue],
         recent_history: Sequence[Mapping[str, object]],
         semantic_fast_path_candidate_id: str | None = None,
+        structural_continuation_candidate_id: str | None = None,
     ) -> bool:
         if self.planner_mode == "disabled":
             return False
@@ -487,6 +520,11 @@ class AndroidWorldResearchPolicy:
         best = safe[0].final_score
         second = safe[1].final_score if len(safe) > 1 else 0.0
         if query.standards_profile == "exitguide.navigation-experience.v1":
+            if structural_continuation_candidate_id is not None and any(
+                value.candidate_id == structural_continuation_candidate_id
+                for value in safe
+            ):
+                return False
             if semantic_fast_path_candidate_id is None:
                 semantic_fast_path_candidate_id = self._semantic_stage_fast_path_candidate(
                     query=query,
@@ -544,6 +582,7 @@ class AndroidWorldResearchPolicy:
         eligible: list[str] = []
         for candidate in query.screen.candidate_payloads:
             candidate_id = str(candidate.get("candidate_id", ""))
+            label = str(candidate.get("label", "")).strip()
             value = value_by_id.get(candidate_id)
             role_scores = candidate.get("function_role_scores", {})
             if (
@@ -556,6 +595,10 @@ class AndroidWorldResearchPolicy:
                 or not bool(candidate.get("enabled", True))
                 or bool(candidate.get("selected", False))
                 or not isinstance(role_scores, Mapping)
+                # Accessibility roots often concatenate an entire screen into
+                # one clickable label.  Such composite text may contain a
+                # perfect alias but is not an obvious single affordance.
+                or (label and len(label) > SEMANTIC_FAST_PATH_LABEL_MAX_CHARS)
             ):
                 continue
             if any(
@@ -576,6 +619,83 @@ class AndroidWorldResearchPolicy:
         if not safe_values or safe_values[0].candidate_id != eligible[0]:
             return None
         return eligible[0]
+
+    def _structural_continuation_fast_path_candidate(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        candidates: Sequence[NavigationCandidate],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> str | None:
+        """Return a newly revealed safe child of the last successful expander."""
+
+        if (
+            query.standards_profile != "exitguide.navigation-experience.v1"
+            or plan.stage not in {"hub_discovery", "destination_entry"}
+            or not recent_history
+        ):
+            return None
+        latest = recent_history[-1]
+        if (
+            str(latest.get("connectivity_status", "")) != "observed"
+            or str(latest.get("action_name", "")) != "click"
+            or str(latest.get("progress_label", "")) != "advanced"
+        ):
+            return None
+        previous_id = str(latest.get("candidate_id", "")).strip()
+        candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
+        previous = candidate_by_id.get(previous_id)
+        if previous is None:
+            return None
+
+        def semantic_key(candidate: NavigationCandidate) -> str:
+            direct = candidate.label.strip() or candidate.icon_semantics.strip()
+            return " ".join(direct.casefold().split())
+
+        previous_key = semantic_key(previous)
+        if not previous_key:
+            return None
+        target_roles = set(plan.target_roles) & SAFE_INTERMEDIATE_FAST_PATH_ROLES
+        if not target_roles:
+            return None
+        payload_by_id = {
+            str(payload.get("candidate_id", "")): payload
+            for payload in query.screen.candidate_payloads
+        }
+        children: list[str] = []
+        for candidate in candidates:
+            if candidate.candidate_id == previous_id or semantic_key(candidate) != previous_key:
+                continue
+            label_key = " ".join(candidate.label.casefold().split())
+            parent_key = " ".join(candidate.parent_semantics.casefold().split())
+            payload = payload_by_id.get(candidate.candidate_id, {})
+            role_scores = payload.get("function_role_scores", {})
+            semantic_text = " ".join(
+                (
+                    candidate.label,
+                    candidate.icon_semantics,
+                    candidate.nearby_text,
+                    candidate.parent_semantics,
+                )
+            )
+            if (
+                not label_key
+                or label_key != parent_key
+                or not candidate.clickable
+                or not candidate.enabled
+                or candidate.selected
+                or candidate.risk_level != "low"
+                or is_dangerous_final_candidate(semantic_text)
+                or not isinstance(role_scores, Mapping)
+                or not any(
+                    float(role_scores.get(role, 0.0)) >= SEMANTIC_FAST_PATH_ROLE_FLOOR
+                    for role in target_roles
+                )
+            ):
+                continue
+            children.append(candidate.candidate_id)
+        return children[0] if len(children) == 1 else None
 
     def _enumerate_actions(
         self,

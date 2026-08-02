@@ -691,6 +691,144 @@ def main() -> None:
         recent_history=[],
     ) is True
 
+    compact_menu_query = replace(
+        semantic_fast_path_query,
+        screen=replace(
+            semantic_fast_path_query.screen,
+            semantic_fingerprint="compact-menu",
+            candidate_payloads=(
+                {
+                    "candidate_id": "menu-button",
+                    "label": "Open all menu",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"navigation.menu": 1.0},
+                },
+                {
+                    "candidate_id": "screen-root",
+                    "label": "Open all menu " + "unrelated composite screen text " * 4,
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"navigation.menu": 1.0},
+                },
+            ),
+        ),
+    )
+    assert selective_policy._semantic_stage_fast_path_candidate(
+        query=compact_menu_query,
+        plan=semantic_fast_path_plan.model_copy(
+            update={
+                "target_roles": [
+                    *semantic_fast_path_plan.target_roles,
+                    "navigation.menu",
+                ]
+            }
+        ),
+        prior_values=[
+            CandidateValue(
+                candidate_id="menu-button", value=0.60, memory_score=0.60,
+                role_score=0.60, final_score=0.60, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="screen-root", value=0.50, memory_score=0.50,
+                role_score=0.50, final_score=0.50, forbidden=False, risk_level="low",
+            ),
+        ],
+        recent_history=[],
+    ) == "menu-button"
+
+    continuation_query = replace(
+        semantic_fast_path_query,
+        screen=replace(
+            semantic_fast_path_query.screen,
+            semantic_fingerprint="expanded-members-menu",
+            candidate_payloads=(
+                {
+                    "candidate_id": "members-category",
+                    "label": "Members",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"membership.hub": 0.98},
+                },
+                {
+                    "candidate_id": "members-entry",
+                    "label": "Members",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"membership.hub": 0.98},
+                },
+                {
+                    "candidate_id": "benefits",
+                    "label": "Member benefits",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"membership.hub": 0.98},
+                },
+            ),
+        ),
+        candidate_scores={
+            "members-category": 0.74,
+            "members-entry": 0.74,
+            "benefits": 0.74,
+        },
+        candidate_confidence={},
+    )
+    continuation_candidates = [
+        NavigationCandidate(
+            candidate_id="members-category", label="Members", role="clickable",
+            parent_semantics="Travel preparation", risk_level="low",
+        ),
+        NavigationCandidate(
+            candidate_id="members-entry", label="Members", role="clickable",
+            parent_semantics="Members", risk_level="low",
+        ),
+        NavigationCandidate(
+            candidate_id="benefits", label="Member benefits", role="clickable",
+            parent_semantics="Member benefits", risk_level="low",
+        ),
+    ]
+    advanced_history = [
+        {
+            "connectivity_status": "observed",
+            "action_name": "click",
+            "candidate_id": "members-category",
+            "outcome_type": "navigated",
+            "progress_label": "advanced",
+        }
+    ]
+    assert selective_policy._structural_continuation_fast_path_candidate(
+        query=continuation_query,
+        plan=semantic_fast_path_plan,
+        candidates=continuation_candidates,
+        recent_history=advanced_history,
+    ) == "members-entry"
+    planner_calls_before_continuation = planner_transport.plan_calls
+    continuation_decision = selective_policy.decide_action(
+        query=continuation_query,
+        plan=semantic_fast_path_plan,
+        candidates=continuation_candidates,
+        forbidden_candidate_ids=set(),
+        recent_history=advanced_history,
+    )
+    assert continuation_decision.proposal.action.candidate_id == "members-entry"
+    assert continuation_decision.proposal.provider == "structural_continuation_fast_path"
+    assert planner_transport.plan_calls == planner_calls_before_continuation
+
     guarded = selective_policy._apply_direct_role_guard(
         scores={
             "click:travel": (0.70, "surrounding text suggests account access"),
