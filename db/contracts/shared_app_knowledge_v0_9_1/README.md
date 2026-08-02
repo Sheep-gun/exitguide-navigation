@@ -10,9 +10,9 @@
 Navigation의 과거 Decision Case를 변환할 때는 다음 규칙을 지킵니다.
 
 1. `navigation-goal-crosswalk.v1.json`으로 기존 Navigation goal ID를 공통 goal ID로 변환합니다.
-2. 과거 기록에 전체 화면 후보가 없으면 `candidate_set_status=unavailable`, `candidates=[]`로 기록합니다.
+2. 과거 기록에 전체 화면 후보가 없으면 `candidate_set_status=unavailable`, `candidates=[]`로 기록합니다. 다만 provenance SHA-256이 일치하는 원본 후보 inventory를 1:1로 대조할 수 있으면 `complete`로 복구할 수 있습니다.
 3. 없는 후보, 점수, 모델 호출, 검색 근거를 추정해서 채우지 않습니다.
-4. `candidate_set_status=unavailable`인 기록은 canonical transition으로 자동 승격할 수 없습니다.
+4. `candidate_set_status=unavailable`인 기록은 canonical transition으로 자동 승격할 수 없습니다. `complete` 기록도 검증을 거칠 뿐 자동 승격되지는 않습니다.
 5. 원본 SQLite는 읽기 전용으로 열고 변환 결과는 별도 JSONL로 생성합니다.
 
 `interaction-episode.v1.json`은 실행 경험, `knowledge-promotion.v1.json`은 검증을 통과한 경험의 승격 절차를 각각 규정합니다. 두 계층을 분리해 Human Gold도 자동 실행 경로가 아니라 높은 신뢰도의 경험 근거로만 사용합니다.

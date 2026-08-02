@@ -31,8 +31,14 @@ REQUIRED_TABLES = {
     "affordances",
     "decision_cases",
     "transition_outcomes",
+    "evidence_records",
     "experience_episodes",
     "experience_steps",
+}
+LEGACY_REQUIRED_TABLES = {
+    "navigation_training_examples",
+    "universal_exploration_attempts",
+    "universal_actions",
 }
 
 sys.path.insert(0, str(ROOT / "apps" / "api"))
@@ -118,6 +124,30 @@ def verify_source(connection: sqlite3.Connection) -> dict[str, str]:
     return metadata
 
 
+def verify_legacy_source(
+    connection: sqlite3.Connection,
+    *,
+    actual_sha256: str,
+    expected_sha256: str,
+) -> None:
+    available = {
+        str(row[0])
+        for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    }
+    missing = sorted(LEGACY_REQUIRED_TABLES - available)
+    if missing:
+        raise ValueError(f"legacy source is missing required tables: {', '.join(missing)}")
+    if not expected_sha256:
+        raise ValueError("Decision DB does not declare its upstream legacy source SHA-256")
+    if actual_sha256 != expected_sha256:
+        raise ValueError(
+            "legacy source SHA-256 does not match the Decision DB provenance: "
+            f"{actual_sha256} != {expected_sha256}"
+        )
+    if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+        raise ValueError("legacy source failed SQLite quick_check")
+
+
 def load_contracts(contracts_root: Path) -> tuple[dict[str, Any], dict[str, str], str]:
     schema_path = contracts_root / INTERACTION_SCHEMA_NAME
     crosswalk_path = contracts_root / CROSSWALK_NAME
@@ -172,6 +202,13 @@ def source_rows(connection: sqlite3.Connection) -> dict[str, list[sqlite3.Row]]:
             es.reward,
             es.discount,
             c.*,
+            COALESCE((
+                SELECT er.source_ref
+                FROM evidence_records AS er
+                WHERE er.entity_type='decision_case' AND er.entity_id=c.case_id
+                ORDER BY er.confidence DESC, er.verification_count DESC, er.evidence_id
+                LIMIT 1
+            ), '') AS decision_source_ref,
             a.candidate_key AS selected_candidate_key,
             a.normalized_label AS selected_label,
             a.icon_semantics AS selected_icon_semantics,
@@ -324,6 +361,168 @@ def execution_payload(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
+def source_element_key_hash(candidate: dict[str, Any]) -> str:
+    source_id = str(candidate.get("element_id") or candidate.get("action_id") or "")
+    element_key = str(candidate.get("element_key") or source_id)
+    if not element_key:
+        return ""
+    return hashlib.sha256(element_key.encode("utf-8")).hexdigest()[:20]
+
+
+def legacy_candidates_for_case(
+    legacy_connection: sqlite3.Connection,
+    row: sqlite3.Row,
+) -> list[dict[str, Any]]:
+    source_ref = str(row["decision_source_ref"] or "")
+    if not source_ref:
+        return []
+    source_type = str(row["source_type"])
+    if source_type == "human_gold":
+        source = legacy_connection.execute(
+            """
+            SELECT candidates_json
+            FROM navigation_training_examples
+            WHERE example_id=? AND provenance='real_device_human_gold'
+            """,
+            (source_ref,),
+        ).fetchone()
+        if source is None:
+            return []
+        return [
+            value
+            for value in json_list(source["candidates_json"])
+            if isinstance(value, dict)
+        ]
+    if source_type == "real_device":
+        attempt = legacy_connection.execute(
+            "SELECT screen_fingerprint FROM universal_exploration_attempts WHERE attempt_id=?",
+            (source_ref,),
+        ).fetchone()
+        if attempt is None:
+            return []
+        return [
+            dict(value)
+            for value in legacy_connection.execute(
+                """
+                SELECT action_id AS element_id,element_key,label,role,risk_level,risk_reason
+                FROM universal_actions
+                WHERE screen_fingerprint=?
+                ORDER BY action_id
+                """,
+                (attempt["screen_fingerprint"],),
+            )
+        ]
+    return []
+
+
+def candidate_inventory(
+    connection: sqlite3.Connection,
+    legacy_connection: sqlite3.Connection | None,
+    row: sqlite3.Row,
+) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+    if legacy_connection is None:
+        return "unavailable", [], {
+            "source_candidate_count": None,
+            "matched_candidate_count": 0,
+            "target_affordance_count": int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM affordances WHERE screen_id=?", (row["screen_id"],)
+                ).fetchone()[0]
+            ),
+            "inventory_reason": "legacy_source_not_supplied",
+        }
+
+    source_candidates = legacy_candidates_for_case(legacy_connection, row)
+    affordances = connection.execute(
+        "SELECT * FROM affordances WHERE screen_id=? ORDER BY candidate_key",
+        (row["screen_id"],),
+    ).fetchall()
+    source_by_hash: dict[str, dict[str, Any]] = {}
+    duplicate_source_keys = False
+    for candidate in source_candidates:
+        key_hash = source_element_key_hash(candidate)
+        if not key_hash or key_hash in source_by_hash:
+            duplicate_source_keys = True
+            continue
+        source_by_hash[key_hash] = candidate
+    affordance_by_hash: dict[str, sqlite3.Row] = {}
+    duplicate_affordance_keys = False
+    for affordance in affordances:
+        key_hash = str(affordance["source_element_key"] or "")
+        if not key_hash or key_hash in affordance_by_hash:
+            duplicate_affordance_keys = True
+            continue
+        affordance_by_hash[key_hash] = affordance
+
+    source_keys = set(source_by_hash)
+    target_keys = set(affordance_by_hash)
+    matched_keys = source_keys & target_keys
+    exact = (
+        not duplicate_source_keys
+        and not duplicate_affordance_keys
+        and len(source_candidates) == len(affordances)
+        and len(source_by_hash) == len(source_candidates)
+        and len(affordance_by_hash) == len(affordances)
+        and source_keys == target_keys
+    )
+    status = "complete" if exact else "partial" if matched_keys else "unavailable"
+    selected_candidate_key = str(row["selected_candidate_key"] or "")
+    candidates: list[dict[str, Any]] = []
+    for key_hash in sorted(matched_keys, key=lambda key: str(affordance_by_hash[key]["candidate_key"])):
+        source = source_by_hash[key_hash]
+        affordance = affordance_by_hash[key_hash]
+        candidate_id = str(affordance["candidate_key"])
+        dangerous_final = bool(affordance["dangerous_final"])
+        risk_class = str(affordance["risk_level"] or "low")
+        if risk_class not in {"low", "medium", "high", "critical", "blocked"}:
+            risk_class = "low"
+        source_element_id = str(source.get("element_id") or source.get("action_id") or "")
+        candidates.append(
+            {
+                "candidate_id": candidate_id,
+                "observed_payload": {
+                    "label": str(affordance["label"] or ""),
+                    "normalized_label": str(affordance["normalized_label"] or ""),
+                    "role": str(affordance["role"] or "unknown"),
+                    "icon_semantics": str(affordance["icon_semantics"] or ""),
+                    "parent_semantics": str(affordance["parent_semantics"] or ""),
+                    "nearby_text": str(affordance["nearby_text"] or ""),
+                    "position_bucket": str(affordance["position_bucket"] or "unknown"),
+                    "function_roles": json_list(affordance["function_roles_json"]),
+                    "source_modality": "ocr" if source_element_id.startswith("ocr_") else "accessibility",
+                },
+                "matched_affordance_id": str(affordance["affordance_id"]),
+                "memory_score": None,
+                "verifier_score": None,
+                "final_score": None,
+                "risk_class": risk_class,
+                "terminal": dangerous_final,
+                "dangerous_final": dangerous_final,
+                "forbidden": dangerous_final or risk_class in {"critical", "blocked"},
+                "selected": bool(
+                    str(row["chosen_action"]) == "click"
+                    and candidate_id == selected_candidate_key
+                ),
+            }
+        )
+
+    selected_count = sum(candidate["selected"] is True for candidate in candidates)
+    if str(row["chosen_action"]) == "click" and selected_count != 1:
+        status, candidates = "unavailable", []
+    return status, candidates, {
+        "source_candidate_count": len(source_candidates),
+        "matched_candidate_count": len(matched_keys),
+        "target_affordance_count": len(affordances),
+        "inventory_reason": (
+            "exact_hash_key_match"
+            if exact
+            else "partial_hash_key_match"
+            if matched_keys
+            else "no_hash_key_match"
+        ),
+    }
+
+
 def episode_status(end_reason: str) -> tuple[str, str]:
     return {
         "user_handoff": ("completed", "user_stopped"),
@@ -338,6 +537,7 @@ def build_episode(
     connection: sqlite3.Connection,
     rows: list[sqlite3.Row],
     goal_crosswalk: dict[str, str],
+    legacy_connection: sqlite3.Connection | None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     first = rows[0]
     legacy_goal_id = str(first["goal_id"])
@@ -377,6 +577,9 @@ def build_episode(
             )
         step_id = stable_id("interaction_step", case_id)
         action = action_payload(row)
+        candidate_set_status, candidates, inventory_audit = candidate_inventory(
+            connection, legacy_connection, row
+        )
         is_last = ordinal == len(rows) - 1
         is_terminal = bool(is_last and int(row["is_terminal"] or 0))
         step = {
@@ -385,8 +588,8 @@ def build_episode(
             "plan_stage": "legacy_recorded_navigation",
             "immediate_subgoal": immediate_subgoal(row),
             "before": before,
-            "candidate_set_status": "unavailable",
-            "candidates": [],
+            "candidate_set_status": candidate_set_status,
+            "candidates": candidates,
             "selected_action": action,
             "execution": execution_payload(row),
             "after": after,
@@ -411,8 +614,9 @@ def build_episode(
                 "episode_id": episode_id,
                 "step_id": step_id,
                 "exported_ordinal": ordinal,
-                "candidate_set_status": "unavailable",
-                "promotion_eligible": False,
+                "candidate_set_status": candidate_set_status,
+                "promotion_validation_eligible": candidate_set_status == "complete",
+                **inventory_audit,
             }
         )
 
@@ -539,6 +743,29 @@ def round_trip_errors(
         for field, (actual, expected) in checks.items():
             if actual != expected:
                 errors.append(f"{row['case_id']}: {field} {actual!r} != {expected!r}")
+        if mapping["candidate_set_status"] == "complete":
+            expected_candidate_ids = {
+                str(value[0])
+                for value in connection.execute(
+                    "SELECT candidate_key FROM affordances WHERE screen_id=?",
+                    (row["screen_id"],),
+                )
+            }
+            actual_candidate_ids = {
+                str(candidate["candidate_id"]) for candidate in step["candidates"]
+            }
+            if actual_candidate_ids != expected_candidate_ids:
+                errors.append(f"{row['case_id']}: complete candidate inventory changed")
+            selected_ids = [
+                str(candidate["candidate_id"])
+                for candidate in step["candidates"]
+                if candidate["selected"] is True
+            ]
+            expected_selected = [str(row["candidate_key"])] if row["chosen_action"] == "click" else []
+            if selected_ids != expected_selected:
+                errors.append(
+                    f"{row['case_id']}: selected candidate flags {selected_ids!r} != {expected_selected!r}"
+                )
     return errors
 
 
@@ -548,32 +775,48 @@ def export(
     output: Path,
     report_path: Path,
     *,
+    legacy_source: Path | None = None,
+    require_complete_candidates: bool = False,
     force: bool = False,
 ) -> dict[str, Any]:
     source = source.resolve()
     contracts_root = contracts_root.resolve()
     output = output.resolve()
     report_path = report_path.resolve()
+    legacy_source = legacy_source.resolve() if legacy_source is not None else None
     if not source.is_file():
         raise FileNotFoundError(source)
+    if legacy_source is not None and not legacy_source.is_file():
+        raise FileNotFoundError(legacy_source)
     for target in (output, report_path):
         if target.exists() and not force:
             raise FileExistsError(f"refusing to overwrite generated artifact: {target}")
         if target == source:
             raise ValueError("generated output must not overwrite the source database")
+        if legacy_source is not None and target == legacy_source:
+            raise ValueError("generated output must not overwrite the legacy source database")
 
     source_hash_before = file_sha256(source)
+    legacy_hash_before = file_sha256(legacy_source) if legacy_source is not None else None
     schema, goal_crosswalk, contract_digest = load_contracts(contracts_root)
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     connection = open_read_only(source)
+    legacy_connection: sqlite3.Connection | None = None
     try:
         metadata = verify_source(connection)
+        if legacy_source is not None:
+            legacy_connection = open_read_only(legacy_source)
+            verify_legacy_source(
+                legacy_connection,
+                actual_sha256=str(legacy_hash_before),
+                expected_sha256=metadata.get("upstream_legacy_source_sha256", ""),
+            )
         grouped = source_rows(connection)
         episodes: list[dict[str, Any]] = []
         mappings: list[dict[str, Any]] = []
         for profile_episode_id in sorted(grouped):
             episode, episode_mappings = build_episode(
-                connection, grouped[profile_episode_id], goal_crosswalk
+                connection, grouped[profile_episode_id], goal_crosswalk, legacy_connection
             )
             episodes.append(episode)
             mappings.extend(episode_mappings)
@@ -592,6 +835,13 @@ def export(
                     f"{episode['episode_id']}: shared v0.9.1 validator: {error}"
                 )
         roundtrip = round_trip_errors(connection, episodes, mappings, goal_crosswalk)
+        incomplete = [
+            mapping for mapping in mappings if mapping["candidate_set_status"] != "complete"
+        ]
+        if require_complete_candidates and incomplete:
+            raise ValueError(
+                f"strict candidate inventory requested but {len(incomplete)} steps are incomplete"
+            )
         source_counts = {
             "decision_cases": int(connection.execute("SELECT COUNT(*) FROM decision_cases").fetchone()[0]),
             "transition_outcomes": int(connection.execute("SELECT COUNT(*) FROM transition_outcomes").fetchone()[0]),
@@ -599,11 +849,16 @@ def export(
             "experience_steps": int(connection.execute("SELECT COUNT(*) FROM experience_steps").fetchone()[0]),
         }
     finally:
+        if legacy_connection is not None:
+            legacy_connection.close()
         connection.close()
 
     source_hash_after = file_sha256(source)
+    legacy_hash_after = file_sha256(legacy_source) if legacy_source is not None else None
     if source_hash_before != source_hash_after:
         raise RuntimeError("source database changed during read-only export")
+    if legacy_hash_before != legacy_hash_after:
+        raise RuntimeError("legacy source database changed during read-only export")
     if schema_errors or semantic_validation_errors or roundtrip:
         details = schema_errors + semantic_validation_errors + roundtrip
         raise ValueError("interaction export validation failed: " + "; ".join(details[:10]))
@@ -621,6 +876,19 @@ def export(
     source_type_counts = Counter(
         episode["context"]["device_context"]["source_type"] for episode in episodes
     )
+    candidate_status_counts = Counter(
+        str(mapping["candidate_set_status"]) for mapping in mappings
+    )
+    complete_steps = candidate_status_counts.get("complete", 0)
+    limitations = [
+        "retrieval hits, model calls, latency, and executor safety traces were not recorded",
+        "legacy mojibake is preserved rather than guessed or silently repaired",
+        "complete candidate inventory permits promotion validation but never automatic promotion",
+    ]
+    if legacy_source is None:
+        limitations.insert(
+            0, "legacy source was not supplied, so complete on-screen candidates were unavailable"
+        )
     report = {
         "schema_version": "1.0",
         "adapter_version": ADAPTER_VERSION,
@@ -642,6 +910,16 @@ def export(
             },
             "counts": source_counts,
         },
+        "legacy_source": None
+        if legacy_source is None
+        else {
+            "filename": legacy_source.name,
+            "sha256": legacy_hash_before,
+            "read_only": True,
+            "preserved": legacy_hash_before == legacy_hash_after,
+            "provenance_match": legacy_hash_before
+            == metadata.get("upstream_legacy_source_sha256", ""),
+        },
         "contract": {
             "version": "0.9.1",
             "interaction_schema": INTERACTION_SCHEMA_NAME,
@@ -653,8 +931,12 @@ def export(
             "sha256": file_sha256(output),
             "episodes": len(episodes),
             "steps": sum(len(episode["steps"]) for episode in episodes),
-            "candidate_set_status": {"unavailable": len(mappings), "partial": 0, "complete": 0},
-            "promotion_eligible_steps": 0,
+            "candidate_set_status": {
+                key: candidate_status_counts.get(key, 0)
+                for key in ("unavailable", "partial", "complete")
+            },
+            "promotion_validation_eligible_steps": complete_steps,
+            "automatically_promoted_steps": 0,
             "goal_counts": dict(sorted(goal_counts.items())),
             "action_counts": dict(sorted(action_counts.items())),
             "source_type_episode_counts": dict(sorted(source_type_counts.items())),
@@ -664,14 +946,12 @@ def export(
             "semantic_errors": 0,
             "round_trip_mismatches": 0,
             "source_hash_unchanged": True,
+            "legacy_source_hash_unchanged": None
+            if legacy_source is None
+            else legacy_hash_before == legacy_hash_after,
             "passed": True,
         },
-        "limitations": [
-            "legacy records do not contain the complete on-screen candidate inventory",
-            "retrieval hits, model calls, latency, and executor safety traces were not recorded",
-            "legacy mojibake is preserved rather than guessed or silently repaired",
-            "all exported steps are blocked from automatic canonical transition promotion",
-        ],
+        "limitations": limitations,
         "step_mappings": mappings,
     }
     report_path.write_text(
@@ -685,9 +965,19 @@ def parse_args() -> argparse.Namespace:
         description="Export Navigation Decision DB v2 into shared interaction-episode v1 JSONL"
     )
     parser.add_argument("--source", type=Path, required=True, help="read-only Decision DB v2")
+    parser.add_argument(
+        "--legacy-source",
+        type=Path,
+        help="optional exact-hash legacy DB used to recover the original full candidate inventory",
+    )
     parser.add_argument("--contracts-root", type=Path, default=DEFAULT_CONTRACTS)
     parser.add_argument("--output", type=Path, required=True, help="new interaction episode JSONL")
     parser.add_argument("--report", type=Path, required=True, help="new validation/round-trip report")
+    parser.add_argument(
+        "--require-complete-candidates",
+        action="store_true",
+        help="fail without writing outputs unless every step has an exact full candidate inventory",
+    )
     parser.add_argument("--force", action="store_true", help="overwrite only the two generated outputs")
     return parser.parse_args()
 
@@ -699,12 +989,15 @@ def main() -> None:
         args.contracts_root,
         args.output,
         args.report,
+        legacy_source=args.legacy_source,
+        require_complete_candidates=args.require_complete_candidates,
         force=args.force,
     )
     print(json.dumps({
         "passed": report["validation"]["passed"],
         "episodes": report["output"]["episodes"],
         "steps": report["output"]["steps"],
+        "candidate_set_status": report["output"]["candidate_set_status"],
         "output_sha256": report["output"]["sha256"],
         "source_preserved": report["source"]["preserved"],
     }, ensure_ascii=False, indent=2))

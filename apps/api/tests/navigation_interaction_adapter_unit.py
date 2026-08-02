@@ -25,7 +25,56 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def build_source(path: Path) -> None:
+def source_key(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:20]
+
+
+def build_legacy_source(path: Path) -> None:
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        """
+        CREATE TABLE navigation_training_examples(
+            example_id TEXT PRIMARY KEY,provenance TEXT NOT NULL,candidates_json TEXT NOT NULL
+        );
+        CREATE TABLE universal_exploration_attempts(
+            attempt_id TEXT PRIMARY KEY,screen_fingerprint TEXT NOT NULL
+        );
+        CREATE TABLE universal_actions(
+            action_id TEXT PRIMARY KEY,screen_fingerprint TEXT NOT NULL,element_key TEXT NOT NULL,
+            label TEXT NOT NULL,role TEXT NOT NULL,risk_level TEXT NOT NULL,risk_reason TEXT
+        );
+        """
+    )
+    candidates = json.dumps(
+        [
+            {"element_id": "element-1", "element_key": "key-1", "label": "계정 관리", "role": "button"},
+            {"element_id": "element-2", "element_key": "key-2", "label": "회원가입", "role": "button"},
+        ],
+        ensure_ascii=False,
+    )
+    connection.executemany(
+        "INSERT INTO navigation_training_examples VALUES (?,?,?)",
+        (
+            ("example-1", "real_device_human_gold", candidates),
+            ("example-2", "real_device_human_gold", "[]"),
+        ),
+    )
+    connection.execute(
+        "INSERT INTO universal_exploration_attempts VALUES (?,?)",
+        ("attempt-1", "legacy-screen-1"),
+    )
+    connection.executemany(
+        "INSERT INTO universal_actions VALUES (?,?,?,?,?,?,?)",
+        (
+            ("action-1", "legacy-screen-1", "key-1", "계정 관리", "button", "low", ""),
+            ("action-2", "legacy-screen-1", "key-2", "회원가입", "button", "low", ""),
+        ),
+    )
+    connection.commit()
+    connection.close()
+
+
+def build_source(path: Path, legacy_hash: str) -> None:
     connection = sqlite3.connect(path)
     connection.executescript(
         """
@@ -38,8 +87,11 @@ def build_source(path: Path) -> None:
             ocr_json TEXT NOT NULL,vlm_json TEXT NOT NULL,source_type TEXT NOT NULL,captured_at TEXT NOT NULL
         );
         CREATE TABLE affordances(
-            affordance_id TEXT PRIMARY KEY,candidate_key TEXT,normalized_label TEXT,
-            icon_semantics TEXT,role TEXT,function_roles_json TEXT
+            affordance_id TEXT PRIMARY KEY,screen_id TEXT NOT NULL,candidate_key TEXT NOT NULL,
+            label TEXT NOT NULL,normalized_label TEXT NOT NULL,icon_semantics TEXT NOT NULL,
+            role TEXT NOT NULL,parent_semantics TEXT NOT NULL,nearby_text TEXT NOT NULL,
+            position_bucket TEXT NOT NULL,risk_level TEXT NOT NULL,dangerous_final INTEGER NOT NULL,
+            function_roles_json TEXT NOT NULL,source_element_key TEXT NOT NULL
         );
         CREATE TABLE decision_cases(
             case_id TEXT PRIMARY KEY,goal_id TEXT NOT NULL,screen_id TEXT NOT NULL,
@@ -55,6 +107,10 @@ def build_source(path: Path) -> None:
             destination_match_before REAL,destination_match_after REAL,distance_before REAL,
             distance_after REAL,distance_method TEXT,progress_label TEXT,failure_class TEXT,
             external_target TEXT,observed_at TEXT NOT NULL
+        );
+        CREATE TABLE evidence_records(
+            evidence_id TEXT PRIMARY KEY,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,
+            source_ref TEXT NOT NULL,confidence REAL NOT NULL,verification_count INTEGER NOT NULL
         );
         CREATE TABLE experience_episodes(
             episode_id TEXT PRIMARY KEY,goal_id TEXT NOT NULL,source_type TEXT NOT NULL,
@@ -77,7 +133,7 @@ def build_source(path: Path) -> None:
             ("schema_version", "2"),
             ("standards_profile", "exitguide.navigation-experience.v1"),
             ("standards_profile_version", "1.0.0"),
-            ("upstream_legacy_source_sha256", "a" * 64),
+            ("upstream_legacy_source_sha256", legacy_hash),
         ),
     )
     connection.executemany(
@@ -108,10 +164,10 @@ def build_source(path: Path) -> None:
         ),
     )
     connection.executemany(
-        "INSERT INTO affordances VALUES (?,?,?,?,?,?)",
+        "INSERT INTO affordances VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            ("aff-1", "candidate-1", "계정 관리", "", "button", '["account.hub"]'),
-            ("aff-2", "candidate-2", "회원가입", "", "button", '["auth.signup.entry"]'),
+            ("aff-1", "screen-1", "candidate-1", "계정 관리", "계정 관리", "", "button", "", "", "middle", "low", 0, '["account.hub"]', source_key("key-1")),
+            ("aff-2", "screen-1", "candidate-2", "회원가입", "회원가입", "", "button", "", "", "middle", "low", 0, '["auth.signup.entry"]', source_key("key-2")),
         ),
     )
     connection.executemany(
@@ -120,6 +176,14 @@ def build_source(path: Path) -> None:
             ("case-1", "account.delete", "screen-1", "회원탈퇴", "{}", "click", "aff-1", None, "dest-delete", "com.example", "gold-1", 4, "human_gold", 0.98, "2026-08-01T00:00:00+00:00"),
             ("case-2", "account.delete", "screen-2", "회원탈퇴", "{}", "stop_for_user", None, None, "dest-delete", "com.example", "gold-1", 8, "human_gold", 0.98, "2026-08-01T00:00:01+00:00"),
             ("case-3", "account.signup", "screen-1", "회원가입", "{}", "click", "aff-2", None, "dest-signup", "com.example", "device-1", 0, "real_device", 0.9, "2026-08-01T00:00:02+00:00"),
+        ),
+    )
+    connection.executemany(
+        "INSERT INTO evidence_records VALUES (?,?,?,?,?,?)",
+        (
+            ("evidence-1", "decision_case", "case-1", "example-1", 0.98, 1),
+            ("evidence-2", "decision_case", "case-2", "example-2", 0.98, 1),
+            ("evidence-3", "decision_case", "case-3", "attempt-1", 0.9, 1),
         ),
     )
     connection.executemany(
@@ -153,35 +217,63 @@ def run() -> None:
     adapter = load_adapter()
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
+        legacy_source = root / "legacy.sqlite"
         source = root / "source.sqlite"
         output = root / "episodes.jsonl"
         report_path = root / "report.json"
-        build_source(source)
+        build_legacy_source(legacy_source)
+        legacy_hash = sha256(legacy_source)
+        build_source(source, legacy_hash)
         source_hash = sha256(source)
-        report = adapter.export(source, CONTRACTS_ROOT, output, report_path)
+        report = adapter.export(
+            source,
+            CONTRACTS_ROOT,
+            output,
+            report_path,
+            legacy_source=legacy_source,
+            require_complete_candidates=True,
+        )
         assert sha256(source) == source_hash
+        assert sha256(legacy_source) == legacy_hash
         assert report["validation"]["passed"] is True
         assert report["output"]["episodes"] == 2
         assert report["output"]["steps"] == 3
         assert report["output"]["candidate_set_status"] == {
-            "unavailable": 3,
+            "unavailable": 0,
             "partial": 0,
-            "complete": 0,
+            "complete": 3,
         }
-        assert report["output"]["promotion_eligible_steps"] == 0
+        assert report["output"]["promotion_validation_eligible_steps"] == 3
+        assert report["output"]["automatically_promoted_steps"] == 0
         episodes = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
         delete_episode = next(row for row in episodes if row["context"]["goal_id"] == "delete_account")
         assert delete_episode["outcome"] == "user_stopped"
         assert [step["ordinal"] for step in delete_episode["steps"]] == [0, 1]
-        assert delete_episode["steps"][0]["selected_action"]["candidate_id"] == "candidate-1"
-        assert delete_episode["steps"][0]["candidate_set_status"] == "unavailable"
+        first_step = delete_episode["steps"][0]
+        assert first_step["selected_action"]["candidate_id"] == "candidate-1"
+        assert first_step["candidate_set_status"] == "complete"
+        assert {candidate["candidate_id"] for candidate in first_step["candidates"]} == {
+            "candidate-1",
+            "candidate-2",
+        }
+        assert [
+            candidate["candidate_id"]
+            for candidate in first_step["candidates"]
+            if candidate["selected"]
+        ] == ["candidate-1"]
         transport_episode = next(row for row in episodes if row["context"]["goal_id"] == "create_account")
         transport_step = transport_episode["steps"][0]
         assert transport_step["execution"]["status"] == "transport_error"
         assert transport_step["execution"]["outcome_type"] == "unknown"
         assert transport_step["after"] is None
         try:
-            adapter.export(source, CONTRACTS_ROOT, output, report_path)
+            adapter.export(
+                source,
+                CONTRACTS_ROOT,
+                output,
+                report_path,
+                legacy_source=legacy_source,
+            )
         except FileExistsError:
             pass
         else:
