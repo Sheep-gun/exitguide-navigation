@@ -93,6 +93,14 @@ class ScriptedPlannerClient:
                 _kwargs["tools"][0]["function"]["name"]
                 == "submit_navigation_step_evaluation"
             )
+            parameters = _kwargs["tools"][0]["function"]["parameters"]
+            packet = json.loads(messages[1]["content"])
+            expected_keys = [item["action_key"] for item in packet["candidate_actions"]]
+            assert parameters["properties"]["best_action_key"]["enum"] == expected_keys
+            score_schema = parameters["properties"]["scores"]
+            assert score_schema["minItems"] == len(expected_keys)
+            assert score_schema["maxItems"] == len(expected_keys)
+            assert score_schema["items"]["properties"]["action_key"]["enum"] == expected_keys
             self.plan_calls += 1
             if self.fail_first_step_evaluation and self.plan_calls == 1:
                 return _tool_response(
@@ -106,7 +114,6 @@ class ScriptedPlannerClient:
                         "scores": [],
                     },
                 )
-            packet = json.loads(messages[1]["content"])
             assert "app_package" not in packet
             scores = {
                 "click:profile": 0.93,

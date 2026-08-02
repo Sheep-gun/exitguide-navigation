@@ -532,6 +532,9 @@ class NavigationPlannerResearchClient:
             "deterministic_hierarchy_hint": fallback_plan,
             "candidate_actions": list(actions),
         }
+        expected_action_keys = [
+            str(item.get("action_key", "")) for item in actions
+        ]
         response = self.client.complete(
             messages=[
                 {
@@ -542,7 +545,11 @@ class NavigationPlannerResearchClient:
                         "semantic subgoal, then score every supplied candidate_action independently "
                         "for that subgoal. This is multi-step navigation: a profile, account, or "
                         "settings hub can be highly helpful even when it is not the final destination "
-                        "button. Assign one unique best_action_key; use stop_for_user as the best "
+                        "button. Weight each candidate's own label and icon above parent or nearby "
+                        "text. A direct semantic match in the candidate itself must outrank an "
+                        "unrelated candidate supported only by surrounding text, unless observed "
+                        "failure evidence forbids it. Assign one unique best_action_key; use "
+                        "stop_for_user as the best "
                         "action only when no safe progress action exists. Do not execute an action. Never invent an "
                         "action_key, candidate ID, coordinate, or app-specific route. Keep every "
                         "action_key unchanged and return exactly one score for each supplied key. "
@@ -584,15 +591,22 @@ class NavigationPlannerResearchClient:
                                     "items": {"type": "string"},
                                     "maxItems": 8,
                                 },
-                                "best_action_key": {"type": "string"},
+                                "best_action_key": {
+                                    "type": "string",
+                                    "enum": expected_action_keys,
+                                },
                                 "scores": {
                                     "type": "array",
-                                    "maxItems": 20,
+                                    "minItems": len(expected_action_keys),
+                                    "maxItems": len(expected_action_keys),
                                     "items": {
                                         "type": "object",
                                         "additionalProperties": False,
                                         "properties": {
-                                            "action_key": {"type": "string"},
+                                            "action_key": {
+                                                "type": "string",
+                                                "enum": expected_action_keys,
+                                            },
                                             "helpful_probability": {
                                                 "type": "number",
                                                 "minimum": 0.0,
