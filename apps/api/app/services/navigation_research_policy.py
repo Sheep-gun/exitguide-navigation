@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
@@ -24,6 +25,9 @@ from app.services.navigation_planner import (
     HierarchicalPlanBuilder,
     PlannerProposal,
 )
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 STRICT_FAST_PATH_SCORE_FLOOR = 0.90
@@ -120,7 +124,12 @@ class AndroidWorldResearchPolicy:
                     screen=screen,
                     screenshot_data_url=screenshot_data_url,
                 )
-            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
+            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+                LOGGER.warning(
+                    "vlm_perception_fallback failure_class=%s detail=%s",
+                    type(error).__name__,
+                    str(error)[:500],
+                )
                 if not self.allow_model_fallback:
                     raise
         return PerceptionOutput(screen=screen, semantic_summary="", provider="structured_input")
@@ -181,7 +190,13 @@ class AndroidWorldResearchPolicy:
                 )
                 provider = f"{self.planner_model.name}_step_evaluator"
                 fallback_used = False
-            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
+            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+                LOGGER.warning(
+                    "planner_model_fallback provider=%s failure_class=%s detail=%s",
+                    self.planner_model.name,
+                    type(error).__name__,
+                    str(error)[:500],
+                )
                 if not self.allow_model_fallback:
                     raise
                 model_plan = plan
