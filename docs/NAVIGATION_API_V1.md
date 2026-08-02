@@ -18,6 +18,8 @@
 cd apps/api
 export NAVIGATION_DECISION_DB_PATH=/absolute/path/navigation-decision-v1.sqlite
 export NAVIGATION_RUNTIME_DB_PATH=/absolute/path/navigation-runtime-v1.sqlite
+export NAVIGATION_DATASET_SPLIT_MANIFEST_PATH=/absolute/path/navigation_dataset_split_v1.json
+export NAVIGATION_ALLOW_LOCKED_HOLDOUT=false
 uvicorn app.navigation_main:app --host 100.77.172.25 --port 8100
 ```
 
@@ -60,6 +62,8 @@ transport/device 오류는 UI 탐색 실패와 분리하며 Solar 호출로 해�
 - `GET /v1/navigation/status`: decision/runtime DB와 planner 준비 상태. 모델 endpoint가
   없으면 `serving_mode=decision_memory_fallback`과 구체적인
   `research_model_blockers`를 반환하며 model-ready로 가장하지 않는다.
+- `GET /v1/navigation/dataset-splits`: Runtime DB에 고정된 앱별
+  `collection/validation/locked_holdout` 분할과 manifest 해시 확인
 - `POST /v1/navigation/decide`: 현재 화면 후보 중 안전한 다음 행동 하나 결정
 - `POST /v1/navigation/observe`: 실행 직후 화면 변화·연결 상태 기록 및 복구 제안
 
@@ -78,6 +82,14 @@ stop_for_user()
 
 중간·고위험 후보, 차단 후보, 탈퇴·해지·결제·구매·개인정보 제출의 최종 행동은
 Python 안전 게이트가 `stop_for_user()`로 교체한다.
+
+## 앱 데이터 분리
+
+`db/navigation_dataset_split_v1.json`은 기존 Decision DB를 감사한 시점의 앱 분할을
+고정한다. 기존 기록이 한 건이라도 있는 앱은 `collection`, 기록이 없는 별도 앱은
+`validation` 또는 `locked_holdout`이다. Runtime DB는 처음 설치한 manifest의 버전과
+SHA-256을 보존하며, 다른 manifest로 조용히 교체되지 않는다. 수집 모드에서 미등록 앱과
+잠금된 holdout 앱의 `/decide` 요청은 어떤 세션도 쓰기 전에 HTTP 403으로 거부한다.
 
 ## 중간 목적지와 LLM 호출 경계
 

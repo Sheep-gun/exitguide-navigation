@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     navigation_decision_db_path: str = ""
     navigation_runtime_db_path: str = ".artifacts/navigation-runtime-v1.sqlite"
+    navigation_dataset_split_manifest_path: str = ""
+    navigation_allow_locked_holdout: bool = False
     navigation_planner_timeout_seconds: float = 30.0
     navigation_model_allow_fallback: bool = True
     navigation_verifier_max_clicks: int = 12

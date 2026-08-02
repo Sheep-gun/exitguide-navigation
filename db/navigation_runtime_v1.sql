@@ -5,6 +5,23 @@ CREATE TABLE IF NOT EXISTS navigation_runtime_metadata (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS navigation_dataset_split_manifest (
+    manifest_version TEXT NOT NULL,
+    manifest_sha256 TEXT NOT NULL,
+    app_package TEXT PRIMARY KEY,
+    app_name TEXT NOT NULL,
+    split TEXT NOT NULL CHECK (split IN ('collection', 'validation', 'locked_holdout')),
+    reason TEXT NOT NULL,
+    existing_decision_cases INTEGER NOT NULL CHECK (existing_decision_cases >= 0),
+    available_on_device INTEGER NOT NULL CHECK (available_on_device IN (0, 1)),
+    priority_app INTEGER NOT NULL CHECK (priority_app IN (0, 1)),
+    locked_at TEXT NOT NULL,
+    CHECK (split <> 'locked_holdout' OR existing_decision_cases = 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_runtime_dataset_split
+    ON navigation_dataset_split_manifest(split, app_package);
+
 CREATE TABLE IF NOT EXISTS navigation_sessions (
     session_id TEXT PRIMARY KEY,
     request_id TEXT NOT NULL,
@@ -199,9 +216,9 @@ CREATE INDEX IF NOT EXISTS idx_runtime_candidates_selected
     WHERE selected = 1 OR forbidden = 1;
 
 INSERT OR REPLACE INTO navigation_runtime_metadata(key, value) VALUES
-    ('schema_version', '2'),
+    ('schema_version', '3'),
     ('database_kind', 'navigation_runtime_events'),
     ('promotion_policy', 'offline_validation_required'),
     ('interaction_contract', 'exitguide.interaction-episode.v1');
 
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;

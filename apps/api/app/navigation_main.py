@@ -9,6 +9,10 @@ from fastapi import FastAPI, HTTPException
 from app.config import get_settings
 from app.navigation_contracts import DecideRequest, DecideResponse, ObserveRequest, ObserveResponse
 from app.services.navigation_decision_memory import NavigationDecisionMemory
+from app.services.navigation_dataset_split import (
+    DatasetSplitAccessError,
+    NavigationDatasetSplitManifest,
+)
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
@@ -48,6 +52,11 @@ def get_navigation_runtime() -> NavigationRuntime:
         raise RuntimeError("NAVIGATION_DECISION_DB_PATH is not configured")
     memory = NavigationDecisionMemory(decision_path, read_only=True)
     store = NavigationRuntimeStore(runtime_path)
+    dataset_split_manifest = (
+        NavigationDatasetSplitManifest.load(settings.navigation_dataset_split_manifest_path)
+        if settings.navigation_dataset_split_manifest_path
+        else None
+    )
     policy = AndroidWorldResearchPolicy(
         planner_model=NavigationPlannerResearchClient(
             OpenAICompatibleChatClient(
@@ -77,7 +86,13 @@ def get_navigation_runtime() -> NavigationRuntime:
         planner_margin_threshold=settings.navigation_planner_margin_threshold,
         vlm_mode=settings.navigation_vlm_mode,
     )
-    return NavigationRuntime(memory=memory, store=store, policy=policy)
+    return NavigationRuntime(
+        memory=memory,
+        store=store,
+        policy=policy,
+        dataset_split_manifest=dataset_split_manifest,
+        allow_locked_holdout=settings.navigation_allow_locked_holdout,
+    )
 
 
 @app.get("/health")
@@ -113,6 +128,8 @@ def navigation_decide(request: DecideRequest) -> DecideResponse:
         return response
     except sqlite3.IntegrityError as error:
         raise HTTPException(status_code=409, detail="duplicate or invalid navigation decision") from error
+    except DatasetSplitAccessError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
@@ -145,5 +162,19 @@ def navigation_episode(session_id: str) -> dict[str, object]:
         return get_navigation_runtime().store.interaction_episode(session_id)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="navigation session was not found") from error
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/v1/navigation/dataset-splits")
+def navigation_dataset_splits() -> dict[str, object]:
+    """Return the immutable runtime copy of the app-disjoint split manifest."""
+
+    try:
+        runtime = get_navigation_runtime()
+        return {
+            "policy": runtime.status()["dataset_split"],
+            "entries": runtime.store.dataset_split_manifest(),
+        }
     except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error

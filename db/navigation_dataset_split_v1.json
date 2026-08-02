@@ -1,0 +1,130 @@
+{
+  "manifest_version": "navigation-app-split-v1-20260803",
+  "created_at": "2026-08-03T04:45:00+09:00",
+  "split_policy": "app_disjoint_collection_validation_locked_holdout",
+  "decision_db_audit": {
+    "path_kind": "n100_navigation_decision_memory",
+    "sha256": "4ebf210115d5223ad46ce12858b9a7383df89b02b81dddd1b5c0d9c7b2fd5a34",
+    "runtime_real_app_sessions_before_lock": 0,
+    "note": "Any app with pre-existing decision or converted Gold evidence is collection-only."
+  },
+  "entries": [
+    {
+      "app_package": "com.coupang.mobile",
+      "app_name": "Coupang",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 10,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.google.android.youtube",
+      "app_name": "YouTube",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and real-device evidence",
+      "existing_decision_cases": 13,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.netflix.mediaclient",
+      "app_name": "Netflix",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence; cannot remain holdout",
+      "existing_decision_cases": 19,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.parksmt.jejuair.android16",
+      "app_name": "Jeju Air",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 7,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.sampleapp",
+      "app_name": "Baemin",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 17,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.twitter.android",
+      "app_name": "X",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 3,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.discord",
+      "app_name": "Discord",
+      "split": "collection",
+      "reason": "pre-existing real-device failure evidence",
+      "existing_decision_cases": 2,
+      "available_on_device": true,
+      "priority_app": false
+    },
+    {
+      "app_package": "com.sec.android.app.launcher",
+      "app_name": "Samsung Launcher",
+      "split": "collection",
+      "reason": "pre-existing real-device launcher evidence",
+      "existing_decision_cases": 3,
+      "available_on_device": true,
+      "priority_app": false
+    },
+    {
+      "app_package": "com.kbins.kbinsure",
+      "app_name": "KB Insurance",
+      "split": "validation",
+      "reason": "installed zero-record financial-app validation fallback",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": false
+    },
+    {
+      "app_package": "ni.mh.android.launcher",
+      "app_name": "NH Nonghyup Property and Casualty Insurance",
+      "split": "validation",
+      "reason": "priority validation app reserved until installed",
+      "existing_decision_cases": 0,
+      "available_on_device": false,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.instagram.android",
+      "app_name": "Instagram",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen social-app holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.postype.play",
+      "app_name": "Postype",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen creator-membership holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.openai.chatgpt",
+      "app_name": "ChatGPT",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen subscription-app holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    }
+  ]
+}

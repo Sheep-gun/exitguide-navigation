@@ -25,6 +25,10 @@ from app.navigation_contracts import (  # noqa: E402
     ScreenObservation,
 )
 from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
+from app.services.navigation_dataset_split import (  # noqa: E402
+    DatasetSplitAccessError,
+    NavigationDatasetSplitManifest,
+)
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
@@ -172,6 +176,31 @@ def main() -> None:
         )
         assert dangerous.action.name == "stop_for_user"
 
+        safety_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "state-change-runtime.sqlite"),
+            policy=_policy(),
+        )
+        state_changing = safety_runtime.decide(
+            DecideRequest(
+                request_id="request-state-change",
+                app_package="evaluation.another.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                screen=ScreenObservation(
+                    window_title="계정 설정",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="logout",
+                            label="로그아웃",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert state_changing.action.name == "stop_for_user"
+
         out_of_scope = runtime.decide(
             DecideRequest(
                 request_id="request-4",
@@ -190,12 +219,72 @@ def main() -> None:
         else:
             raise AssertionError("coordinate fields were accepted")
 
+        split_manifest = NavigationDatasetSplitManifest.load(
+            ROOT / "db" / "navigation_dataset_split_v1.json"
+        )
+        split_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "split-runtime.sqlite"),
+            policy=_policy(),
+            dataset_split_manifest=split_manifest,
+        )
+        split_status = split_runtime.status()["dataset_split"]
+        assert split_status["counts"]["locked_holdout"] == 3
+        assert split_runtime.store.status()["schema_version"] == 3
+        assert len(split_runtime.store.dataset_split_manifest()) == len(split_manifest.entries)
+        try:
+            split_runtime.decide(
+                DecideRequest(
+                    request_id="holdout-denied",
+                    app_package="com.instagram.android",
+                    goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                    screen=_account_screen(),
+                )
+            )
+        except DatasetSplitAccessError:
+            pass
+        else:
+            raise AssertionError("locked holdout app was accepted during collection")
+
+        legacy_runtime_path = temporary_path / "legacy-runtime-v2.sqlite"
+        legacy_store = NavigationRuntimeStore(legacy_runtime_path)
+        legacy_store.upsert_session(
+            session_id="legacy-session",
+            request_id="legacy-request",
+            app_package="legacy.app",
+            locale="ko-KR",
+            goal_text="회원 탈퇴",
+            goal_id="account.delete",
+        )
+        connection = sqlite3.connect(legacy_runtime_path)
+        try:
+            connection.execute("DROP TABLE navigation_dataset_split_manifest")
+            connection.execute(
+                "UPDATE navigation_runtime_metadata SET value='2' WHERE key='schema_version'"
+            )
+            connection.execute(
+                "DELETE FROM navigation_runtime_metadata WHERE key LIKE 'dataset_split_manifest_%'"
+            )
+            connection.execute("PRAGMA user_version=2")
+            connection.commit()
+        finally:
+            connection.close()
+        upgraded_store = NavigationRuntimeStore(legacy_runtime_path)
+        assert upgraded_store.status()["schema_version"] == 3
+        assert upgraded_store.session("legacy-session") is not None
+
         previous = {key: os.environ.get(key) for key in (
             "NAVIGATION_DECISION_DB_PATH",
             "NAVIGATION_RUNTIME_DB_PATH",
+            "NAVIGATION_DATASET_SPLIT_MANIFEST_PATH",
+            "NAVIGATION_ALLOW_LOCKED_HOLDOUT",
         )}
         os.environ["NAVIGATION_DECISION_DB_PATH"] = str(decision_db)
         os.environ["NAVIGATION_RUNTIME_DB_PATH"] = str(temporary_path / "api-runtime.sqlite")
+        os.environ["NAVIGATION_DATASET_SPLIT_MANIFEST_PATH"] = str(
+            ROOT / "db" / "navigation_dataset_split_v1.json"
+        )
+        os.environ["NAVIGATION_ALLOW_LOCKED_HOLDOUT"] = "false"
         get_settings.cache_clear()
         from app import navigation_main  # noqa: E402
 
@@ -214,17 +303,30 @@ def main() -> None:
                 status.json()["planner"]["structured_output"]
                 == "hermes_tools_without_direct_action_execution"
             )
+            split_response = client.get("/v1/navigation/dataset-splits")
+            assert split_response.status_code == 200
+            assert split_response.json()["policy"]["counts"]["locked_holdout"] == 3
             api_decision = client.post(
                 "/v1/navigation/decide",
                 json={
                     "request_id": "api-request",
-                    "app_package": "evaluation.api.app",
+                    "app_package": "com.coupang.mobile",
                     "goal_text": "회원 탈퇴",
                     "screen": _account_screen().model_dump(mode="json"),
                 },
             )
             assert api_decision.status_code == 200
             assert api_decision.json()["action"]["candidate_id"] == "profile"
+            holdout_decision = client.post(
+                "/v1/navigation/decide",
+                json={
+                    "request_id": "api-holdout-denied",
+                    "app_package": "com.openai.chatgpt",
+                    "goal_text": "회원 탈퇴",
+                    "screen": _account_screen().model_dump(mode="json"),
+                },
+            )
+            assert holdout_decision.status_code == 403
             repeated_decision = client.post(
                 "/v1/navigation/decide",
                 json=json.loads(api_decision.request.content.decode("utf-8")),

@@ -37,9 +37,9 @@ test "$terms_before" = True
 
 install -d -m 2770 "$runtime_root/backups" "$runtime_root/tmp"
 stamp=$(date +%Y%m%d-%H%M%S)
-runtime_backup=$runtime_root/backups/navigation-runtime-v1.pre-v2-$stamp.sqlite
+runtime_backup=$runtime_root/backups/navigation-runtime-v1.pre-v3-$stamp.sqlite
 unit_backup=$runtime_root/backups/$service_name.pre-collector-$stamp
-migration_test=$runtime_root/tmp/navigation-runtime-v2-migration-test-$stamp.sqlite
+migration_test=$runtime_root/tmp/navigation-runtime-v3-migration-test-$stamp.sqlite
 
 RUNTIME_DB="$runtime_db" RUNTIME_BACKUP="$runtime_backup" "$venv_dir/bin/python" <<'PY'
 import os
@@ -60,7 +60,7 @@ from app.services.navigation_runtime_store import NavigationRuntimeStore
 
 status = NavigationRuntimeStore(os.environ["MIGRATION_TEST"]).status()
 assert status["ready"] is True
-assert status["schema_version"] == 2
+assert status["schema_version"] == 3
 print("migration_copy_status", status)
 PY
 
@@ -120,7 +120,10 @@ import os
 status = json.loads(os.environ["STATUS_JSON"])
 assert status["ready"] is True
 assert status["research_models_ready"] is True
-assert status["runtime_db"]["schema_version"] == 2
+assert status["runtime_db"]["schema_version"] == 3
+assert status["dataset_split"]["enabled"] is True
+assert status["dataset_split"]["counts"]["locked_holdout"] >= 3
+assert status["dataset_split"]["locked_holdout_access_enabled"] is False
 print("navigation_status", json.dumps(status, ensure_ascii=False, sort_keys=True))
 PY
 

@@ -18,7 +18,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import redact_text
 
 
-RUNTIME_SCHEMA_VERSION = 2
+RUNTIME_SCHEMA_VERSION = 3
 
 
 def utc_now() -> str:
@@ -97,6 +97,18 @@ class NavigationRuntimeStore:
                     "SELECT count(*) FROM navigation_knowledge_revision_queue WHERE status = 'pending'"
                 ).fetchone()[0]
             )
+            split_rows = connection.execute(
+                """
+                SELECT split, count(*) AS count
+                FROM navigation_dataset_split_manifest GROUP BY split
+                """
+            ).fetchall()
+            split_identity = connection.execute(
+                """
+                SELECT manifest_version, manifest_sha256
+                FROM navigation_dataset_split_manifest LIMIT 1
+                """
+            ).fetchone()
         return {
             "ready": quick_check == "ok",
             "schema_version": RUNTIME_SCHEMA_VERSION,
@@ -107,7 +119,100 @@ class NavigationRuntimeStore:
             "screen_candidates": screen_candidates,
             "complete_steps": complete_steps,
             "pending_knowledge_revisions": pending_revisions,
+            "dataset_split_manifest": {
+                "installed": split_identity is not None,
+                "manifest_version": (
+                    None if split_identity is None else str(split_identity["manifest_version"])
+                ),
+                "sha256": (
+                    None if split_identity is None else str(split_identity["manifest_sha256"])
+                ),
+                "counts": {str(row["split"]): int(row["count"]) for row in split_rows},
+            },
         }
+
+    def install_dataset_split_manifest(
+        self,
+        *,
+        manifest_version: str,
+        manifest_sha256: str,
+        entries: Iterable[dict[str, object]],
+    ) -> None:
+        """Install one immutable split manifest into the runtime evidence DB."""
+
+        rows = list(entries)
+        with self._lock, closing(self._connect()) as connection:
+            existing_identity = connection.execute(
+                """
+                SELECT manifest_version, manifest_sha256
+                FROM navigation_dataset_split_manifest LIMIT 1
+                """
+            ).fetchone()
+            if existing_identity is not None:
+                if (
+                    str(existing_identity["manifest_version"]) != manifest_version
+                    or str(existing_identity["manifest_sha256"]) != manifest_sha256
+                ):
+                    raise ValueError("runtime DB already contains a different locked split manifest")
+                existing_packages = {
+                    str(row["app_package"])
+                    for row in connection.execute(
+                        "SELECT app_package FROM navigation_dataset_split_manifest"
+                    )
+                }
+                incoming_packages = {str(row["app_package"]) for row in rows}
+                if existing_packages != incoming_packages:
+                    raise ValueError("runtime DB split manifest package set does not match")
+                return
+            now = utc_now()
+            connection.executemany(
+                """
+                INSERT INTO navigation_dataset_split_manifest(
+                    manifest_version, manifest_sha256, app_package, app_name, split,
+                    reason, existing_decision_cases, available_on_device,
+                    priority_app, locked_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        manifest_version,
+                        manifest_sha256,
+                        str(row["app_package"]),
+                        str(row["app_name"]),
+                        str(row["split"]),
+                        str(row["reason"]),
+                        int(row["existing_decision_cases"]),
+                        int(bool(row["available_on_device"])),
+                        int(bool(row["priority_app"])),
+                        now,
+                    )
+                    for row in rows
+                ],
+            )
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO navigation_runtime_metadata(key, value)
+                VALUES ('dataset_split_manifest_version', ?),
+                       ('dataset_split_manifest_sha256', ?)
+                """,
+                (manifest_version, manifest_sha256),
+            )
+            connection.commit()
+
+    def dataset_split_manifest(self) -> list[dict[str, Any]]:
+        with self._lock, closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT manifest_version, app_package, app_name, split, reason,
+                       existing_decision_cases, available_on_device, priority_app, locked_at
+                FROM navigation_dataset_split_manifest
+                ORDER BY CASE split
+                    WHEN 'collection' THEN 1
+                    WHEN 'validation' THEN 2
+                    ELSE 3 END, app_package
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def upsert_session(
         self,
@@ -394,6 +499,13 @@ class NavigationRuntimeStore:
             ).fetchone()
             if session is None:
                 raise KeyError(session_id)
+            split_row = connection.execute(
+                """
+                SELECT split FROM navigation_dataset_split_manifest
+                WHERE app_package = ?
+                """,
+                (session["app_package"],),
+            ).fetchone()
             rows = connection.execute(
                 """
                 SELECT d.*, o.observation_id, o.connectivity_status,
@@ -458,9 +570,13 @@ class NavigationRuntimeStore:
                 item["screen"] = screens
                 item.pop("screen_payload_json", None)
                 steps.append(item)
+        session_payload = dict(session)
+        session_payload["dataset_split"] = (
+            "unassigned" if split_row is None else str(split_row["split"])
+        )
         return {
             "schema_version": "runtime-episode.v2",
-            "session": dict(session),
+            "session": session_payload,
             "candidate_set_status": episode_candidate_status,
             "steps": steps,
         }

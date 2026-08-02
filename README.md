@@ -119,7 +119,7 @@ Android 실행 계약과 설치 방법은 [Android Executor v1](docs/ANDROID_EXE
 
 ### 실기기 경험 수집 상태
 
-Android Executor는 이제 `/decide → 안전 실행 → /observe` 루프를 최대 24단계까지 자율 수행한다. runtime schema v2는 각 단계의 before/after 화면, 전체 후보, 후보별 점수, 실제 선택, 실행 상태, 연결 상태, 목적지 거리 변화, 실패와 복구 힌트를 정규화해 저장한다. 연결 오류는 탐색 실패와 분리되고, 위험한 최종 행동은 서버와 기기 양쪽에서 `stop_for_user`로 차단된다. 수집 세션은 `GET /v1/navigation/sessions/{session_id}/episode`로 확인할 수 있다.
+Android Executor는 `/decide → 안전 실행 → /observe` 루프를 최대 15단계·10분까지 자율 수행한다. runtime schema v3는 각 단계의 before/after 화면, 전체 후보, 후보별 점수, 실제 선택, 실행 상태, 연결 상태, 목적지 거리 변화, 실패와 복구 힌트 및 고정된 앱 데이터 분할을 정규화해 저장한다. 연결 오류는 탐색 실패와 분리되고, 위험한 최종 행동은 서버와 기기 양쪽에서 `stop_for_user`로 차단된다. 수집 중에는 좌표 기반 keep-alive 대신 Android wake-lock을 유지하며 종료 시 해제한다. 수집 세션은 `GET /v1/navigation/sessions/{session_id}/episode`로 확인할 수 있다.
 
 ## 로컬 검증
 

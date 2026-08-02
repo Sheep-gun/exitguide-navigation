@@ -10,6 +10,8 @@ Group=exitguide-admin
 WorkingDirectory=/home/kyle/exitguide/runtime/navigation-api-current-code/apps/api
 EnvironmentFile=/home/kyle/exitguide/secrets/navigation-api.env
 EnvironmentFile=-/srv/exitguide/secrets/navigation-planner.env
+Environment=NAVIGATION_DATASET_SPLIT_MANIFEST_PATH=/home/kyle/exitguide/runtime/navigation-api-current-code/db/navigation_dataset_split_v1.json
+Environment=NAVIGATION_ALLOW_LOCKED_HOLDOUT=false
 ExecStart=/home/kyle/exitguide/runtime/navigation-api-current-venv/bin/uvicorn app.navigation_main:app --host 100.77.172.25 --port 8100
 Restart=on-failure
 RestartSec=3

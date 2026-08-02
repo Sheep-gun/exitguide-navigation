@@ -11,6 +11,8 @@ import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.os.SystemClock;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -30,7 +32,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private static final long EVENT_DEBOUNCE_MS = 700;
     private static final long OBSERVATION_DELAY_MS = 1_200;
-    private static final int MAX_ACTIONS = 24;
+    private static final int MAX_ACTIONS = 15;
+    private static final long MAX_EPISODE_DURATION_MS = 10 * 60 * 1_000L;
     private static final int MAX_SCREENSHOT_EDGE = 900;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -42,15 +45,19 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private String sessionId = "";
     private String lastActivityName = "";
     private Runnable pendingDecision;
+    private PowerManager.WakeLock screenWakeLock;
+    private long episodeStartedAtElapsed;
 
     private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             resetSession();
             if (ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
+                holdScreenAwake();
                 verifyApiAndSchedule();
             } else {
                 cancelPending();
+                releaseScreenAwake();
             }
         }
     };
@@ -67,6 +74,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
         publish("접근성 서비스가 준비되었습니다.");
         if (ExecutorPreferences.active(this)) {
+            holdScreenAwake();
             verifyApiAndSchedule();
         }
     }
@@ -93,6 +101,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         cancelPending();
+        releaseScreenAwake();
         try {
             unregisterReceiver(configurationReceiver);
         } catch (IllegalArgumentException ignored) {
@@ -103,6 +112,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void verifyApiAndSchedule() {
+        holdScreenAwake();
         publish("Navigation API 상태를 확인하는 중입니다.");
         apiClient.get(
                 ExecutorPreferences.apiBaseUrl(this),
@@ -148,8 +158,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (!ExecutorPreferences.active(this) || inFlight) {
             return;
         }
+        if (episodeStartedAtElapsed == 0L) {
+            episodeStartedAtElapsed = SystemClock.elapsedRealtime();
+        }
         if (stepOrdinal >= MAX_ACTIONS) {
-            stop("안전 한도 24회에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
+            stop("안전 한도 15회에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
+            return;
+        }
+        if (SystemClock.elapsedRealtime() - episodeStartedAtElapsed >= MAX_EPISODE_DURATION_MS) {
+            stop("안전 시간 한도 10분에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
             return;
         }
         AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
@@ -526,13 +543,38 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private void resetSession() {
         sessionId = "";
         stepOrdinal = 0;
+        episodeStartedAtElapsed = 0L;
         inFlight = false;
     }
 
     private void stop(String message) {
         cancelPending();
         ExecutorPreferences.setActive(this, false);
+        releaseScreenAwake();
         publish(message);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void holdScreenAwake() {
+        if (screenWakeLock == null) {
+            PowerManager powerManager = (PowerManager) getSystemService(POWER_SERVICE);
+            screenWakeLock = powerManager.newWakeLock(
+                    PowerManager.SCREEN_DIM_WAKE_LOCK
+                            | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                            | PowerManager.ON_AFTER_RELEASE,
+                    "ExitGuideNavigation:CollectionScreenAwake"
+            );
+            screenWakeLock.setReferenceCounted(false);
+        }
+        if (!screenWakeLock.isHeld()) {
+            screenWakeLock.acquire();
+        }
+    }
+
+    private void releaseScreenAwake() {
+        if (screenWakeLock != null && screenWakeLock.isHeld()) {
+            screenWakeLock.release();
+        }
     }
 
     private void publish(String message) {

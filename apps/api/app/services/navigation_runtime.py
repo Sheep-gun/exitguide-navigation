@@ -18,7 +18,9 @@ from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     NavigationDecisionMemory,
     NormalizedGoal,
+    is_dangerous_final_candidate,
 )
+from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
 from app.services.navigation_planner import PlannerProposal
 from app.services.navigation_research_policy import (
     AndroidWorldResearchPolicy,
@@ -46,11 +48,21 @@ class NavigationRuntime:
         memory: NavigationDecisionMemory,
         store: NavigationRuntimeStore,
         policy: AndroidWorldResearchPolicy,
+        dataset_split_manifest: NavigationDatasetSplitManifest | None = None,
+        allow_locked_holdout: bool = False,
     ) -> None:
         self.memory = memory
         self.store = store
         self.policy = policy
+        self.dataset_split_manifest = dataset_split_manifest
+        self.allow_locked_holdout = allow_locked_holdout
         self.reflection_policy = ReflectionTriggerPolicy()
+        if dataset_split_manifest is not None:
+            self.store.install_dataset_split_manifest(
+                manifest_version=dataset_split_manifest.manifest_version,
+                manifest_sha256=dataset_split_manifest.digest,
+                entries=[entry.as_dict() for entry in dataset_split_manifest.entries],
+            )
 
     def status(self) -> dict[str, object]:
         research_models_ready = (
@@ -76,6 +88,13 @@ class NavigationRuntime:
                 "access_mode": "read_only",
             },
             "runtime_db": self.store.status(),
+            "dataset_split": (
+                {"enabled": False}
+                if self.dataset_split_manifest is None
+                else self.dataset_split_manifest.status(
+                    allow_locked_holdout=self.allow_locked_holdout
+                )
+            ),
             "planner": {
                 "architecture": "k2_planner_vdroid_verifier_mobileuse_reflection",
                 "structured_output": "hermes_tools_without_direct_action_execution",
@@ -97,6 +116,11 @@ class NavigationRuntime:
         }
 
     def decide(self, request: DecideRequest) -> DecideResponse:
+        if self.dataset_split_manifest is not None:
+            self.dataset_split_manifest.require_collection_access(
+                request.app_package,
+                allow_locked_holdout=self.allow_locked_holdout,
+            )
         session_id = request.session_id or f"navs_{uuid.uuid4().hex}"
         perception = self.policy.perceive(
             goal_text=request.goal_text,
@@ -153,6 +177,27 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_terminal_boundary"
+        elif effective_screen.candidates and all(
+            candidate.risk_level in {"medium", "high", "blocked"}
+            or is_dangerous_final_candidate(
+                " ".join(
+                    (
+                        candidate.label,
+                        candidate.icon_semantics,
+                        candidate.nearby_text,
+                        candidate.parent_semantics,
+                    )
+                )
+            )
+            for candidate in effective_screen.candidates
+        ):
+            proposal = PlannerProposal(
+                NavigationAction(name="stop_for_user"),
+                1.0,
+                "python_state_change_boundary",
+                False,
+            )
+            planner_provider = "python_state_change_boundary"
         else:
             research_decision = self.policy.decide_action(
                 query=query,
