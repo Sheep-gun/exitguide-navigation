@@ -350,6 +350,56 @@ def main() -> None:
         assert already_member_observation.candidate_forbidden is False
         assert already_member_observation.session_status == "stopped"
 
+        already_member_after_click = auth_transition_runtime.decide(
+            DecideRequest(
+                request_id="request-member-after-click",
+                app_package="evaluation.membership.app",
+                goal_text="유료 멤버십에 가입하고 싶어",
+                screen=ScreenObservation(
+                    window_title="홈",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="my-page",
+                            label="내 페이지",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert already_member_after_click.action.name == "click"
+        already_member_after_click_observation = auth_transition_runtime.observe(
+            ObserveRequest(
+                request_id="request-member-after-click-observe",
+                decision_id=already_member_after_click.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=ScreenObservation(
+                    window_title="계정",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-status",
+                            label="Premium 회원",
+                            role="text",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="benefits",
+                            label="Premium 혜택",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert already_member_after_click_observation.outcome_type == "blocked"
+        assert already_member_after_click_observation.progress_label == "advanced"
+        assert already_member_after_click_observation.failure_class == "already_satisfied"
+        assert already_member_after_click_observation.candidate_forbidden is False
+        assert already_member_after_click_observation.knowledge_revision_queued is False
+        assert already_member_after_click_observation.session_status == "stopped"
+
         out_of_scope = runtime.decide(
             DecideRequest(
                 request_id="request-4",

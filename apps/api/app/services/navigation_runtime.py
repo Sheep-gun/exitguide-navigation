@@ -485,16 +485,23 @@ class NavigationRuntime:
             observed_signal = request.observed_signal
             if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
                 observed_signal = "login_required"
-            if decision["planner_provider"] == "python_goal_already_satisfied":
+            if (
+                decision["planner_provider"] == "python_goal_already_satisfied"
+                or _goal_already_satisfied(next_query)
+            ):
                 verified = VerifiedTransition(
                     outcome_type="blocked",
                     state_changed=(
                         str(decision["screen_fingerprint"]) != next_fingerprint
                     ),
-                    progress_label="unchanged",
+                    progress_label=(
+                        "advanced"
+                        if str(decision["screen_fingerprint"]) != next_fingerprint
+                        else "unchanged"
+                    ),
                     destination_match_after=next_query.destination_match,
                     failure_class="already_satisfied",
-                    recovery_action=None,
+                    recovery_action=NavigationAction(name="stop_for_user"),
                 )
             else:
                 verified = verify_transition(
@@ -512,6 +519,7 @@ class NavigationRuntime:
         if (
             request.connectivity_status == "observed"
             and candidate_id
+            and verified.failure_class != "already_satisfied"
             and verified.outcome_type
             in {"no_change", "wrong_destination", "external_app", "infinite_feed", "blocked"}
         ):
