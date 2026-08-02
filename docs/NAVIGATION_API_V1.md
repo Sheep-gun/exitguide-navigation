@@ -18,8 +18,10 @@
 cd apps/api
 export NAVIGATION_DECISION_DB_PATH=/absolute/path/navigation-decision-v1.sqlite
 export NAVIGATION_RUNTIME_DB_PATH=/absolute/path/navigation-runtime-v1.sqlite
-uvicorn app.navigation_main:app --host 127.0.0.1 --port 8100
+uvicorn app.navigation_main:app --host 100.77.172.25 --port 8100
 ```
+
+N100 배포본은 공용 LAN 전체가 아니라 N100의 Tailscale 주소 `100.77.172.25`에만 바인딩한다. 따라서 같은 tailnet의 Android Executor가 `http://100.77.172.25:8100`으로 접근할 수 있고, Terms RAG의 8010 서비스와 데이터는 변경하지 않는다.
 
 Solar Pro 3 Hermes planner를 사용할 때는 서비스 비밀 환경에서 다음을 설정한다.
 

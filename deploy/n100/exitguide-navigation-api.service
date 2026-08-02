@@ -1,16 +1,16 @@
 [Unit]
 Description=ExitGuide Navigation Decision API
-After=network-online.target exitguide-a100-vlm-tunnel.service
-Wants=network-online.target exitguide-a100-vlm-tunnel.service
+After=network-online.target tailscaled.service exitguide-a100-vlm-tunnel.service
+Wants=network-online.target tailscaled.service exitguide-a100-vlm-tunnel.service
 
 [Service]
 Type=simple
 User=exitguide
 Group=exitguide-admin
-WorkingDirectory=/home/kyle/exitguide/workspaces/yanggeon/navigation-db-redesign/apps/api
+WorkingDirectory=/home/kyle/exitguide/runtime/navigation-api-current-code/apps/api
 EnvironmentFile=/home/kyle/exitguide/secrets/navigation-api.env
 EnvironmentFile=-/srv/exitguide/secrets/navigation-planner.env
-ExecStart=/home/kyle/exitguide/workspaces/yanggeon/navigation-db-redesign/.venv/bin/uvicorn app.navigation_main:app --host 127.0.0.1 --port 8100
+ExecStart=/home/kyle/exitguide/runtime/navigation-api-current-venv/bin/uvicorn app.navigation_main:app --host 100.77.172.25 --port 8100
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=20
