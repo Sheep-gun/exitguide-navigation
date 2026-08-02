@@ -472,7 +472,7 @@ class NavigationRuntime:
         session_status = None
         if verified.outcome_type == "destination_reached":
             session_status = "reached"
-        elif verified.outcome_type == "blocked":
+        elif verified.outcome_type == "blocked" or decision["action_name"] == "stop_for_user":
             session_status = "stopped"
         observation_id = self.store.record_observation(
             observation_id=f"navo_{uuid.uuid4().hex}",

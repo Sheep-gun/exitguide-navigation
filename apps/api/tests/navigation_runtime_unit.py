@@ -220,6 +220,26 @@ def main() -> None:
         assert logged_out.action.name == "stop_for_user"
         assert logged_out.planner_provider == "python_authentication_boundary"
         assert logged_out.perception_provider == "structured_input_auth_boundary"
+        logged_out_observation = safety_runtime.observe(
+            ObserveRequest(
+                request_id="request-auth-boundary-observe",
+                decision_id=logged_out.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=False,
+                observed_signal="blocked",
+                next_screen=ScreenObservation(
+                    window_title="전체 메뉴",
+                    activity_name="androidx.drawerlayout.widget.DrawerLayout",
+                    candidates=[
+                        NavigationCandidate(candidate_id="signup", label="회원가입", role="button"),
+                        NavigationCandidate(candidate_id="login", label="로그인", role="button"),
+                        NavigationCandidate(candidate_id="my-page", label="마이페이지", role="button"),
+                    ],
+                ),
+            )
+        )
+        assert logged_out_observation.outcome_type == "login_required"
+        assert safety_runtime.store.session(logged_out.session_id)["status"] == "stopped"
 
         auth_transition_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
