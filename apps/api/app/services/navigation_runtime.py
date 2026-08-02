@@ -137,11 +137,34 @@ class NavigationRuntime:
             locale=request.locale,
             navigation_depth=request.screen.navigation_depth,
         )
+        structured_query = self.memory.retrieve(
+            goal_text=request.goal_text,
+            window_title=request.screen.window_title,
+            activity_name=request.screen.activity_name,
+            candidates=[
+                candidate.model_dump(mode="json") for candidate in request.screen.candidates
+            ],
+            locale=request.locale,
+            exclude_app_package=request.app_package,
+            top_k=0,
+            normalized_goal=normalized_goal,
+            resolve_goal_from_text=False,
+        )
+        structured_terminal_boundary = (
+            goal_resolution.status == "recognized"
+            and structured_query.destination_match >= _destination_threshold(structured_query)
+        )
         if _is_authentication_boundary(normalized_goal, structured_screen.auth_state):
             perception = PerceptionOutput(
                 screen=request.screen,
                 semantic_summary="explicit authentication boundary from structured UI",
                 provider="structured_input_auth_boundary",
+            )
+        elif structured_terminal_boundary:
+            perception = PerceptionOutput(
+                screen=request.screen,
+                semantic_summary="destination signature satisfied by structured UI",
+                provider="structured_input_terminal_boundary",
             )
         else:
             perception = self.policy.perceive(

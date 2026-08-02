@@ -274,6 +274,26 @@ def main() -> None:
         assert auth_observation.recovery_action is not None
         assert auth_observation.recovery_action.name == "stop_for_user"
 
+        signup_terminal = auth_transition_runtime.decide(
+            DecideRequest(
+                request_id="request-signup-terminal",
+                app_package="evaluation.auth.app",
+                goal_text="새 계정을 만들고 싶어",
+                screen=ScreenObservation(
+                    window_title="회원가입",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(candidate_id="email", label="이메일", role="input"),
+                        NavigationCandidate(candidate_id="password", label="비밀번호", role="input"),
+                        NavigationCandidate(candidate_id="create", label="가입하기", role="button"),
+                    ],
+                ),
+            )
+        )
+        assert signup_terminal.action.name == "stop_for_user"
+        assert signup_terminal.planner_provider == "python_terminal_boundary"
+        assert signup_terminal.perception_provider == "structured_input_terminal_boundary"
+
         out_of_scope = runtime.decide(
             DecideRequest(
                 request_id="request-4",
