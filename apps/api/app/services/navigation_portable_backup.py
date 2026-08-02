@@ -65,12 +65,12 @@ FORBIDDEN_PARTS = frozenset(
     }
 )
 SECRET_PATTERNS = (
-    # Token boundaries matter for corpus/index files: ordinary words such as
-    # ``risk-evaluation`` contain the byte sequence ``sk-`` but are not API
-    # keys. A real credential may follow ``=``, quotes or whitespace, all of
-    # which still satisfy this negative alphanumeric boundary.
-    re.compile(rb"(?<![a-z0-9])flp_[a-z0-9_-]{20,}", re.IGNORECASE),
-    re.compile(rb"(?<![a-z0-9])sk-[a-z0-9_-]{20,}", re.IGNORECASE),
+    # Context boundaries matter for corpus/index files: ordinary words such
+    # as ``risk-evaluation`` and URL-encoded ad identifiers can contain a long
+    # ``sk-...`` substring. Real copied credentials occur after whitespace,
+    # assignment punctuation or a quote in env/JSON/shell/Markdown text.
+    re.compile(rb"(?:^|[\s=:,\"'\(\[])flp_[a-z0-9_-]{20,}", re.IGNORECASE),
+    re.compile(rb"(?:^|[\s=:,\"'\(\[])sk-[a-z0-9_-]{20,}", re.IGNORECASE),
     re.compile(rb"\bbearer\s+[a-z0-9._~-]{24,}", re.IGNORECASE),
 )
 

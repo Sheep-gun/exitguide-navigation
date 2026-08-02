@@ -29,6 +29,10 @@ def main() -> None:
                 "INSERT INTO sample(value) VALUES (?)",
                 ("https://example.test/risk-evaluation-and-mitigation-strategies-rems",),
             )
+            index_connection.execute(
+                "INSERT INTO sample(value) VALUES (?)",
+                ("https://example.test/click?gclid=abc_sk-abcdefghijklmnopqrstuvwxyz012345%2",),
+            )
             index_connection.commit()
         finally:
             index_connection.close()
