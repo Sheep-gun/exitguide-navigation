@@ -166,11 +166,36 @@ public final class MainActivity extends Activity {
         for (AccessibilityServiceInfo info : services) {
             if (info.getResolveInfo() != null
                     && info.getResolveInfo().serviceInfo != null
-                    && serviceName.equals(info.getResolveInfo().serviceInfo.name)) {
+                    && matchesAccessibilityService(
+                            getPackageName(),
+                            serviceName,
+                            info.getResolveInfo().serviceInfo.packageName,
+                            info.getResolveInfo().serviceInfo.name
+                    )) {
                 return true;
             }
         }
         return false;
+    }
+
+    static boolean matchesAccessibilityService(
+            String expectedPackage,
+            String expectedClass,
+            String actualPackage,
+            String actualClass
+    ) {
+        if (expectedPackage == null || expectedClass == null
+                || actualPackage == null || actualClass == null
+                || !expectedPackage.equals(actualPackage)) {
+            return false;
+        }
+        String normalizedClass = actualClass;
+        if (actualClass.startsWith(".")) {
+            normalizedClass = actualPackage + actualClass;
+        } else if (!actualClass.contains(".")) {
+            normalizedClass = actualPackage + "." + actualClass;
+        }
+        return expectedClass.equals(normalizedClass);
     }
 
     private static boolean isValidHttpUrl(String value) {
