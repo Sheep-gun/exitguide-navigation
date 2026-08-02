@@ -10,7 +10,7 @@
 
 > **EXAONE 4.5 VLM = 눈** — 화면 전체 의미, 아이콘, 영역, 주변 문맥을 해석
 >
-> **K-EXAONE LLM = 두뇌** — 목적과 현재 상태를 바탕으로 다음 행동을 계획
+> **Solar Pro 3 LLM = 두뇌** — 목적과 현재 상태를 바탕으로 다음 행동을 계획하고 후보 가치를 평가
 >
 > **N100 신규 DB = 기억** — 과거의 유사 화면·후보·선택·결과·실패 경험을 검색하고 축적
 >
@@ -21,20 +21,6 @@
 이 다섯 요소는 서로 대체 관계가 아니다. VLM과 LLM은 매 단계 바뀌는 화면을 해석하고
 판단하며, DB는 과거 경험을 근거로 제공한다. Navigation API는 모델의 판단을 실제 기기
 명령으로 바로 전달하지 않고 후보 제한·안전 검사·결과 검증을 거친다.
-
-```mermaid
-flowchart LR
-    USER["사용자 목적"] --> API["Navigation API<br/>신경계 및 통제 장치"]
-    ANDROID["Android 앱/실행기<br/>손과 몸"] -->|"화면·Accessibility·OCR·candidate_id"| API
-    API -->|"스크린샷 + 발견된 후보만"| VLM["EXAONE 4.5 VLM<br/>눈"]
-    VLM -->|"화면 의미·아이콘·영역·문맥"| API
-    API <-->|"유사 결정·결과·실패 검색/기록"| DB["N100 신규 DB<br/>기억"]
-    API -->|"목적 + 현재 상태 + 검색 근거 + 유한 후보"| LLM["K-EXAONE LLM<br/>두뇌"]
-    LLM -->|"즉시 sub-goal + 후보별 가치"| API
-    API --> SAFE{"Python 안전 검사"}
-    SAFE -->|"안전한 허용 행동"| ANDROID
-    SAFE -->|"위험 최종 행동"| STOP["stop_for_user()<br/>사용자가 직접 수행"]
-```
 
 ## 현재 N100 Navigation DB
 
@@ -132,7 +118,7 @@ ExitGuide 대응:
 - Locate/Revise: 첫 불일치 decision과 실패 후보를 runtime memory에 격리 기록
 
 K²의 C-GRPO 학습은 이번 N100 프로토타입에 포함하지 않는다. 논문 구현은 대규모 GPU
-훈련을 전제로 하므로, 현재는 비모수 DB 기억과 K-EXAONE planner/executor 경계만
+훈련을 전제로 하므로, 현재는 비모수 DB 기억과 Solar Pro 3 planner/executor 경계만
 구현한다. 이를 K² 전체 재현이라고 부르지 않는다.
 
 ### V-Droid: 생성기가 아닌 후보 verifier
@@ -146,13 +132,13 @@ ExitGuide 대응:
 - 클릭 후보는 Accessibility/OCR/VLM 단계에서 실제 발견된 `candidate_id`만 사용
 - 기본 후보는 `scroll`, `back`, `wait_and_observe`, `stop_for_user`
 - 좌표 후보, 임의 텍스트 입력, 앱별 정답 경로는 생성하지 않음
-- K-EXAONE은 직접 좌표나 임의 행동을 생성하지 않고 각 허용 후보의 도움 가능성을 채점
+- Solar Pro 3는 직접 좌표나 임의 행동을 생성하지 않고 각 허용 후보의 도움 가능성을 채점
 - Hermes tool call은 semantic sub-goal 제출과 단일 후보 점수 제출에만 사용
-- DB 점수는 prior이며 K-EXAONE verifier 점수와 출처를 분리
+- DB 점수는 prior이며 Solar Pro 3 verifier 점수와 출처를 분리
 - 위험 후보는 verifier 호출 전 Python이 차단하고 최종 선택 후 다시 검사
 
 V-Droid의 8B verifier 가중치와 P³ pairwise 학습은 이번 단계에서 그대로 사용하지
-않는다. 대신 동일한 verifier 입출력 계약을 K-EXAONE에 적용하고, 향후 실제 결과로
+않는다. 대신 동일한 verifier 입출력 계약을 Solar Pro 3에 적용하고, 향후 실제 결과로
 positive/negative action pair를 축적할 수 있게 한다.
 
 ### MobileUse: Reflection-on-Demand
@@ -186,35 +172,49 @@ ExitGuide 대응:
 
 ```mermaid
 flowchart TD
-    A["1. 사용자 자연어 목적 입력"] --> B["2. Goal Ontology 정규화<br/>표준 목적 + 조건 + terminal policy"]
-    B --> C["3. Destination Signature 구성"]
-    D["현재 Android 화면"] --> E["4. Accessibility/OCR 후보 추출<br/>안정적인 candidate_id 부여"]
-    E --> F["5. EXAONE 4.5 VLM perception<br/>화면 전체 의미와 기존 후보를 보강"]
-    C --> G["6. N100 Decision Memory 검색"]
-    F --> G
-    G --> H["7. K-EXAONE high-level planner<br/>즉시 검증 가능한 sub-goal + 기대 결과"]
-    H --> I["8. 허용 행동 후보 열거<br/>발견된 click ID + scroll/back/wait/stop"]
-    I --> J["9. K-EXAONE verifier<br/>동일 문맥으로 후보를 하나씩 채점"]
-    J --> K["10. Python argmax + 이중 안전 검사"]
-    K -->|"위험·미발견 ID·금지 후보"| L["stop_for_user() 또는 안전 행동으로 교체"]
-    K -->|"안전"| M["11. Android 실행기가 원자 행동 실행"]
-    M --> N["12. 다음 화면 재관찰<br/>동일 perception 경로 적용"]
-    N --> O{"13. 의미적 거리와 실제 결과 검증"}
-    O -->|"목적지 Signature 충족"| P["14. 위험한 최종 확정 직전 정지<br/>사용자에게 제어권 반환"]
-    O -->|"진전"| Q["Runtime outcome 기록"]
-    O -->|"무변화·오클릭·반복"| R["Failure/Recovery 기록<br/>후보 금지 + 선택적 reflection"]
-    O -->|"transport/device 오류"| S["연결 장애로 별도 기록<br/>탐색 실패로 학습하지 않음"]
-    Q --> A2["다음 decide"]
-    R --> A2
-    S --> T["wait_and_observe() 후 재연결"]
+    USER["사용자 자연어 목적"] --> GOAL["Solar Pro 3<br/>표준 목적 1개 선택"]
+    GOAL_DB["Goal Ontology DB<br/>기능 카탈로그"] --> GOAL
+    GOAL --> DEST["Destination Signature DB<br/>목표에 맞는 최종 목적지 설정"]
+
+    SCREEN["현재 Android 화면"] --> VIEW["Accessibility/OCR + EXAONE 4.5<br/>현재 화면과 후보 파악"]
+    DEST --> K2["K²식 Navigation API<br/>다음 중간 목표 결정"]
+    VIEW --> K2
+
+    K2 --> VDROID["V-Droid식 Navigation API<br/>현재 후보 중 다음 행동 평가"]
+    MEMORY["Decision Memory DB<br/>과거 선택과 결과 경험"] --> VDROID
+    VDROID --> CLEAR{"DB 경험으로<br/>결정 가능한가?"}
+    CLEAR -->|"예"| CHOOSE["다음 행동 선택"]
+    CLEAR -->|"아니오"| SOLAR["Solar Pro 3<br/>현재 후보 재평가"]
+    SOLAR --> CHOOSE
+
+    CHOOSE --> SAFE["Python 안전 검사<br/>실재 후보 확인 · 위험 행동 차단"]
+    SAFE -->|"위험"| STOP["사용자에게 최종 행동 요청"]
+    SAFE -->|"안전"| EXECUTE["Android 실행기가 행동 실행"]
+
+    EXECUTE --> VERIFY["DroidRun식 Navigation API<br/>행동 후 새 화면과 결과 확인"]
+    VERIFY --> RESULT{"행동 결과"}
+    RESULT -->|"목적지 도달"| STOP
+    RESULT -->|"진전"| RECORD["성공 경험 기록"]
+    RECORD --> SCREEN
+    RESULT -->|"실패·반복"| RECOVERY["MobileUse식 Navigation API<br/>필요할 때만 복구"]
+    RECOVERY --> SCREEN
+    RESULT -->|"연결 오류"| WAIT["연결 복구 후 다시 관찰"]
+    WAIT --> SCREEN
 ```
+
+`Goal Ontology DB`는 기능 카탈로그, `Destination Signature DB`는 목표에 맞는 최종 목적지,
+`Decision Memory DB`는 과거 선택과 결과 경험이다. 모두 N100 Navigation Decision DB 안의
+서로 다른 데이터 계층이다.
+
+이 목표 흐름에서는 Solar가 사용자 자연어 목적을 Goal Ontology의 표준 기능 하나로 반환한다.
+현재 구현은 이 부분이 Python 문구 매칭이므로 Solar Goal Ontology classifier 구현이 남아 있다.
 
 ### API와 실행기 사이의 계약
 
-- `POST /v1/navigation/decide`: 현재 화면을 바탕으로 안전한 다음 행동 하나를 반환
-- `POST /v1/navigation/observe`: 그 행동의 실제 실행 결과와 다음 화면을 기록·검증
-- K-EXAONE Hermes 함수는 `submit_navigation_subgoal`,
-  `score_navigation_candidate`만 허용
+- `POST /v1/navigation/decide`: 다음에 실행할 행동 하나를 고른다.
+- `POST /v1/navigation/observe`: 행동 뒤 화면이 어떻게 바뀌었는지 확인한다.
+- Solar Pro 3 Hermes 함수는 `submit_navigation_step_evaluation` 하나만 허용한다. 이 함수는
+  즉시 sub-goal과 모든 허용 후보의 점수를 한 응답으로 반환한다.
 - 실행 가능 행동은 `click(candidate_id)`, `scroll(direction)`, `back()`,
   `wait_and_observe()`, `stop_for_user()`로 제한
 - 모델에는 좌표 필드가 없고 입력 화면에 없던 candidate ID는 Python이 거부
@@ -222,13 +222,13 @@ flowchart TD
 
 ### 구현과 아직 검증되지 않은 것
 
-현재 Python/FastAPI Navigation API, K-EXAONE·EXAONE 4.5 어댑터, Runtime DB와 안전
+현재 Python/FastAPI Navigation API, Solar Pro 3·EXAONE 4.5 어댑터, Runtime DB와 안전
 계약 테스트까지 구현돼 있다. 논문의 학습법인 K² C-GRPO와 V-Droid P³ 가중치를 재현한
 것은 아니다. 실제 모델 endpoint를 사용한 앱 분리 A/B, 실기기 성공률, APK 실행기 연결은
 후속 검증 대상이며 그 전에는 기존 방식보다 성능이 높다고 주장하지 않는다.
 
 74개 변환 사례의 source-app 제외 진단 재생에서는 첫 행동 정확도 0.7778, positive
-next-action exact match 0.4444, 실패 클릭 회피율 0.8182, 위험 행동 자동 클릭 0건이었다.
+next-action exact match 0.4603, 실패 클릭 회피율 0.8182, 위험 행동 자동 클릭 0건이었다.
 이 수치는 모델 endpoint가 없는 fallback의 방향성 검사이며 최종 A/B가 아니다. 특히 전체
 다음 행동 정확도는 낮으므로 데이터를 더 늘릴 근거가 되지 않는다.
 

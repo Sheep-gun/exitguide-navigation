@@ -1,0 +1,27 @@
+[Unit]
+Description=ExitGuide N100 to A100 VLM SSH tunnel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=exitguide
+Group=exitguide-admin
+ExecStart=/usr/bin/ssh -NT -p 30002 -i /srv/exitguide/secrets/navigation-a100-tunnel/id_ed25519 -o BatchMode=yes -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/srv/exitguide/secrets/navigation-a100-tunnel/known_hosts -L 127.0.0.1:18000:127.0.0.1:8000 ubuntu@proxy.tta-gpu.gov-nhncloud.com
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

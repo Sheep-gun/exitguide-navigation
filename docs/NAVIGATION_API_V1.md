@@ -21,29 +21,43 @@ export NAVIGATION_RUNTIME_DB_PATH=/absolute/path/navigation-runtime-v1.sqlite
 uvicorn app.navigation_main:app --host 127.0.0.1 --port 8100
 ```
 
-K-EXAONE Hermes planner를 사용할 때는 서비스 비밀 환경에서 다음을 설정한다.
+Solar Pro 3 Hermes planner를 사용할 때는 서비스 비밀 환경에서 다음을 설정한다.
 
 ```text
 NAVIGATION_MODEL_ALLOW_FALLBACK=true
-EXAONE_API_KEY=(service secret)
-EXAONE_BASE_URL=(OpenAI-compatible chat completions base URL)
-EXAONE_MODEL=LGAI-EXAONE/K-EXAONE-236B-A23B
+NAVIGATION_PLANNER_MODE=selective
+NAVIGATION_VLM_MODE=selective
+NAVIGATION_PLANNER_PROVIDER=solar_pro3
+NAVIGATION_PLANNER_API_KEY=(service secret)
+NAVIGATION_PLANNER_BASE_URL=https://api.upstage.ai/v1
+NAVIGATION_PLANNER_MODEL=solar-pro3
 EXAONE_VLM_API_KEY=(service secret, local endpoint이면 생략 가능)
 EXAONE_VLM_BASE_URL=(EXAONE 4.5 OpenAI-compatible base URL)
-EXAONE_VLM_MODEL=LGAI-EXAONE/EXAONE-4.5-33B
+EXAONE_VLM_MODEL=EXAONE-4.5-33B
 ```
 
 API 키는 DB, Git, runtime event payload에 저장하지 않는다.
 
-K-EXAONE의 Hermes tool call은 `submit_navigation_subgoal`과
-`score_navigation_candidate`로 제한된다. `click` tool을 모델에 직접 노출하지 않으며,
-점수가 가장 높은 열거 후보를 Python이 고른 뒤 안전 게이트를 통과시킨다. 따라서 모델은
-좌표나 화면에 없는 candidate ID를 실행 요청으로 만들 수 없다.
+Solar Pro 3의 런타임 Hermes tool call은 `submit_navigation_step_evaluation` 하나로 제한한다.
+한 응답에 검증 가능한 즉시 sub-goal과 현재 허용 행동 전체의 상대 가치를 함께 받아 모델
+왕복을 줄인다. 모델은 `best_action_key`를 제시하지만 `click` tool을 직접 호출하지 않는다.
+Python은 누락·발명 ID, 0점 동률, 최고 점수와 best key 불일치, 낮은 점수 간격을 거부한
+뒤 안전 게이트를 통과한 행동만 반환한다.
+
+`NAVIGATION_PLANNER_MODE`와 `NAVIGATION_VLM_MODE`는 `always`, `selective`, `disabled`
+중 하나다. `always`는 연구 A/B용이고, 기본 `selective`는 DB 점수·후보 간격이 충분하지
+않거나 무라벨 아이콘·WebView·Canvas·복구 상황일 때만 모델을 호출한다. 정상적으로
+`advanced`된 이전 단계는 Solar 호출 사유가 아니다. 관찰된 무변화·역행·실패 화면,
+A→B→A 화면 루프, 금지 후보가 생긴 복구 단계만 history 기반 escalation으로 취급한다.
+transport/device 오류는 UI 탐색 실패와 분리하며 Solar 호출로 해결하려 하지 않는다.
+모델 endpoint가 연결됐다는 이유만으로 매 화면 느린 호출을 강제하지 않는다.
 
 ## 계약
 
 - `GET /health`: 프로세스 생존 확인
-- `GET /v1/navigation/status`: decision/runtime DB와 planner 준비 상태
+- `GET /v1/navigation/status`: decision/runtime DB와 planner 준비 상태. 모델 endpoint가
+  없으면 `serving_mode=decision_memory_fallback`과 구체적인
+  `research_model_blockers`를 반환하며 model-ready로 가장하지 않는다.
 - `POST /v1/navigation/decide`: 현재 화면 후보 중 안전한 다음 행동 하나 결정
 - `POST /v1/navigation/observe`: 실행 직후 화면 변화·연결 상태 기록 및 복구 제안
 
@@ -65,8 +79,8 @@ Python 안전 게이트가 `stop_for_user()`로 교체한다.
 
 ## 연구 구조의 코드 대응
 
-- K² 계층적 계획: `KExaoneResearchClient.plan`과 검증 가능한 즉시 sub-goal
-- V-Droid 후보 가치 평가: 유한 후보 열거 후 `KExaoneResearchClient.verify_action`을 후보마다 호출
+- K² 계층적 계획: `NavigationPlannerResearchClient.plan_and_verify_actions`의 검증 가능한 즉시 sub-goal
+- V-Droid 후보 가치 평가: 동일 Hermes 응답에서 유한 행동 전체를 독립 채점
 - DroidRun 행동 후 검증: `verify_transition`
 - MobileUse 선택적 복구: action/trajectory/global trigger와 VLM/LLM reflector
 - K² Locate/Revise: 첫 실패 단계의 수정 제안을 runtime queue에 격리하고 수동/리플레이 검증 전에는 canonical DB를 수정하지 않음

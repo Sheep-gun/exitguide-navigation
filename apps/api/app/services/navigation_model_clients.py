@@ -51,12 +51,14 @@ class OpenAICompatibleChatClient:
         model: str,
         team: str = "",
         timeout_seconds: float = 30.0,
+        chat_template_kwargs: Mapping[str, object] | None = None,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.team = team
         self.timeout_seconds = timeout_seconds
+        self.chat_template_kwargs = dict(chat_template_kwargs or {})
 
     @property
     def configured(self) -> bool:
@@ -81,8 +83,9 @@ class OpenAICompatibleChatClient:
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "chat_template_kwargs": {"enable_thinking": False},
         }
+        if self.chat_template_kwargs:
+            payload["chat_template_kwargs"] = self.chat_template_kwargs
         if top_p is not None:
             payload["top_p"] = top_p
         if presence_penalty is not None:
@@ -106,17 +109,21 @@ class OpenAICompatibleChatClient:
         return response.json()
 
 
-class KExaoneResearchClient:
-    """K-EXAONE as high-level planner and per-action verifier.
+class NavigationPlannerResearchClient:
+    """A bounded planner model used for high-level planning and action verification.
 
     It never emits coordinates. The planner emits only a sub-goal; the verifier
     receives one already-enumerated action and returns a bounded score.
     """
 
-    name = "k_exaone"
-
-    def __init__(self, client: OpenAICompatibleChatClient) -> None:
+    def __init__(
+        self,
+        client: OpenAICompatibleChatClient,
+        *,
+        provider_name: str = "solar_pro3",
+    ) -> None:
         self.client = client
+        self.name = provider_name.strip() or "planner_model"
 
     @property
     def configured(self) -> bool:
@@ -294,6 +301,269 @@ class KExaoneResearchClient:
             expected_progress=str(payload.get("expected_progress", "unknown"))[:120],
             reason=str(payload.get("reason", ""))[:500],
         )
+
+    def verify_actions(
+        self,
+        *,
+        goal: Mapping[str, object],
+        subgoal: str,
+        expected_outcome: str,
+        screen: Mapping[str, object],
+        recent_history: Sequence[Mapping[str, object]],
+        actions: Sequence[Mapping[str, object]],
+        decision_evidence: Sequence[Mapping[str, object]],
+    ) -> dict[str, VerifierOutput]:
+        """Score the bounded action allowlist in one model round trip.
+
+        This preserves V-Droid-style per-candidate values while avoiding one
+        expensive planner-model request for every visible candidate.
+        """
+
+        packet = {
+            "goal": goal,
+            "immediate_subgoal": subgoal,
+            "expected_outcome": expected_outcome,
+            "current_screen": screen,
+            "recent_observed_history": list(recent_history),
+            "candidate_actions": list(actions),
+            "cross_app_evidence": list(decision_evidence),
+        }
+        response = self.client.complete(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Act as a V-Droid-style batch verifier, not an action generator. "
+                        "Score every supplied candidate_action independently for the immediate "
+                        "subgoal. Keep each action_key unchanged. Priors are evidence, not ground "
+                        "truth. Penalize repeats and observed failures. Return exactly one score "
+                        "for every supplied action_key."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
+            ],
+            max_tokens=900,
+            temperature=0.0,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "score_navigation_candidates",
+                        "description": "Score all and only the supplied candidate actions.",
+                        "parameters": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "scores": {
+                                    "type": "array",
+                                    "maxItems": 20,
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "action_key": {"type": "string"},
+                                            "helpful_probability": {
+                                                "type": "number",
+                                                "minimum": 0.0,
+                                                "maximum": 1.0,
+                                            },
+                                            "expected_progress": {"type": "string"},
+                                            "reason": {"type": "string"},
+                                        },
+                                        "required": [
+                                            "action_key",
+                                            "helpful_probability",
+                                            "expected_progress",
+                                            "reason",
+                                        ],
+                                    },
+                                }
+                            },
+                            "required": ["scores"],
+                        },
+                    },
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "score_navigation_candidates"},
+            },
+        )
+        payload = _response_json(response, expected_tool="score_navigation_candidates")
+        raw_scores = payload.get("scores", [])
+        if not isinstance(raw_scores, list):
+            raise ValueError("batch verifier scores must be a list")
+        expected_keys = {str(item.get("action_key", "")) for item in actions}
+        outputs: dict[str, VerifierOutput] = {}
+        for item in raw_scores:
+            if not isinstance(item, Mapping):
+                continue
+            action_key = str(item.get("action_key", ""))
+            if action_key not in expected_keys or action_key in outputs:
+                continue
+            probability = float(item.get("helpful_probability", 0.0))
+            outputs[action_key] = VerifierOutput(
+                helpful_probability=max(0.0, min(1.0, probability)),
+                expected_progress=str(item.get("expected_progress", "unknown"))[:120],
+                reason=str(item.get("reason", ""))[:500],
+            )
+        if set(outputs) != expected_keys:
+            raise ValueError("batch verifier omitted or invented action keys")
+        return outputs
+
+    def plan_and_verify_actions(
+        self,
+        *,
+        goal: Mapping[str, object],
+        screen: Mapping[str, object],
+        destination_signatures: Sequence[Mapping[str, object]],
+        decision_evidence: Sequence[Mapping[str, object]],
+        recent_history: Sequence[Mapping[str, object]],
+        fallback_plan: Mapping[str, object],
+        actions: Sequence[Mapping[str, object]],
+    ) -> tuple[PlannerOutput, dict[str, VerifierOutput]]:
+        """Return a K2-style subgoal and V-Droid-style values in one inference."""
+
+        packet = {
+            "goal": goal,
+            "current_screen": screen,
+            "destination_signatures": list(destination_signatures),
+            "cross_app_decision_evidence": list(decision_evidence),
+            "recent_observed_history": list(recent_history),
+            "deterministic_hierarchy_hint": fallback_plan,
+            "candidate_actions": list(actions),
+        }
+        response = self.client.complete(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the combined K2-style planner and V-Droid-style batch verifier "
+                        "of an Android navigation agent. First form one immediately verifiable "
+                        "semantic subgoal, then score every supplied candidate_action independently "
+                        "for that subgoal. This is multi-step navigation: a profile, account, or "
+                        "settings hub can be highly helpful even when it is not the final destination "
+                        "button. Assign one unique best_action_key; use stop_for_user as the best "
+                        "action only when no safe progress action exists. Do not execute an action. Never invent an "
+                        "action_key, candidate ID, coordinate, or app-specific route. Keep every "
+                        "action_key unchanged and return exactly one score for each supplied key. "
+                        "The unique best action must have helpful_probability at least 0.5."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
+            ],
+            max_tokens=1_250,
+            temperature=0.0,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "submit_navigation_step_evaluation",
+                        "description": (
+                            "Submit one semantic subgoal and independent values for the bounded "
+                            "action allowlist; do not choose an action."
+                        ),
+                        "parameters": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "stage": {
+                                    "type": "string",
+                                    "enum": [
+                                        "hub_discovery",
+                                        "destination_entry",
+                                        "destination_verification",
+                                        "selective_recovery",
+                                    ],
+                                },
+                                "immediate_subgoal": {"type": "string"},
+                                "expected_outcome": {"type": "string"},
+                                "target_roles": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "maxItems": 8,
+                                },
+                                "best_action_key": {"type": "string"},
+                                "scores": {
+                                    "type": "array",
+                                    "maxItems": 20,
+                                    "items": {
+                                        "type": "object",
+                                        "additionalProperties": False,
+                                        "properties": {
+                                            "action_key": {"type": "string"},
+                                            "helpful_probability": {
+                                                "type": "number",
+                                                "minimum": 0.0,
+                                                "maximum": 1.0,
+                                            },
+                                            "expected_progress": {"type": "string"},
+                                            "reason": {"type": "string"},
+                                        },
+                                        "required": [
+                                            "action_key",
+                                            "helpful_probability",
+                                            "expected_progress",
+                                            "reason",
+                                        ],
+                                    },
+                                },
+                            },
+                            "required": [
+                                "stage",
+                                "immediate_subgoal",
+                                "expected_outcome",
+                                "target_roles",
+                                "best_action_key",
+                                "scores",
+                            ],
+                        },
+                    },
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "submit_navigation_step_evaluation"},
+            },
+        )
+        payload = _response_json(
+            response,
+            expected_tool="submit_navigation_step_evaluation",
+        )
+        stage = str(payload.get("stage", "hub_discovery"))
+        if stage not in {
+            "hub_discovery",
+            "destination_entry",
+            "destination_verification",
+            "selective_recovery",
+        }:
+            stage = "hub_discovery"
+        roles = payload.get("target_roles", [])
+        if not isinstance(roles, list):
+            roles = []
+        plan = PlannerOutput(
+            stage=stage,
+            immediate_subgoal=str(payload.get("immediate_subgoal", ""))[:500],
+            expected_outcome=str(payload.get("expected_outcome", ""))[:500],
+            target_roles=tuple(str(role)[:120] for role in roles[:8]),
+        )
+        outputs = _parse_batch_scores(payload.get("scores"), actions)
+        best_action_key = str(payload.get("best_action_key", ""))
+        ranked = sorted(
+            outputs.items(),
+            key=lambda item: (-item[1].helpful_probability, item[0]),
+        )
+        if not ranked or best_action_key not in outputs:
+            raise ValueError("step evaluator omitted or invented best_action_key")
+        best_key, best_output = ranked[0]
+        second_probability = ranked[1][1].helpful_probability if len(ranked) > 1 else 0.0
+        if (
+            best_key != best_action_key
+            or best_output.helpful_probability < 0.5
+            or best_output.helpful_probability - second_probability < 0.02
+        ):
+            raise ValueError("step evaluator returned an uninformative or inconsistent ranking")
+        return plan, outputs
 
     def reflect_trajectory(
         self,
@@ -578,3 +848,28 @@ def _prefer(existing: str, proposed: object) -> str:
     if existing:
         return existing
     return str(proposed or "")[:500]
+
+
+def _parse_batch_scores(
+    raw_scores: object,
+    actions: Sequence[Mapping[str, object]],
+) -> dict[str, VerifierOutput]:
+    if not isinstance(raw_scores, list):
+        raise ValueError("batch verifier scores must be a list")
+    expected_keys = {str(item.get("action_key", "")) for item in actions}
+    outputs: dict[str, VerifierOutput] = {}
+    for item in raw_scores:
+        if not isinstance(item, Mapping):
+            continue
+        action_key = str(item.get("action_key", ""))
+        if action_key not in expected_keys or action_key in outputs:
+            continue
+        probability = float(item.get("helpful_probability", 0.0))
+        outputs[action_key] = VerifierOutput(
+            helpful_probability=max(0.0, min(1.0, probability)),
+            expected_progress=str(item.get("expected_progress", "unknown"))[:120],
+            reason=str(item.get("reason", ""))[:500],
+        )
+    if set(outputs) != expected_keys:
+        raise ValueError("batch verifier omitted or invented action keys")
+    return outputs

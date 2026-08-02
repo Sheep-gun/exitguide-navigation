@@ -1,0 +1,540 @@
+package com.exitguide.navigation.executor;
+
+import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
+import android.hardware.HardwareBuffer;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.Display;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.ByteArrayOutputStream;
+import java.util.Base64;
+import java.util.Locale;
+import java.util.UUID;
+
+public final class ExitGuideAccessibilityService extends AccessibilityService {
+    private interface ScreenshotCallback {
+        void onCaptured(String dataUrl);
+    }
+
+    private static final long EVENT_DEBOUNCE_MS = 700;
+    private static final long OBSERVATION_DELAY_MS = 1_200;
+    private static final int MAX_ACTIONS = 16;
+    private static final int MAX_SCREENSHOT_EDGE = 900;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final NavigationApiClient apiClient = new NavigationApiClient();
+
+    private AccessibilityScreenReader screenReader;
+    private boolean inFlight;
+    private int stepOrdinal;
+    private String sessionId = "";
+    private String lastActivityName = "";
+    private Runnable pendingDecision;
+
+    private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            resetSession();
+            if (ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
+                verifyApiAndSchedule();
+            } else {
+                cancelPending();
+            }
+        }
+    };
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        screenReader = new AccessibilityScreenReader(getResources().getDisplayMetrics());
+        IntentFilter filter = new IntentFilter(ExecutorPreferences.ACTION_CONFIGURATION_CHANGED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(configurationReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(configurationReceiver, filter);
+        }
+        publish("접근성 서비스가 준비되었습니다.");
+        if (ExecutorPreferences.active(this)) {
+            verifyApiAndSchedule();
+        }
+    }
+
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null || !ExecutorPreferences.active(this) || inFlight) {
+            return;
+        }
+        String packageName = text(event.getPackageName());
+        if (getPackageName().equals(packageName)) {
+            return;
+        }
+        lastActivityName = text(event.getClassName());
+        scheduleDecision(EVENT_DEBOUNCE_MS);
+    }
+
+    @Override
+    public void onInterrupt() {
+        publish("접근성 관찰이 중단되었습니다. 다시 관찰합니다.");
+        scheduleDecision(1_000);
+    }
+
+    @Override
+    public void onDestroy() {
+        cancelPending();
+        try {
+            unregisterReceiver(configurationReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Receiver was not registered because service startup did not finish.
+        }
+        apiClient.close();
+        super.onDestroy();
+    }
+
+    private void verifyApiAndSchedule() {
+        String baseUrl = ExecutorPreferences.apiBaseUrl(this);
+        publish("Navigation API 상태를 확인하는 중입니다.");
+        apiClient.get(baseUrl, "/v1/navigation/status", new NavigationApiClient.Callback() {
+            @Override
+            public void onSuccess(JSONObject response) {
+                if (!response.optBoolean("ready", false)) {
+                    stop("Navigation API가 준비되지 않았습니다.");
+                    return;
+                }
+                String servingMode = response.optString("serving_mode", "unknown");
+                publish("Navigation API 연결됨: " + servingMode);
+                scheduleDecision(300);
+            }
+
+            @Override
+            public void onFailure(String failureClass, String detail) {
+                publish("Navigation API 연결 오류(" + failureClass + "). 화면 실패로 기록하지 않습니다.");
+                scheduleDecision(2_000);
+            }
+        });
+    }
+
+    private void scheduleDecision(long delayMs) {
+        if (!ExecutorPreferences.active(this) || inFlight) {
+            return;
+        }
+        cancelPending();
+        pendingDecision = this::requestDecision;
+        handler.postDelayed(pendingDecision, delayMs);
+    }
+
+    private void cancelPending() {
+        if (pendingDecision != null) {
+            handler.removeCallbacks(pendingDecision);
+            pendingDecision = null;
+        }
+    }
+
+    private void requestDecision() {
+        pendingDecision = null;
+        if (!ExecutorPreferences.active(this) || inFlight) {
+            return;
+        }
+        if (stepOrdinal >= MAX_ACTIONS) {
+            stop("안전 제한 16회에 도달했습니다. 사용자가 화면을 확인해야 합니다.");
+            return;
+        }
+        AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
+        if (snapshot == null) {
+            publish("현재 접근성 화면을 읽을 수 없습니다. 잠시 후 다시 관찰합니다.");
+            scheduleDecision(1_000);
+            return;
+        }
+        inFlight = true;
+        captureScreenshot(dataUrl -> postDecision(snapshot, emptyToNull(dataUrl)));
+    }
+
+    private void postDecision(
+            AccessibilityScreenReader.ScreenSnapshot snapshot,
+            String screenshotDataUrl
+    ) {
+        try {
+            String requestId = UUID.randomUUID().toString();
+            JSONObject request = new JSONObject();
+            request.put("request_id", requestId);
+            if (!sessionId.isEmpty()) {
+                request.put("session_id", sessionId);
+            }
+            request.put("app_package", snapshot.appPackage);
+            request.put("locale", Locale.getDefault().toLanguageTag());
+            request.put("goal_text", ExecutorPreferences.goal(this));
+            request.put("step_ordinal", stepOrdinal);
+            if (screenshotDataUrl != null) {
+                request.put("screenshot_data_url", screenshotDataUrl);
+            }
+            request.put("screen", snapshot.payload);
+            publish("다음 안전 행동을 판단하는 중입니다.");
+            apiClient.post(
+                    ExecutorPreferences.apiBaseUrl(this),
+                    "/v1/navigation/decide",
+                    request,
+                    new NavigationApiClient.Callback() {
+                        @Override
+                        public void onSuccess(JSONObject response) {
+                            handleDecision(response, snapshot, screenshotDataUrl);
+                        }
+
+                        @Override
+                        public void onFailure(String failureClass, String detail) {
+                            inFlight = false;
+                            publish("판단 연결 오류(" + failureClass + "). UI 탐색 실패로 기록하지 않습니다.");
+                            scheduleDecision(2_000);
+                        }
+                    }
+            );
+        } catch (JSONException error) {
+            inFlight = false;
+            stop("판단 요청을 만들 수 없습니다: " + error.getMessage());
+        }
+    }
+
+    private void handleDecision(
+            JSONObject response,
+            AccessibilityScreenReader.ScreenSnapshot beforeSnapshot,
+            String beforeScreenshot
+    ) {
+        sessionId = response.optString("session_id", sessionId);
+        String decisionId = response.optString("decision_id", "");
+        JSONObject action = response.optJSONObject("action");
+        if (decisionId.isEmpty() || action == null) {
+            inFlight = false;
+            stop("Navigation API 응답에 decision_id 또는 action이 없습니다.");
+            return;
+        }
+        String actionName = action.optString("name", "");
+        if (!NavigationSafetyPolicy.isAllowedAction(actionName)) {
+            inFlight = false;
+            stop("허용되지 않은 행동을 차단했습니다: " + actionName);
+            return;
+        }
+        if ("stop_for_user".equals(actionName)) {
+            inFlight = false;
+            stop("목적지 또는 위험한 최종 행동 앞에서 멈췄습니다. 사용자가 직접 확인하세요.");
+            return;
+        }
+
+        ActionExecution execution = execute(action, beforeSnapshot);
+        publish(execution.message);
+        handler.postDelayed(
+                () -> observeDecision(
+                        decisionId,
+                        beforeScreenshot,
+                        execution.succeeded,
+                        execution.observedSignal
+                ),
+                "wait_and_observe".equals(actionName) ? 1_600 : OBSERVATION_DELAY_MS
+        );
+    }
+
+    private ActionExecution execute(
+            JSONObject action,
+            AccessibilityScreenReader.ScreenSnapshot snapshot
+    ) {
+        String name = action.optString("name", "");
+        switch (name) {
+            case "click":
+                return clickCandidate(action.optString("candidate_id", ""), snapshot);
+            case "scroll":
+                return scroll(action.optString("direction", "down"));
+            case "back":
+                return new ActionExecution(
+                        performGlobalAction(GLOBAL_ACTION_BACK),
+                        "none",
+                        "뒤로가기를 실행했습니다."
+                );
+            case "wait_and_observe":
+                return new ActionExecution(true, "none", "화면 변화를 기다립니다.");
+            default:
+                return new ActionExecution(false, "blocked", "허용되지 않은 행동을 차단했습니다.");
+        }
+    }
+
+    private ActionExecution clickCandidate(
+            String candidateId,
+            AccessibilityScreenReader.ScreenSnapshot snapshot
+    ) {
+        AccessibilityScreenReader.CandidateBinding binding = snapshot.bindings.get(candidateId);
+        if (binding == null) {
+            return new ActionExecution(false, "blocked", "현재 화면에 없는 후보 ID를 차단했습니다.");
+        }
+        if (!"low".equals(binding.riskLevel)) {
+            return new ActionExecution(false, "blocked", "위험하거나 입력 상태를 바꾸는 후보를 차단했습니다.");
+        }
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
+            return new ActionExecution(false, "blocked", "클릭 직전 현재 화면을 다시 읽지 못했습니다.");
+        }
+        AccessibilityNodeInfo node = screenReader.resolve(root, binding);
+        if (node == null
+                || !node.isVisibleToUser()
+                || !node.isEnabled()
+                || !node.isClickable()) {
+            return new ActionExecution(false, "blocked", "후보가 변경되어 클릭을 취소했습니다.");
+        }
+        String currentRisk = NavigationSafetyPolicy.riskLevel(node, binding.semanticText);
+        if (!"low".equals(currentRisk)) {
+            return new ActionExecution(false, "blocked", "클릭 직전 안전 재검사에서 후보를 차단했습니다.");
+        }
+        boolean succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        return new ActionExecution(
+                succeeded,
+                succeeded ? "none" : "blocked",
+                succeeded ? "후보 ID를 안전하게 클릭했습니다." : "Accessibility 클릭이 거절되었습니다."
+        );
+    }
+
+    private ActionExecution scroll(String direction) {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo scrollable = findScrollable(root);
+        if (scrollable == null) {
+            return new ActionExecution(false, "blocked", "실제 스크롤 가능한 영역을 찾지 못했습니다.");
+        }
+        int action = "up".equals(direction)
+                ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
+        boolean succeeded = scrollable.performAction(action);
+        return new ActionExecution(
+                succeeded,
+                succeeded ? "none" : "blocked",
+                succeeded ? "Accessibility 스크롤을 실행했습니다." : "Accessibility 스크롤이 거절되었습니다."
+        );
+    }
+
+    private AccessibilityNodeInfo findScrollable(AccessibilityNodeInfo node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.isVisibleToUser() && node.isScrollable()) {
+            return node;
+        }
+        for (int index = 0; index < node.getChildCount(); index++) {
+            AccessibilityNodeInfo found = findScrollable(node.getChild(index));
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
+    private void observeDecision(
+            String decisionId,
+            String beforeScreenshot,
+            boolean executionSucceeded,
+            String observedSignal
+    ) {
+        AccessibilityScreenReader.ScreenSnapshot afterSnapshot = currentSnapshot();
+        if (afterSnapshot == null) {
+            postUnobservedOutcome(decisionId, executionSucceeded);
+            return;
+        }
+        captureScreenshot(afterScreenshot -> {
+            try {
+                JSONObject request = new JSONObject();
+                request.put("request_id", UUID.randomUUID().toString());
+                request.put("decision_id", decisionId);
+                request.put("connectivity_status", "observed");
+                request.put("observed_signal", observedSignal);
+                request.put("execution_succeeded", executionSucceeded);
+                if (beforeScreenshot != null) {
+                    request.put("before_screenshot_data_url", beforeScreenshot);
+                }
+                if (!afterScreenshot.isEmpty()) {
+                    request.put("after_screenshot_data_url", afterScreenshot);
+                }
+                request.put("next_screen", afterSnapshot.payload);
+                apiClient.post(
+                        ExecutorPreferences.apiBaseUrl(this),
+                        "/v1/navigation/observe",
+                        request,
+                        new NavigationApiClient.Callback() {
+                            @Override
+                            public void onSuccess(JSONObject response) {
+                                inFlight = false;
+                                stepOrdinal++;
+                                String outcome = response.optString("outcome_type", "unknown");
+                                String progress = response.optString("progress_label", "unknown");
+                                publish("관찰 결과: " + outcome + " / " + progress);
+                                if ("destination_reached".equals(outcome)) {
+                                    stop("목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요.");
+                                } else {
+                                    scheduleDecision(500);
+                                }
+                            }
+
+                            @Override
+                            public void onFailure(String failureClass, String detail) {
+                                inFlight = false;
+                                publish("관찰 전송 오류(" + failureClass + "). UI 실패와 분리합니다.");
+                                scheduleDecision(2_000);
+                            }
+                        }
+                );
+            } catch (JSONException error) {
+                inFlight = false;
+                stop("관찰 요청을 만들 수 없습니다: " + error.getMessage());
+            }
+        });
+    }
+
+    private void postUnobservedOutcome(String decisionId, boolean executionSucceeded) {
+        try {
+            JSONObject request = new JSONObject();
+            request.put("request_id", UUID.randomUUID().toString());
+            request.put("decision_id", decisionId);
+            request.put("connectivity_status", "device_disconnected");
+            request.put("observed_signal", "none");
+            request.put("execution_succeeded", executionSucceeded);
+            apiClient.post(
+                    ExecutorPreferences.apiBaseUrl(this),
+                    "/v1/navigation/observe",
+                    request,
+                    new NavigationApiClient.Callback() {
+                        @Override
+                        public void onSuccess(JSONObject response) {
+                            inFlight = false;
+                            publish("화면 관찰 실패를 탐색 실패와 분리해 기록했습니다.");
+                            scheduleDecision(2_000);
+                        }
+
+                        @Override
+                        public void onFailure(String failureClass, String detail) {
+                            inFlight = false;
+                            publish("기기/전송 오류를 UI 실패로 기록하지 않았습니다.");
+                            scheduleDecision(2_000);
+                        }
+                    }
+            );
+        } catch (JSONException error) {
+            inFlight = false;
+            scheduleDecision(2_000);
+        }
+    }
+
+    private AccessibilityScreenReader.ScreenSnapshot currentSnapshot() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || screenReader == null) {
+            return null;
+        }
+        try {
+            return screenReader.read(root, lastActivityName);
+        } catch (JSONException error) {
+            publish("접근성 화면 구조화 실패: " + error.getMessage());
+            return null;
+        }
+    }
+
+    private void captureScreenshot(ScreenshotCallback callback) {
+        try {
+            takeScreenshot(
+                    Display.DEFAULT_DISPLAY,
+                    getMainExecutor(),
+                    new TakeScreenshotCallback() {
+                        @Override
+                        public void onSuccess(ScreenshotResult screenshot) {
+                            callback.onCaptured(toDataUrl(screenshot));
+                        }
+
+                        @Override
+                        public void onFailure(int errorCode) {
+                            callback.onCaptured("");
+                        }
+                    }
+            );
+        } catch (IllegalStateException | SecurityException error) {
+            callback.onCaptured("");
+        }
+    }
+
+    private String toDataUrl(ScreenshotResult screenshot) {
+        HardwareBuffer buffer = screenshot.getHardwareBuffer();
+        try {
+            ColorSpace colorSpace = screenshot.getColorSpace();
+            Bitmap hardwareBitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
+            if (hardwareBitmap == null) {
+                return "";
+            }
+            Bitmap softwareBitmap = hardwareBitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (softwareBitmap == null) {
+                return "";
+            }
+            Bitmap resized = resize(softwareBitmap, MAX_SCREENSHOT_EDGE);
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            resized.compress(Bitmap.CompressFormat.JPEG, 65, output);
+            if (resized != softwareBitmap) {
+                resized.recycle();
+            }
+            softwareBitmap.recycle();
+            return "data:image/jpeg;base64," + Base64.getEncoder().encodeToString(output.toByteArray());
+        } finally {
+            buffer.close();
+        }
+    }
+
+    private static Bitmap resize(Bitmap source, int maxEdge) {
+        int width = source.getWidth();
+        int height = source.getHeight();
+        int largest = Math.max(width, height);
+        if (largest <= maxEdge) {
+            return source;
+        }
+        float scale = (float) maxEdge / largest;
+        return Bitmap.createScaledBitmap(
+                source,
+                Math.max(1, Math.round(width * scale)),
+                Math.max(1, Math.round(height * scale)),
+                true
+        );
+    }
+
+    private void resetSession() {
+        sessionId = "";
+        stepOrdinal = 0;
+        inFlight = false;
+    }
+
+    private void stop(String message) {
+        cancelPending();
+        ExecutorPreferences.setActive(this, false);
+        publish(message);
+    }
+
+    private void publish(String message) {
+        ExecutorPreferences.publishStatus(this, message);
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
+    }
+
+    private static String text(CharSequence value) {
+        return value == null ? "" : value.toString();
+    }
+
+    private static final class ActionExecution {
+        final boolean succeeded;
+        final String observedSignal;
+        final String message;
+
+        ActionExecution(boolean succeeded, String observedSignal, String message) {
+            this.succeeded = succeeded;
+            this.observedSignal = observedSignal;
+            this.message = message;
+        }
+    }
+}

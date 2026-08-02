@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ExitGuide Navigation Executor</string>
+    <string name="accessibility_service_name">ExitGuide 후보 기반 탐색</string>
+    <string name="accessibility_service_description">현재 화면의 접근성 후보를 Navigation API에 전달하고 승인된 안전 행동만 실행합니다.</string>
+</resources>

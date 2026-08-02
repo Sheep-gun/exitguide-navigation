@@ -160,7 +160,7 @@ python3 scripts/Validate-NavigationDecisionDb.py \
 
 1. DB schema version과 SHA-256 고정
 2. 외부 행동 예시 색인·legacy route·Gold macro fallback 비활성화
-3. K-EXAONE에 전달되는 evidence packet에서 앱 이름과 절대 좌표 제거
+3. planner model에 전달되는 evidence packet에서 앱 이름과 절대 좌표 제거
 4. 현재 화면 후보 allowlist 검사
 5. 위험한 최종 행동 `stop_for_user` 강제
 6. 행동 후 새 관찰이 없으면 transition 성공을 기록하지 않음

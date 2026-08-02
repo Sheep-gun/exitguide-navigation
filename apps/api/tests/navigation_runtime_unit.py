@@ -26,7 +26,7 @@ from app.navigation_contracts import (  # noqa: E402
 from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
-    KExaoneResearchClient,
+    NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
@@ -54,10 +54,11 @@ def _build_decision_db(path: Path) -> None:
 
 def _policy() -> AndroidWorldResearchPolicy:
     return AndroidWorldResearchPolicy(
-        k_exaone=KExaoneResearchClient(
+        planner_model=NavigationPlannerResearchClient(
             OpenAICompatibleChatClient(
-                api_key="", base_url="https://example.invalid/v1", model="test-k-exaone"
-            )
+                api_key="", base_url="https://example.invalid/v1", model="test-solar-pro3"
+            ),
+            provider_name="solar_pro3",
         ),
         exaone_vlm=Exaone45VisionClient(
             OpenAICompatibleChatClient(
@@ -203,6 +204,11 @@ def main() -> None:
             status = client.get("/v1/navigation/status")
             assert status.status_code == 200 and status.json()["ready"] is True
             assert status.json()["research_models_ready"] is False
+            assert status.json()["serving_mode"] == "decision_memory_fallback"
+            assert status.json()["research_model_blockers"] == [
+                "planner_model_endpoint_or_credentials_missing",
+                "exaone_4_5_endpoint_or_credentials_missing",
+            ]
             assert (
                 status.json()["planner"]["structured_output"]
                 == "hermes_tools_without_direct_action_execution"

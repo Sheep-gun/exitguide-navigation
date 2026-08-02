@@ -14,7 +14,9 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.navigation_contracts import (  # noqa: E402
+    CandidateValue,
     DecideRequest,
+    HierarchicalPlan,
     NavigationCandidate,
     ObserveRequest,
     ScreenObservation,
@@ -22,7 +24,7 @@ from app.navigation_contracts import (  # noqa: E402
 from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
-    KExaoneResearchClient,
+    NavigationPlannerResearchClient,
 )
 from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
@@ -57,7 +59,7 @@ def _tool_response(name: str, payload: dict[str, object]) -> dict[str, object]:
     }
 
 
-class ScriptedKClient:
+class ScriptedPlannerClient:
     configured = True
 
     def __init__(self) -> None:
@@ -66,6 +68,44 @@ class ScriptedKClient:
 
     def complete(self, *, messages, **_kwargs):
         system = str(messages[0]["content"])
+        if "combined K2-style planner and V-Droid-style batch verifier" in system:
+            assert (
+                _kwargs["tools"][0]["function"]["name"]
+                == "submit_navigation_step_evaluation"
+            )
+            self.plan_calls += 1
+            packet = json.loads(messages[1]["content"])
+            assert "app_package" not in packet
+            scores = {
+                "click:profile": 0.93,
+                "click:search": 0.04,
+                "scroll:down": 0.12,
+                "wait_and_observe": 0.08,
+                "stop_for_user": 0.02,
+            }
+            output_scores = []
+            for item in packet["candidate_actions"]:
+                key = item["action_key"]
+                self.verifier_actions.append(key)
+                output_scores.append(
+                    {
+                        "action_key": key,
+                        "helpful_probability": scores[key],
+                        "expected_progress": "account hub" if key == "click:profile" else "unlikely",
+                        "reason": f"scripted score for {key}",
+                    }
+                )
+            return _tool_response(
+                "submit_navigation_step_evaluation",
+                {
+                    "stage": "hub_discovery",
+                    "immediate_subgoal": "open the account or profile hub",
+                    "expected_outcome": "account management entries become visible",
+                    "target_roles": ["account_hub", "profile_hub"],
+                    "best_action_key": "click:profile",
+                    "scores": output_scores,
+                },
+            )
         if "high-level planner" in system:
             assert _kwargs["tools"][0]["function"]["name"] == "submit_navigation_subgoal"
             self.plan_calls += 1
@@ -81,17 +121,9 @@ class ScriptedKClient:
                     "target_roles": ["account_hub", "profile_hub"],
                 }
             )
-        if "V-Droid-style verifier" in system:
-            assert _kwargs["tools"][0]["function"]["name"] == "score_navigation_candidate"
+        if "V-Droid-style batch verifier" in system:
+            assert _kwargs["tools"][0]["function"]["name"] == "score_navigation_candidates"
             packet = json.loads(messages[1]["content"])
-            action = packet["candidate_action"]
-            if action["name"] == "click":
-                key = f"click:{action['candidate_id']}"
-            elif action["name"] == "scroll":
-                key = f"scroll:{action['direction']}"
-            else:
-                key = action["name"]
-            self.verifier_actions.append(key)
             scores = {
                 "click:profile": 0.93,
                 "click:search": 0.04,
@@ -99,13 +131,21 @@ class ScriptedKClient:
                 "wait_and_observe": 0.08,
                 "stop_for_user": 0.02,
             }
+            output_scores = []
+            for item in packet["candidate_actions"]:
+                key = item["action_key"]
+                self.verifier_actions.append(key)
+                output_scores.append(
+                    {
+                        "action_key": key,
+                        "helpful_probability": scores[key],
+                        "expected_progress": "account hub" if key == "click:profile" else "unlikely",
+                        "reason": f"scripted score for {key}",
+                    }
+                )
             return _tool_response(
-                "score_navigation_candidate",
-                {
-                    "helpful_probability": scores[key],
-                    "expected_progress": "account hub" if key == "click:profile" else "unlikely",
-                    "reason": f"scripted score for {key}",
-                }
+                "score_navigation_candidates",
+                {"scores": output_scores},
             )
         if "trajectory reflector" in system:
             return _response(
@@ -176,15 +216,19 @@ def _screen() -> ScreenObservation:
 
 
 def main() -> None:
-    k_transport = ScriptedKClient()
+    planner_transport = ScriptedPlannerClient()
     vision_transport = ScriptedVisionClient()
-    k_exaone = KExaoneResearchClient(k_transport)
+    planner_model = NavigationPlannerResearchClient(
+        planner_transport,
+        provider_name="solar_pro3",
+    )
     exaone_vlm = Exaone45VisionClient(vision_transport)
     policy = AndroidWorldResearchPolicy(
-        k_exaone=k_exaone,
+        planner_model=planner_model,
         exaone_vlm=exaone_vlm,
         allow_model_fallback=False,
-        verifier_workers=2,
+        planner_mode="always",
+        vlm_mode="always",
     )
 
     perceived = exaone_vlm.perceive(
@@ -213,12 +257,12 @@ def main() -> None:
                 screen=_screen(),
             )
         )
-        assert decision.plan.source == "k_exaone"
+        assert decision.plan.source == "solar_pro3"
         assert decision.action.name == "click" and decision.action.candidate_id == "profile"
         assert decision.perception_provider == "exaone_4_5"
-        assert decision.verifier_provider == "k_exaone_verifier"
-        assert k_transport.plan_calls == 1
-        assert sorted(k_transport.verifier_actions) == sorted(
+        assert decision.verifier_provider == "solar_pro3_step_evaluator"
+        assert planner_transport.plan_calls == 1
+        assert sorted(planner_transport.verifier_actions) == sorted(
             ["click:profile", "click:search", "scroll:down", "wait_and_observe", "stop_for_user"]
         )
 
@@ -261,6 +305,102 @@ def main() -> None:
         recent_history=[],
     )
     assert level == "global"
+
+    high_confidence_values = [
+        CandidateValue(
+            candidate_id="signup",
+            value=0.94,
+            memory_score=0.74,
+            role_score=1.0,
+            final_score=0.94,
+            forbidden=False,
+            risk_level="low",
+        ),
+        CandidateValue(
+            candidate_id="login",
+            value=0.70,
+            memory_score=0.58,
+            role_score=0.78,
+            final_score=0.70,
+            forbidden=False,
+            risk_level="low",
+        ),
+    ]
+    fast_path_plan = HierarchicalPlan(
+        goal_id="account.signup",
+        stage="destination_entry",
+        target_roles=["auth.signup.entry"],
+        immediate_subgoal="open sign up",
+        expected_outcome="registration screen appears",
+        completion_rule="choose a safe direct entry",
+        source="decision_memory_fallback",
+    )
+    selective_policy = AndroidWorldResearchPolicy(
+        planner_model=planner_model,
+        exaone_vlm=exaone_vlm,
+        allow_model_fallback=False,
+        planner_mode="selective",
+    )
+    assert selective_policy._should_invoke_planner(
+        plan=fast_path_plan,
+        prior_values=high_confidence_values,
+        recent_history=[
+            {
+                "screen_fingerprint": "screen-a",
+                "connectivity_status": "observed",
+                "outcome_type": "navigated",
+                "progress_label": "advanced",
+                "failure_class": "",
+            }
+        ],
+    ) is False
+    assert selective_policy._should_invoke_planner(
+        plan=fast_path_plan,
+        prior_values=high_confidence_values,
+        recent_history=[
+            {
+                "screen_fingerprint": "screen-a",
+                "connectivity_status": "observed",
+                "outcome_type": "no_change",
+                "progress_label": "unchanged",
+                "failure_class": "screen_unchanged",
+            }
+        ],
+    ) is True
+    assert selective_policy._should_invoke_planner(
+        plan=fast_path_plan,
+        prior_values=high_confidence_values,
+        recent_history=[
+            {
+                "screen_fingerprint": "screen-a",
+                "connectivity_status": "transport_error",
+                "outcome_type": "unknown",
+                "progress_label": "unknown",
+                "failure_class": "transport_error",
+            }
+        ],
+    ) is False
+    assert selective_policy._should_invoke_planner(
+        plan=fast_path_plan,
+        prior_values=high_confidence_values,
+        recent_history=[
+            {
+                "screen_fingerprint": "screen-a",
+                "connectivity_status": "observed",
+                "progress_label": "advanced",
+            },
+            {
+                "screen_fingerprint": "screen-b",
+                "connectivity_status": "observed",
+                "progress_label": "advanced",
+            },
+            {
+                "screen_fingerprint": "screen-a",
+                "connectivity_status": "observed",
+                "progress_label": "advanced",
+            },
+        ],
+    ) is True
     print("navigation_research_architecture_unit: ok")
 
 

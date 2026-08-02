@@ -11,7 +11,7 @@ from app.navigation_contracts import DecideRequest, DecideResponse, ObserveReque
 from app.services.navigation_decision_memory import NavigationDecisionMemory
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
-    KExaoneResearchClient,
+    NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy
@@ -49,14 +49,14 @@ def get_navigation_runtime() -> NavigationRuntime:
     memory = NavigationDecisionMemory(decision_path, read_only=True)
     store = NavigationRuntimeStore(runtime_path)
     policy = AndroidWorldResearchPolicy(
-        k_exaone=KExaoneResearchClient(
+        planner_model=NavigationPlannerResearchClient(
             OpenAICompatibleChatClient(
-                api_key=settings.exaone_api_key,
-                base_url=settings.exaone_base_url,
-                model=settings.exaone_model,
-                team=settings.exaone_team,
+                api_key=settings.navigation_planner_api_key,
+                base_url=settings.navigation_planner_base_url,
+                model=settings.navigation_planner_model,
                 timeout_seconds=settings.navigation_planner_timeout_seconds,
-            )
+            ),
+            provider_name=settings.navigation_planner_provider,
         ),
         exaone_vlm=Exaone45VisionClient(
             OpenAICompatibleChatClient(
@@ -65,13 +65,17 @@ def get_navigation_runtime() -> NavigationRuntime:
                 model=settings.exaone_vlm_model,
                 team=settings.exaone_vlm_team,
                 timeout_seconds=settings.exaone_vlm_timeout_seconds,
+                chat_template_kwargs={"enable_thinking": False},
             )
         ),
         allow_model_fallback=settings.navigation_model_allow_fallback,
         max_verified_clicks=settings.navigation_verifier_max_clicks,
-        verifier_workers=settings.navigation_verifier_workers,
         reflection_confidence_threshold=settings.navigation_reflection_confidence_threshold,
         reflection_margin_threshold=settings.navigation_reflection_margin_threshold,
+        planner_mode=settings.navigation_planner_mode,
+        planner_score_threshold=settings.navigation_planner_score_threshold,
+        planner_margin_threshold=settings.navigation_planner_margin_threshold,
+        vlm_mode=settings.navigation_vlm_mode,
     )
     return NavigationRuntime(memory=memory, store=store, policy=policy)
 

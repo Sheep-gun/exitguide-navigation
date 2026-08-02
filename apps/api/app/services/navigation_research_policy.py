@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
@@ -16,7 +15,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import DecisionMemoryQuery
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
-    KExaoneResearchClient,
+    NavigationPlannerResearchClient,
     PerceptionOutput,
 )
 from app.services.navigation_planner import (
@@ -29,6 +28,7 @@ from app.services.navigation_planner import (
 
 @dataclass(frozen=True)
 class ResearchDecision:
+    plan: HierarchicalPlan
     proposal: PlannerProposal
     candidate_values: tuple[CandidateValue, ...]
     verifier_provider: str
@@ -63,21 +63,27 @@ class AndroidWorldResearchPolicy:
     def __init__(
         self,
         *,
-        k_exaone: KExaoneResearchClient,
+        planner_model: NavigationPlannerResearchClient,
         exaone_vlm: Exaone45VisionClient,
         allow_model_fallback: bool = True,
         max_verified_clicks: int = 12,
-        verifier_workers: int = 4,
         reflection_confidence_threshold: float = 0.45,
         reflection_margin_threshold: float = 0.08,
+        planner_mode: str = "selective",
+        planner_score_threshold: float = 0.72,
+        planner_margin_threshold: float = 0.18,
+        vlm_mode: str = "selective",
     ) -> None:
-        self.k_exaone = k_exaone
+        self.planner_model = planner_model
         self.exaone_vlm = exaone_vlm
         self.allow_model_fallback = allow_model_fallback
         self.max_verified_clicks = max(1, max_verified_clicks)
-        self.verifier_workers = max(1, verifier_workers)
         self.reflection_confidence_threshold = reflection_confidence_threshold
         self.reflection_margin_threshold = reflection_margin_threshold
+        self.planner_mode = _validated_mode(planner_mode, "planner_mode")
+        self.planner_score_threshold = planner_score_threshold
+        self.planner_margin_threshold = planner_margin_threshold
+        self.vlm_mode = _validated_mode(vlm_mode, "vlm_mode")
         self.fallback_planner = HierarchicalPlanBuilder()
         self.prior_scorer = CandidateValueScorer()
         self.safety_gate = ActionSafetyGate()
@@ -89,7 +95,13 @@ class AndroidWorldResearchPolicy:
         screen: ScreenObservation,
         screenshot_data_url: str | None,
     ) -> PerceptionOutput:
-        if screenshot_data_url and self.exaone_vlm.configured:
+        should_invoke_vlm = self.vlm_mode == "always" or _needs_visual_reasoning(screen)
+        if (
+            screenshot_data_url
+            and self.exaone_vlm.configured
+            and self.vlm_mode != "disabled"
+            and should_invoke_vlm
+        ):
             try:
                 return self.exaone_vlm.perceive(
                     goal_text=goal_text,
@@ -114,37 +126,11 @@ class AndroidWorldResearchPolicy:
             forbidden_candidate_ids=forbidden_candidate_ids,
             destination_threshold=destination_threshold,
         )
-        if query.goal is None or fallback.stage in {"goal_disambiguation", "terminal_boundary"}:
-            return fallback, fallback.source, False
-        if not self.k_exaone.configured:
-            return fallback, fallback.source, False
-        try:
-            result = self.k_exaone.plan(
-                goal=query.goal.prompt_payload(),
-                screen=query.screen.prompt_payload(),
-                destination_signatures=query.destination_signatures,
-                decision_evidence=[evidence.prompt_payload() for evidence in query.evidence],
-                recent_history=recent_history,
-                target_roles=fallback.target_roles,
-            )
-            target_roles = list(result.target_roles) or fallback.target_roles
-            return (
-                HierarchicalPlan(
-                    goal_id=query.goal.goal_id,
-                    stage=result.stage,
-                    target_roles=target_roles,
-                    immediate_subgoal=result.immediate_subgoal or fallback.immediate_subgoal,
-                    expected_outcome=result.expected_outcome or fallback.expected_outcome,
-                    completion_rule=fallback.completion_rule,
-                    source="k_exaone",
-                ),
-                "k_exaone",
-                False,
-            )
-        except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
-            if not self.allow_model_fallback:
-                raise
-            return fallback, "k_exaone->decision_memory_fallback", True
+        # The deterministic hierarchy is built first so goal ambiguity and the
+        # terminal boundary are enforced without a model call. For navigable
+        # screens, Solar Pro 3 refines this plan together with all candidate
+        # values in one bounded Hermes round trip inside decide_action().
+        return fallback, fallback.source, False
 
     def decide_action(
         self,
@@ -166,28 +152,42 @@ class AndroidWorldResearchPolicy:
             plan=plan,
             recent_history=recent_history,
         )
-        if self.k_exaone.configured:
+        should_invoke_planner = self._should_invoke_planner(
+            plan=plan,
+            prior_values=prior_values,
+            recent_history=recent_history,
+        )
+        if self.planner_model.configured and should_invoke_planner:
             try:
-                scored, updated_values = self._verify_actions(
+                model_plan, scored, updated_values = self._plan_and_verify_actions(
                     query=query,
                     plan=plan,
                     recent_history=recent_history,
                     enumerated=enumerated,
                     prior_values=prior_values,
                 )
-                provider = "k_exaone_verifier"
+                provider = f"{self.planner_model.name}_step_evaluator"
                 fallback_used = False
             except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
                 if not self.allow_model_fallback:
                     raise
+                model_plan = plan
                 scored = [(item.memory_prior, item) for item in enumerated]
                 updated_values = prior_values
-                provider = "k_exaone_verifier->decision_memory_fallback"
+                provider = (
+                    f"{self.planner_model.name}_step_evaluator"
+                    "->decision_memory_fallback"
+                )
                 fallback_used = True
         else:
+            model_plan = plan
             scored = [(item.memory_prior, item) for item in enumerated]
             updated_values = prior_values
-            provider = "decision_memory_fallback"
+            provider = (
+                "decision_memory_high_confidence"
+                if self.planner_model.configured and self.planner_mode == "selective"
+                else "decision_memory_fallback"
+            )
             fallback_used = False
         scored.sort(key=lambda item: (-item[0], _action_sort_key(item[1].action)))
         if not scored:
@@ -197,10 +197,31 @@ class AndroidWorldResearchPolicy:
                 provider,
                 fallback_used,
             )
-            return ResearchDecision(proposal, tuple(updated_values), provider, 0.0, True)
+            return ResearchDecision(model_plan, proposal, tuple(updated_values), provider, 0.0, True)
         best_score, best = scored[0]
         second_score = scored[1][0] if len(scored) > 1 else 0.0
         margin = max(0.0, best_score - second_score)
+        if (
+            fallback_used
+            and (
+                best_score < self.planner_score_threshold
+                or margin < self.planner_margin_threshold
+            )
+        ):
+            proposal = PlannerProposal(
+                NavigationAction(name="stop_for_user"),
+                1.0,
+                provider + "->fail_closed",
+                True,
+            )
+            return ResearchDecision(
+                plan=model_plan,
+                proposal=proposal,
+                candidate_values=tuple(updated_values),
+                verifier_provider=provider + "->fail_closed",
+                score_margin=round(margin, 4),
+                reflection_on_demand=True,
+            )
         safe_action, safety_status, _ = self.safety_gate.validate(
             best.action,
             candidates=candidates,
@@ -219,11 +240,40 @@ class AndroidWorldResearchPolicy:
             or margin < self.reflection_margin_threshold
         )
         return ResearchDecision(
+            plan=model_plan,
             proposal=proposal,
             candidate_values=tuple(updated_values),
             verifier_provider=provider,
             score_margin=round(margin, 4),
             reflection_on_demand=reflect,
+        )
+
+    def _should_invoke_planner(
+        self,
+        *,
+        plan: HierarchicalPlan,
+        prior_values: Sequence[CandidateValue],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> bool:
+        if self.planner_mode == "disabled":
+            return False
+        if self.planner_mode == "always":
+            return True
+        if plan.stage == "selective_recovery" or _history_requires_planner(recent_history):
+            return True
+        safe = [
+            value
+            for value in prior_values
+            if not value.forbidden and value.score_source != "safety_blocked"
+        ]
+        if not safe:
+            return True
+        safe.sort(key=lambda value: (-value.final_score, value.candidate_id))
+        best = safe[0].final_score
+        second = safe[1].final_score if len(safe) > 1 else 0.0
+        return not (
+            best >= self.planner_score_threshold
+            and best - second >= self.planner_margin_threshold
         )
 
     def _enumerate_actions(
@@ -262,7 +312,7 @@ class AndroidWorldResearchPolicy:
             actions.append(EnumeratedAction(NavigationAction(name="back"), 0.2, None))
         return actions
 
-    def _verify_actions(
+    def _plan_and_verify_actions(
         self,
         *,
         query: DecisionMemoryQuery,
@@ -270,27 +320,32 @@ class AndroidWorldResearchPolicy:
         recent_history: Sequence[Mapping[str, object]],
         enumerated: Sequence[EnumeratedAction],
         prior_values: Sequence[CandidateValue],
-    ) -> tuple[list[tuple[float, EnumeratedAction]], list[CandidateValue]]:
-        scores: dict[str, tuple[float, str]] = {}
-
-        def verify(item: EnumeratedAction) -> tuple[str, float, str]:
-            output = self.k_exaone.verify_action(
-                goal=query.goal.prompt_payload() if query.goal else {},
-                subgoal=plan.immediate_subgoal,
-                expected_outcome=plan.expected_outcome,
-                screen=query.screen.prompt_payload(),
-                recent_history=recent_history,
-                action=item.prompt_payload(),
-                memory_prior=item.memory_prior,
-                decision_evidence=[evidence.prompt_payload() for evidence in query.evidence],
-            )
-            return _action_key(item.action), output.helpful_probability, output.reason
-
-        with ThreadPoolExecutor(max_workers=min(self.verifier_workers, len(enumerated))) as executor:
-            futures = {executor.submit(verify, item): item for item in enumerated}
-            for future in as_completed(futures):
-                key, score, reason = future.result()
-                scores[key] = (score, reason)
+    ) -> tuple[
+        HierarchicalPlan,
+        list[tuple[float, EnumeratedAction]],
+        list[CandidateValue],
+    ]:
+        batch_actions = [
+            {
+                "action_key": _action_key(item.action),
+                "action": item.prompt_payload(),
+                "memory_prior": item.memory_prior,
+            }
+            for item in enumerated
+        ]
+        model_plan, outputs = self.planner_model.plan_and_verify_actions(
+            goal=query.goal.prompt_payload() if query.goal else {},
+            screen=query.screen.prompt_payload(),
+            destination_signatures=query.destination_signatures,
+            decision_evidence=[evidence.prompt_payload() for evidence in query.evidence],
+            recent_history=recent_history,
+            fallback_plan=plan.model_dump(mode="json"),
+            actions=batch_actions,
+        )
+        scores = {
+            key: (output.helpful_probability, output.reason)
+            for key, output in outputs.items()
+        }
         scored = [
             (scores[_action_key(item.action)][0], item)
             for item in enumerated
@@ -306,13 +361,22 @@ class AndroidWorldResearchPolicy:
                     update={
                         "verifier_score": round(result[0], 4),
                         "final_score": round(result[0], 4),
-                        "score_source": "k_exaone_verifier",
+                        "score_source": "planner_model_verifier",
                         "verifier_reason": result[1],
                     }
                 )
             )
         updated_values.sort(key=lambda value: (-value.final_score, value.candidate_id))
-        return scored, updated_values
+        refined_plan = HierarchicalPlan(
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            stage=model_plan.stage,
+            target_roles=list(model_plan.target_roles) or plan.target_roles,
+            immediate_subgoal=model_plan.immediate_subgoal or plan.immediate_subgoal,
+            expected_outcome=model_plan.expected_outcome or plan.expected_outcome,
+            completion_rule=plan.completion_rule,
+            source="solar_pro3",
+        )
+        return refined_plan, scored, updated_values
 
 
 class ReflectionTriggerPolicy:
@@ -361,3 +425,73 @@ def _action_key(action: NavigationAction) -> str:
 
 def _action_sort_key(action: NavigationAction) -> str:
     return _action_key(action)
+
+
+def _validated_mode(value: str, name: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"always", "selective", "disabled"}:
+        raise ValueError(f"{name} must be always, selective, or disabled")
+    return normalized
+
+
+def _needs_visual_reasoning(screen: ScreenObservation) -> bool:
+    activity = screen.activity_name.lower()
+    if not screen.candidates or "webview" in activity or "canvas" in activity:
+        return True
+    for candidate in screen.candidates:
+        if not candidate.label.strip():
+            return True
+        if candidate.role in {"icon_button", "unknown"} and not candidate.icon_semantics.strip():
+            return True
+    return False
+
+
+def _history_requires_planner(
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    """Escalate only observed navigation anomalies or a detected loop.
+
+    Normal `advanced` history is positive evidence and must not disable the DB
+    fast path. Transport/device errors are kept separate from navigation
+    failures; invoking a planner cannot repair a disconnected observation path.
+    """
+
+    observed_failure_outcomes = {
+        "no_change",
+        "wrong_destination",
+        "external_app",
+        "login_required",
+        "popup",
+        "infinite_feed",
+        "network_error",
+        "blocked",
+    }
+    for item in recent_history[-5:]:
+        if str(item.get("connectivity_status", "")) != "observed":
+            continue
+        if str(item.get("progress_label", "")) in {"unchanged", "regressed"}:
+            return True
+        if str(item.get("outcome_type", "")) in observed_failure_outcomes:
+            return True
+        if str(item.get("failure_class", "")).strip():
+            return True
+
+    if len(recent_history) < 2:
+        return False
+    latest = recent_history[-1]
+    if str(latest.get("connectivity_status", "")) != "observed":
+        return False
+    latest_screen = str(latest.get("screen_fingerprint", "")).strip()
+    if not latest_screen:
+        return False
+
+    # A -> B -> A is a semantic screen loop even when individual execution
+    # calls succeeded. Repeating the same action on the same screen is the
+    # shorter A -> A form of the same failure.
+    if any(
+        str(item.get("connectivity_status", "")) == "observed"
+        and str(item.get("screen_fingerprint", "")).strip() == latest_screen
+        for item in recent_history[-5:-1]
+    ):
+        return True
+    return False

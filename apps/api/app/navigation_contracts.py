@@ -98,7 +98,7 @@ class HierarchicalPlan(BaseModel):
     immediate_subgoal: str
     expected_outcome: str
     completion_rule: str
-    source: Literal["k_exaone", "decision_memory_fallback", "python_safety_gate"]
+    source: Literal["solar_pro3", "decision_memory_fallback", "python_safety_gate"]
 
 
 class CandidateValue(BaseModel):
@@ -108,7 +108,7 @@ class CandidateValue(BaseModel):
     role_score: float = Field(ge=0.0, le=1.0)
     verifier_score: float | None = Field(default=None, ge=0.0, le=1.0)
     final_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    score_source: Literal["k_exaone_verifier", "decision_memory_fallback", "safety_blocked"] = (
+    score_source: Literal["planner_model_verifier", "decision_memory_fallback", "safety_blocked"] = (
         "decision_memory_fallback"
     )
     verifier_reason: str = ""

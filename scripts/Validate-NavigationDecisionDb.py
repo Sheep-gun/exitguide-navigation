@@ -210,7 +210,7 @@ def validate(database: Path, *, expected_source_sha256: str) -> dict[str, object
             "next_action_accuracy",
             "destination_arrival_rate",
             "recovery_success_rate",
-            "K-EXAONE planner quality",
+            "planner-model quality",
         ],
         "validated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }

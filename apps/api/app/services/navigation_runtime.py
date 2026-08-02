@@ -50,11 +50,20 @@ class NavigationRuntime:
 
     def status(self) -> dict[str, object]:
         research_models_ready = (
-            self.policy.k_exaone.configured and self.policy.exaone_vlm.configured
+            self.policy.planner_model.configured and self.policy.exaone_vlm.configured
         )
+        model_blockers: list[str] = []
+        if not self.policy.planner_model.configured:
+            model_blockers.append("planner_model_endpoint_or_credentials_missing")
+        if not self.policy.exaone_vlm.configured:
+            model_blockers.append("exaone_4_5_endpoint_or_credentials_missing")
         return {
             "ready": True,
             "research_models_ready": research_models_ready,
+            "serving_mode": (
+                "research_models" if research_models_ready else "decision_memory_fallback"
+            ),
+            "research_model_blockers": model_blockers,
             "decision_db": {
                 "schema_version": self.memory.metadata.get("schema_version"),
                 "database_kind": self.memory.metadata.get("database_kind"),
@@ -64,9 +73,12 @@ class NavigationRuntime:
             "planner": {
                 "architecture": "k2_planner_vdroid_verifier_mobileuse_reflection",
                 "structured_output": "hermes_tools_without_direct_action_execution",
-                "k_exaone_configured": self.policy.k_exaone.configured,
+                "planner_model_provider": self.policy.planner_model.name,
+                "planner_model_configured": self.policy.planner_model.configured,
                 "exaone_4_5_configured": self.policy.exaone_vlm.configured,
                 "fallback_allowed": self.policy.allow_model_fallback,
+                "planner_model_mode": self.policy.planner_mode,
+                "exaone_4_5_mode": self.policy.vlm_mode,
             },
             "allowed_actions": [
                 "click(candidate_id)",
@@ -136,6 +148,8 @@ class NavigationRuntime:
                 forbidden_candidate_ids=forbidden,
                 recent_history=recent_history,
             )
+            plan = research_decision.plan
+            planner_provider = plan.source
             proposal = research_decision.proposal
             candidate_values = list(research_decision.candidate_values)
             verifier_provider = research_decision.verifier_provider
@@ -343,9 +357,9 @@ class NavigationRuntime:
                     )
                 except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
                     reflection_result = None
-            elif reflection_level == "trajectory" and self.policy.k_exaone.configured:
+            elif reflection_level == "trajectory" and self.policy.planner_model.configured:
                 try:
-                    reflection_result = self.policy.k_exaone.reflect_trajectory(
+                    reflection_result = self.policy.planner_model.reflect_trajectory(
                         goal={
                             "goal_id": decision.get("goal_id"),
                             "text_redacted": decision["goal_text_redacted"],
@@ -361,9 +375,9 @@ class NavigationRuntime:
                     )
                 except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
                     reflection_result = None
-            elif reflection_level == "global" and self.policy.k_exaone.configured:
+            elif reflection_level == "global" and self.policy.planner_model.configured:
                 try:
-                    reflection_result = self.policy.k_exaone.reflect_global(
+                    reflection_result = self.policy.planner_model.reflect_global(
                         goal={
                             "goal_id": decision.get("goal_id"),
                             "text_redacted": decision["goal_text_redacted"],

@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     The models never receive database credentials. The API reads the validated
     decision-memory SQLite file and sends a bounded evidence packet to the
-    configured K-EXAONE and EXAONE 4.5 endpoints.
+    configured Solar Pro 3 planner and EXAONE 4.5 vision endpoints.
     """
 
     navigation_decision_db_path: str = ""
@@ -16,14 +16,17 @@ class Settings(BaseSettings):
     navigation_planner_timeout_seconds: float = 30.0
     navigation_model_allow_fallback: bool = True
     navigation_verifier_max_clicks: int = 12
-    navigation_verifier_workers: int = 4
     navigation_reflection_confidence_threshold: float = 0.45
     navigation_reflection_margin_threshold: float = 0.08
+    navigation_planner_mode: str = "selective"
+    navigation_planner_score_threshold: float = 0.72
+    navigation_planner_margin_threshold: float = 0.18
+    navigation_vlm_mode: str = "selective"
 
-    exaone_api_key: str = ""
-    exaone_base_url: str = "https://api.friendli.ai/serverless/v1"
-    exaone_model: str = "LGAI-EXAONE/K-EXAONE-236B-A23B"
-    exaone_team: str = ""
+    navigation_planner_provider: str = "solar_pro3"
+    navigation_planner_api_key: str = ""
+    navigation_planner_base_url: str = "https://api.upstage.ai/v1"
+    navigation_planner_model: str = "solar-pro3"
 
     exaone_vlm_api_key: str = ""
     exaone_vlm_base_url: str = ""

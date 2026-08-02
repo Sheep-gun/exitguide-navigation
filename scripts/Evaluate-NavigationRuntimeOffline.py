@@ -20,7 +20,7 @@ from app.navigation_contracts import DecideRequest, NavigationCandidate, ScreenO
 from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
-    KExaoneResearchClient,
+    NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
@@ -91,10 +91,11 @@ def main() -> None:
             memory=NavigationDecisionMemory(args.db),
             store=NavigationRuntimeStore(Path(temporary) / "runtime.sqlite"),
             policy=AndroidWorldResearchPolicy(
-                k_exaone=KExaoneResearchClient(
+                planner_model=NavigationPlannerResearchClient(
                     OpenAICompatibleChatClient(
                         api_key="", base_url="https://example.invalid/v1", model="offline"
-                    )
+                    ),
+                    provider_name="solar_pro3",
                 ),
                 exaone_vlm=Exaone45VisionClient(
                     OpenAICompatibleChatClient(api_key="", base_url="", model="offline-vlm")
