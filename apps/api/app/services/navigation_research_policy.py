@@ -153,6 +153,7 @@ class AndroidWorldResearchPolicy:
             recent_history=recent_history,
         )
         should_invoke_planner = self._should_invoke_planner(
+            query=query,
             plan=plan,
             prior_values=prior_values,
             recent_history=recent_history,
@@ -184,7 +185,9 @@ class AndroidWorldResearchPolicy:
             scored = [(item.memory_prior, item) for item in enumerated]
             updated_values = prior_values
             provider = (
-                "decision_memory_high_confidence"
+                "decision_memory_profile_fast_path"
+                if query.standards_profile == "exitguide.navigation-experience.v1"
+                else "decision_memory_high_confidence"
                 if self.planner_model.configured and self.planner_mode == "selective"
                 else "decision_memory_fallback"
             )
@@ -251,6 +254,7 @@ class AndroidWorldResearchPolicy:
     def _should_invoke_planner(
         self,
         *,
+        query: DecisionMemoryQuery,
         plan: HierarchicalPlan,
         prior_values: Sequence[CandidateValue],
         recent_history: Sequence[Mapping[str, object]],
@@ -269,6 +273,13 @@ class AndroidWorldResearchPolicy:
         if not safe:
             return True
         safe.sort(key=lambda value: (-value.final_score, value.candidate_id))
+        if query.standards_profile == "exitguide.navigation-experience.v1":
+            fast_path_candidate_id = query.fast_path_candidate_id()
+            return not (
+                fast_path_candidate_id is not None
+                and safe[0].candidate_id == fast_path_candidate_id
+                and safe[0].fast_path_eligible
+            )
         best = safe[0].final_score
         second = safe[1].final_score if len(safe) > 1 else 0.0
         return not (

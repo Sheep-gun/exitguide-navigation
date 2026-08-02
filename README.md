@@ -114,6 +114,8 @@ Android 실행 계약과 설치 방법은 [Android Executor v1](docs/ANDROID_EXE
 ```bash
 python -m pip install -r apps/api/requirements.txt
 python apps/api/tests/navigation_decision_memory_unit.py
+python apps/api/tests/navigation_experience_profile_unit.py
+python apps/api/tests/navigation_interaction_adapter_unit.py
 python apps/api/tests/navigation_research_architecture_unit.py
 python apps/api/tests/navigation_runtime_unit.py
 cd apps/android-executor
@@ -127,3 +129,10 @@ cd apps/android-executor
 74개 변환 사례를 source app 제외 방식으로 다시 재생한 진단 결과는 첫 행동 0.7778, 전체 positive next-action exact match 0.4603, 기록된 실패 클릭 회피 0.8182, 위험 행동 자동 클릭 0건이었다. 이는 **최종 A/B가 아니라 runtime 방향성 검사**다. 전체 다음 행동 정확도 46.03%는 아직 낮고 기존 방식보다 개선됐다고 말할 근거도 없다. 따라서 정적 데이터를 더 쌓지 않고, 실제 Solar Pro 3/EXAONE 4.5 endpoint를 연결한 앱 분리 A/B와 실패 지점 분석을 먼저 수행한다. 재현 조건과 미충족 기준은 [오프라인 평가 보고서](docs/OFFLINE_AB_EVALUATION.md)에 있다.
 
 2026-08-02 실모델 smoke에서는 EXAONE 4.5가 합성 화면 후보 ID를 3/3 보존했고 약 4.5초에 응답했다. 기존 K-EXAONE은 단일 Hermes 호출도 56.7~92.0초가 걸려 폐기했고, Solar Pro 3로 교체했다. N100에서 Solar Pro 3의 단순 응답은 약 0.50초, 강제 Hermes tool call은 약 0.59초, 실제 계획+전체 후보 평가는 4.21~6.17초였다. DB가 확신한 첫 fast path는 약 0.018초, 정상 history가 있는 두 번째 fast path도 약 0.021초에 Solar 없이 결정했다. 관찰된 `no_change` 뒤에는 Solar로 escalation했고, 위험 해지 확정은 `stop_for_user()`로 차단했다. 선택 품질은 앱 분리 A/B 전까지 개선됐다고 결론 내리지 않는다. 상세 결과는 [실모델 smoke 보고서](docs/LIVE_MODEL_SMOKE_2026-08-02.md)에 있다.
+
+## 표준화 Profile
+
+기존 DB를 보존하면서 W3C SKOS, RLDS, Android Accessibility, W3C PROV-O,
+JSON Schema를 적용하는 규격과 변환기를 추가했다. 규격과 수집 규칙은
+[Navigation Experience Profile v1](docs/NAVIGATION_EXPERIENCE_PROFILE_V1.md), 실제 현재 데이터의
+부족분은 [DB 품질 보고서](docs/NAVIGATION_DB_QUALITY_REPORT_2026-08-03.md)를 기준으로 한다.

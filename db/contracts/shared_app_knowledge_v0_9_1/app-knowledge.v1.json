@@ -1,0 +1,329 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/app-knowledge.v1.json",
+  "title": "ExitGuide Canonical App Knowledge Packet",
+  "description": "검증된 앱 기능, 화면, affordance, 전이, 절차와 복구 규칙을 교환한다. 개별 실행 trajectory는 포함하지 않는다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "generation_id",
+    "app",
+    "goals",
+    "capabilities",
+    "screen_concepts",
+    "app_screens",
+    "affordances",
+    "destination_signatures",
+    "transitions",
+    "procedures",
+    "recovery_rules",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "packet_id": {"type": "string", "minLength": 1},
+    "generation_id": {"type": "string", "minLength": 1},
+    "app": {"$ref": "#/$defs/app"},
+    "goals": {"type": "array", "items": {"$ref": "#/$defs/goalRef"}},
+    "capabilities": {"type": "array", "items": {"$ref": "#/$defs/capability"}},
+    "screen_concepts": {"type": "array", "items": {"$ref": "#/$defs/screenConcept"}},
+    "app_screens": {"type": "array", "items": {"$ref": "#/$defs/appScreen"}},
+    "affordances": {"type": "array", "items": {"$ref": "#/$defs/affordance"}},
+    "destination_signatures": {"type": "array", "items": {"$ref": "#/$defs/destinationSignature"}},
+    "transitions": {"type": "array", "items": {"$ref": "#/$defs/transition"}},
+    "procedures": {"type": "array", "items": {"$ref": "#/$defs/procedure"}},
+    "recovery_rules": {"type": "array", "items": {"$ref": "#/$defs/recoveryRule"}},
+    "provenance": {"$ref": "#/$defs/provenance"}
+  },
+  "$defs": {
+    "status": {
+      "enum": ["draft", "validated", "active", "retired", "disputed"]
+    },
+    "riskClass": {
+      "enum": ["low", "medium", "high", "critical", "blocked"]
+    },
+    "versionConstraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_version", "max_version", "observed_versions"],
+      "properties": {
+        "min_version": {"type": ["string", "null"]},
+        "max_version": {"type": ["string", "null"]},
+        "observed_versions": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_id", "platform", "package_name", "display_name", "locale", "version_constraint"],
+      "properties": {
+        "app_id": {"type": "string", "minLength": 1},
+        "platform": {"enum": ["android", "ios", "system", "cross_platform"]},
+        "package_name": {"type": "string", "minLength": 1},
+        "display_name": {"type": "string", "minLength": 1},
+        "locale": {"type": "string", "minLength": 2},
+        "version_constraint": {"$ref": "#/$defs/versionConstraint"}
+      }
+    },
+    "goalRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "family", "operation", "object_type", "risk_class", "terminal_action_policy"],
+      "properties": {
+        "goal_id": {"type": "string", "minLength": 1},
+        "family": {"type": "string", "minLength": 1},
+        "operation": {"type": "string", "minLength": 1},
+        "object_type": {"type": "string", "minLength": 1},
+        "risk_class": {"$ref": "#/$defs/riskClass"},
+        "terminal_action_policy": {
+          "enum": ["safe_navigation", "require_confirmation", "stop_for_user"]
+        }
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "goal_id",
+        "capability_key",
+        "support_status",
+        "entry_mode",
+        "parameter_schema",
+        "preconditions",
+        "effects",
+        "risk_class",
+        "status"
+      ],
+      "properties": {
+        "capability_id": {"type": "string", "minLength": 1},
+        "goal_id": {"type": "string", "minLength": 1},
+        "capability_key": {"type": "string", "minLength": 1},
+        "support_status": {"enum": ["supported", "partial", "unsupported", "unknown"]},
+        "entry_mode": {"enum": ["ui", "deep_link", "system_intent", "external_web", "mixed"]},
+        "parameter_schema": {"type": "object"},
+        "preconditions": {"type": "array", "items": {"type": "object"}},
+        "effects": {"type": "array", "items": {"type": "object"}},
+        "risk_class": {"$ref": "#/$defs/riskClass"},
+        "status": {"$ref": "#/$defs/status"}
+      }
+    },
+    "screenConcept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concept_id", "semantic_name", "description", "auth_state", "surface_type", "semantic_tokens"],
+      "properties": {
+        "concept_id": {"type": "string", "minLength": 1},
+        "semantic_name": {"type": "string", "minLength": 1},
+        "description": {"type": "string"},
+        "auth_state": {"enum": ["unknown", "logged_out", "logged_in", "reauthentication"]},
+        "surface_type": {"enum": ["native", "webview", "hybrid", "system", "unknown"]},
+        "semantic_tokens": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "appScreen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_screen_id",
+        "concept_id",
+        "semantic_fingerprint",
+        "semantic_title",
+        "state_features",
+        "version_constraint",
+        "confidence",
+        "status",
+        "evidence_ids"
+      ],
+      "properties": {
+        "app_screen_id": {"type": "string", "minLength": 1},
+        "concept_id": {"type": ["string", "null"]},
+        "semantic_fingerprint": {"type": "string", "minLength": 1},
+        "semantic_title": {"type": "string", "minLength": 1},
+        "state_features": {"type": "object"},
+        "version_constraint": {"$ref": "#/$defs/versionConstraint"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"},
+        "evidence_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "affordance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "affordance_id",
+        "app_screen_id",
+        "role_id",
+        "semantic_label",
+        "operation",
+        "expected_effects",
+        "risk_class",
+        "terminal",
+        "confidence",
+        "status",
+        "evidence_ids"
+      ],
+      "properties": {
+        "affordance_id": {"type": "string", "minLength": 1},
+        "app_screen_id": {"type": "string", "minLength": 1},
+        "role_id": {"type": "string", "minLength": 1},
+        "semantic_label": {"type": "string", "minLength": 1},
+        "operation": {"type": "string", "minLength": 1},
+        "expected_effects": {"type": "array", "items": {"type": "object"}},
+        "risk_class": {"$ref": "#/$defs/riskClass"},
+        "terminal": {"type": "boolean"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"},
+        "evidence_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "destinationSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signature_id",
+        "goal_id",
+        "capability_id",
+        "required_features",
+        "optional_features",
+        "forbidden_features",
+        "terminal_features",
+        "match_threshold",
+        "status"
+      ],
+      "properties": {
+        "signature_id": {"type": "string", "minLength": 1},
+        "goal_id": {"type": "string", "minLength": 1},
+        "capability_id": {"type": ["string", "null"]},
+        "required_features": {"type": "object"},
+        "optional_features": {"type": "array"},
+        "forbidden_features": {"type": "array"},
+        "terminal_features": {"type": "array"},
+        "match_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"}
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transition_id",
+        "capability_id",
+        "from_screen_id",
+        "action",
+        "to_screen_id",
+        "outcome_class",
+        "preconditions",
+        "effects",
+        "failure_modes",
+        "risk_class",
+        "requires_user_confirmation",
+        "support_count",
+        "contradiction_count",
+        "confidence",
+        "status",
+        "evidence_ids"
+      ],
+      "properties": {
+        "transition_id": {"type": "string", "minLength": 1},
+        "capability_id": {"type": ["string", "null"]},
+        "from_screen_id": {"type": "string", "minLength": 1},
+        "action": {"$ref": "#/$defs/action"},
+        "to_screen_id": {"type": ["string", "null"]},
+        "outcome_class": {"enum": ["navigated", "state_changed", "destination_reached", "external", "no_change", "blocked", "unknown"]},
+        "preconditions": {"type": "array", "items": {"type": "object"}},
+        "effects": {"type": "array", "items": {"type": "object"}},
+        "failure_modes": {"type": "array", "items": {"type": "object"}},
+        "risk_class": {"$ref": "#/$defs/riskClass"},
+        "requires_user_confirmation": {"type": "boolean"},
+        "support_count": {"type": "integer", "minimum": 0},
+        "contradiction_count": {"type": "integer", "minimum": 0},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"},
+        "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "affordance_id", "parameters"],
+      "properties": {
+        "type": {
+          "enum": [
+            "click", "long_press", "input_text", "toggle", "select",
+            "scroll", "swipe", "back", "wait_and_observe", "open_deep_link",
+            "system_action", "stop_for_user"
+          ]
+        },
+        "affordance_id": {"type": ["string", "null"]},
+        "parameters": {"type": "object"}
+      }
+    },
+    "procedure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procedure_id", "goal_id", "capability_id", "name", "entry_conditions", "completion_conditions", "steps", "confidence", "status"],
+      "properties": {
+        "procedure_id": {"type": "string", "minLength": 1},
+        "goal_id": {"type": "string", "minLength": 1},
+        "capability_id": {"type": ["string", "null"]},
+        "name": {"type": "string", "minLength": 1},
+        "entry_conditions": {"type": "array", "items": {"type": "object"}},
+        "completion_conditions": {"type": "array", "items": {"type": "object"}},
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ordinal", "immediate_subgoal", "expected_concept_id", "preferred_role_id", "transition_id", "completion_check", "fallback_policy"],
+            "properties": {
+              "ordinal": {"type": "integer", "minimum": 0},
+              "immediate_subgoal": {"type": "string", "minLength": 1},
+              "expected_concept_id": {"type": ["string", "null"]},
+              "preferred_role_id": {"type": ["string", "null"]},
+              "transition_id": {"type": ["string", "null"]},
+              "completion_check": {"type": "object"},
+              "fallback_policy": {"type": "object"}
+            }
+          }
+        },
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"}
+      }
+    },
+    "recoveryRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["recovery_id", "goal_id", "screen_concept_id", "failure_signature", "forbidden_affordance_id", "recovery_action", "expected_effect", "confidence", "status", "evidence_ids"],
+      "properties": {
+        "recovery_id": {"type": "string", "minLength": 1},
+        "goal_id": {"type": ["string", "null"]},
+        "screen_concept_id": {"type": ["string", "null"]},
+        "failure_signature": {"type": "string", "minLength": 1},
+        "forbidden_affordance_id": {"type": ["string", "null"]},
+        "recovery_action": {"$ref": "#/$defs/action"},
+        "expected_effect": {"type": "object"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "status": {"$ref": "#/$defs/status"},
+        "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_system", "source_revision", "generated_at", "generator_kind", "contract_version"],
+      "properties": {
+        "source_system": {"type": "string", "minLength": 1},
+        "source_revision": {"type": "string", "minLength": 1},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "generator_kind": {"enum": ["human", "rule", "model_assisted", "model_generated", "import"]},
+        "contract_version": {"const": "1.0"}
+      }
+    }
+  }
+}

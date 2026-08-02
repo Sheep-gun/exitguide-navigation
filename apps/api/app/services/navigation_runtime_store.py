@@ -119,6 +119,19 @@ class NavigationRuntimeStore:
             )
             connection.commit()
 
+    def session(self, session_id: str) -> dict[str, Any] | None:
+        """Return the cached, server-validated goal for one navigation session."""
+
+        with self._lock, closing(self._connect()) as connection:
+            row = connection.execute(
+                """
+                SELECT session_id, locale, goal_text_redacted, goal_id, status
+                FROM navigation_sessions WHERE session_id = ?
+                """,
+                (session_id,),
+            ).fetchone()
+        return None if row is None else dict(row)
+
     def record_decision(
         self,
         *,

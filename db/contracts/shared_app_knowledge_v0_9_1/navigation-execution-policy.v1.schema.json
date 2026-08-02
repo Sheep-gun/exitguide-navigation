@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/navigation-execution-policy.v1.schema.json",
+  "title": "ExitGuide Navigation Execution Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "policy_id", "policy_version", "status", "description",
+    "allowed_actions", "stored_but_not_executable_actions", "terminal_rules"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "policy_id": {"const": "navigation.safe-five-actions"},
+    "policy_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "status": {"enum": ["draft", "active", "retired"]},
+    "description": {"type": "string", "minLength": 1},
+    "allowed_actions": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "required_arguments", "allowed_arguments", "guards"],
+        "properties": {
+          "name": {"enum": ["click", "scroll", "back", "wait_and_observe", "stop_for_user"]},
+          "required_arguments": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "allowed_arguments": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+          "argument_values": {"type": "object"},
+          "guards": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+        }
+      }
+    },
+    "stored_but_not_executable_actions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "terminal_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "always_stop_before", "terminal_candidate_policy",
+        "critical_or_blocked_candidate_policy", "unknown_candidate_policy",
+        "missing_observation_policy", "unexpected_argument_policy"
+      ],
+      "properties": {
+        "always_stop_before": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+        "terminal_candidate_policy": {"const": "replace_with_stop_for_user"},
+        "critical_or_blocked_candidate_policy": {"const": "replace_with_stop_for_user"},
+        "unknown_candidate_policy": {"const": "reject"},
+        "missing_observation_policy": {"const": "wait_and_observe"},
+        "unexpected_argument_policy": {"const": "reject"}
+      }
+    }
+  }
+}

@@ -115,6 +115,7 @@ class CandidateValueScorer:
             ]
             role_score = max((goal_priors.get(role, 0.0) for role in inferred_roles), default=0.0)
             memory_score = float(query.candidate_scores.get(candidate.candidate_id, 0.0))
+            memory_confidence = query.candidate_confidence.get(candidate.candidate_id)
             value = max(memory_score, role_score * 0.78 + memory_score * 0.22)
             forbidden = candidate.candidate_id in forbidden_candidate_ids
             semantic_text = " ".join(
@@ -139,6 +140,27 @@ class CandidateValueScorer:
                     role_score=round(max(0.0, min(1.0, role_score)), 4),
                     final_score=round(max(0.0, min(1.0, value)), 4),
                     score_source="safety_blocked" if blocked else "decision_memory_fallback",
+                    memory_support_tier=(
+                        memory_confidence.support_tier if memory_confidence else "unknown"
+                    ),
+                    supporting_cases=(
+                        memory_confidence.supporting_cases if memory_confidence else 0
+                    ),
+                    supporting_apps=(
+                        memory_confidence.supporting_apps if memory_confidence else 0
+                    ),
+                    conflicting_cases=(
+                        memory_confidence.conflicting_cases if memory_confidence else 0
+                    ),
+                    provenance_quality=(
+                        memory_confidence.provenance_quality if memory_confidence else 0.0
+                    ),
+                    fast_path_eligible=(
+                        bool(memory_confidence.fast_path_eligible) if memory_confidence else False
+                    ) and not blocked,
+                    confidence_reasons=(
+                        list(memory_confidence.reasons) if memory_confidence else []
+                    ),
                     forbidden=forbidden,
                     risk_level=candidate.risk_level,
                 )

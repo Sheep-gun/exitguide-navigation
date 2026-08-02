@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "crosswalk_version": "1.0.0",
+  "status": "provisional_validated",
+  "source_namespace": "yanggeon.navigation.goal",
+  "target_namespace": "exitguide.goal",
+  "mappings": [
+    {
+      "source_goal_id": "account.signup",
+      "target_goal_id": "create_account",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": []
+    },
+    {
+      "source_goal_id": "account.delete",
+      "target_goal_id": "delete_account",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": []
+    },
+    {
+      "source_goal_id": "membership.join",
+      "target_goal_id": "join_membership",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": []
+    },
+    {
+      "source_goal_id": "membership.manage",
+      "target_goal_id": "manage_membership",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": []
+    },
+    {
+      "source_goal_id": "membership.change",
+      "target_goal_id": "change_membership",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": []
+    },
+    {
+      "source_goal_id": "membership.cancel",
+      "target_goal_id": "cancel_membership",
+      "mapping_type": "exact",
+      "conditions": [],
+      "related_target_goal_ids": ["cancel_subscription"]
+    }
+  ],
+  "rules": {
+    "source_ids_are_not_runtime_ids": true,
+    "unmapped_goal_policy": "reject_and_record",
+    "conditional_mapping_requires_explicit_context": true,
+    "membership_and_subscription_are_not_synonyms": true
+  }
+}

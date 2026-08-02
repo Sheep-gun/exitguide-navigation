@@ -21,7 +21,12 @@ from app.navigation_contracts import (  # noqa: E402
     ObserveRequest,
     ScreenObservation,
 )
-from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
+from app.services.navigation_decision_memory import (  # noqa: E402
+    CandidateMemoryConfidence,
+    DecisionMemoryQuery,
+    NavigationDecisionMemory,
+    SemanticScreenState,
+)
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
@@ -68,6 +73,18 @@ class ScriptedPlannerClient:
 
     def complete(self, *, messages, **_kwargs):
         system = str(messages[0]["content"])
+        if "Goal Ontology classifier" in system:
+            assert _kwargs["tools"][0]["function"]["name"] == "select_navigation_goal"
+            allowed = _kwargs["tools"][0]["function"]["parameters"]["properties"]["goal_id"]["enum"]
+            assert "account.delete" in allowed
+            return _tool_response(
+                "select_navigation_goal",
+                {
+                    "goal_id": "account.delete",
+                    "confidence": 0.99,
+                    "reason": "scripted exact goal classification",
+                },
+            )
         if "combined K2-style planner and V-Droid-style batch verifier" in system:
             assert (
                 _kwargs["tools"][0]["function"]["name"]
@@ -313,6 +330,7 @@ def main() -> None:
             memory_score=0.74,
             role_score=1.0,
             final_score=0.94,
+            fast_path_eligible=True,
             forbidden=False,
             risk_level="low",
         ),
@@ -341,7 +359,50 @@ def main() -> None:
         allow_model_fallback=False,
         planner_mode="selective",
     )
+    fast_path_query = DecisionMemoryQuery(
+        goal=None,
+        screen=SemanticScreenState(
+            semantic_fingerprint="screen-a",
+            title="account",
+            auth_state="unknown",
+            surface_type="native",
+            navigation_depth=None,
+            tokens=(),
+            candidate_payloads=(),
+        ),
+        destination_signatures=(),
+        evidence=(),
+        candidate_scores={"signup": 0.94, "login": 0.70},
+        candidate_confidence={
+            "signup": CandidateMemoryConfidence(
+                candidate_id="signup",
+                score=0.94,
+                support_tier="high",
+                supporting_cases=4,
+                supporting_apps=3,
+                conflicting_cases=0,
+                provenance_quality=0.95,
+                fast_path_eligible=True,
+                reasons=("cross-app observed support",),
+            ),
+            "login": CandidateMemoryConfidence(
+                candidate_id="login",
+                score=0.70,
+                support_tier="medium",
+                supporting_cases=2,
+                supporting_apps=1,
+                conflicting_cases=0,
+                provenance_quality=0.8,
+                fast_path_eligible=False,
+                reasons=("insufficient app diversity",),
+            ),
+        },
+        action_scores={},
+        destination_match=0.0,
+        standards_profile="exitguide.navigation-experience.v1",
+    )
     assert selective_policy._should_invoke_planner(
+        query=fast_path_query,
         plan=fast_path_plan,
         prior_values=high_confidence_values,
         recent_history=[
@@ -355,6 +416,7 @@ def main() -> None:
         ],
     ) is False
     assert selective_policy._should_invoke_planner(
+        query=fast_path_query,
         plan=fast_path_plan,
         prior_values=high_confidence_values,
         recent_history=[
@@ -368,6 +430,7 @@ def main() -> None:
         ],
     ) is True
     assert selective_policy._should_invoke_planner(
+        query=fast_path_query,
         plan=fast_path_plan,
         prior_values=high_confidence_values,
         recent_history=[
@@ -381,6 +444,7 @@ def main() -> None:
         ],
     ) is False
     assert selective_policy._should_invoke_planner(
+        query=fast_path_query,
         plan=fast_path_plan,
         prior_values=high_confidence_values,
         recent_history=[

@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.ai/schemas/navigation-experience-profile.v1.schema.json",
+  "title": "ExitGuide Navigation Experience Profile v1",
+  "description": "Portable episode/step record. Standard fields follow SKOS, RLDS and PROV-O; x-exitguide fields are domain extensions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["profile_id", "episode", "steps", "provenance"],
+  "properties": {
+    "profile_id": { "const": "exitguide.navigation-experience.v1" },
+    "episode": { "$ref": "#/$defs/episode" },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "provenance": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/provenance" }
+    }
+  },
+  "$defs": {
+    "languageTag": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$"
+    },
+    "goal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goal_id", "concept_uri", "notation"],
+      "properties": {
+        "goal_id": { "type": "string", "minLength": 1 },
+        "concept_uri": { "type": "string", "format": "uri" },
+        "notation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["episode_id", "goal", "source_type", "source_app_package", "language_tag", "split"],
+      "properties": {
+        "episode_id": { "type": "string", "minLength": 1 },
+        "goal": { "$ref": "#/$defs/goal" },
+        "source_type": { "enum": ["human_gold", "real_device", "synthetic", "model_inference"] },
+        "source_app_package": { "type": "string" },
+        "language_tag": { "$ref": "#/$defs/languageTag" },
+        "split": { "enum": ["train", "validation", "test", "unassigned"] },
+        "x-exitguide-end-reason": {
+          "enum": ["destination_reached", "user_handoff", "failed", "truncated", "unknown"]
+        }
+      }
+    },
+    "action": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "candidate_id"],
+          "properties": {
+            "name": { "const": "click" },
+            "candidate_id": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "direction"],
+          "properties": {
+            "name": { "const": "scroll" },
+            "direction": { "enum": ["up", "down"] }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": {
+            "name": { "enum": ["back", "wait_and_observe", "stop_for_user"] }
+          }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["step_index", "observation_screen_id", "action", "is_first", "is_last", "is_terminal"],
+      "properties": {
+        "step_index": { "type": "integer", "minimum": 0 },
+        "observation_screen_id": { "type": "string", "minLength": 1 },
+        "action": { "$ref": "#/$defs/action" },
+        "reward": { "type": ["number", "null"] },
+        "discount": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
+        "is_first": { "type": "boolean" },
+        "is_last": { "type": "boolean" },
+        "is_terminal": { "type": "boolean" },
+        "x-exitguide-outcome": { "type": "string" },
+        "x-exitguide-progress": { "enum": ["reached", "advanced", "unchanged", "regressed", "unknown"] },
+        "x-exitguide-connectivity": { "enum": ["observed", "device_disconnected", "transport_error", "not_observed"] }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entity_uri", "generated_by_activity_uri", "attributed_to_agent_uri", "generated_at", "confidence"],
+      "properties": {
+        "entity_uri": { "type": "string", "format": "uri" },
+        "generated_by_activity_uri": { "type": "string", "format": "uri" },
+        "attributed_to_agent_uri": { "type": "string", "format": "uri" },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "verification_count": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

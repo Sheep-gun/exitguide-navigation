@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.ai/schemas/vlm-observation.v1.schema.json",
+  "title": "ExitGuide VLM Observation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "summary": { "type": "string" },
+    "screen_role": { "type": "string" },
+    "regions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "summary"],
+        "properties": {
+          "role": { "type": "string" },
+          "summary": { "type": "string" }
+        }
+      }
+    },
+    "model": { "type": "string" },
+    "model_version": { "type": "string" }
+  }
+}

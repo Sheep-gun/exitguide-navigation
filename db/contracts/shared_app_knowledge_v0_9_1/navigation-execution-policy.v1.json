@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "policy_id": "navigation.safe-five-actions",
+  "policy_version": "1.0.0",
+  "status": "active",
+  "description": "공통 지식 DB가 더 넓은 행동을 보존하더라도 현재 Navigation API와 모델에는 안전한 다섯 행동만 노출한다.",
+  "allowed_actions": [
+    {
+      "name": "click",
+      "required_arguments": ["candidate_id"],
+      "allowed_arguments": ["candidate_id"],
+      "guards": [
+        "candidate_exists_on_current_screen",
+        "candidate_not_forbidden",
+        "candidate_not_terminal",
+        "candidate_not_dangerous_final",
+        "candidate_risk_not_critical_or_blocked"
+      ]
+    },
+    {
+      "name": "scroll",
+      "required_arguments": ["direction"],
+      "allowed_arguments": ["direction"],
+      "argument_values": {"direction": ["up", "down"]},
+      "guards": []
+    },
+    {
+      "name": "back",
+      "required_arguments": [],
+      "allowed_arguments": [],
+      "guards": []
+    },
+    {
+      "name": "wait_and_observe",
+      "required_arguments": [],
+      "allowed_arguments": [],
+      "guards": []
+    },
+    {
+      "name": "stop_for_user",
+      "required_arguments": [],
+      "allowed_arguments": [],
+      "guards": []
+    }
+  ],
+  "stored_but_not_executable_actions": [
+    "long_press",
+    "input_text",
+    "toggle",
+    "select",
+    "swipe",
+    "open_deep_link",
+    "system_action"
+  ],
+  "terminal_rules": {
+    "always_stop_before": [
+      "account_deletion_commit",
+      "membership_cancellation_commit",
+      "subscription_cancellation_commit",
+      "purchase_commit",
+      "payment_commit",
+      "personal_data_submission",
+      "permission_commit"
+    ],
+    "terminal_candidate_policy": "replace_with_stop_for_user",
+    "critical_or_blocked_candidate_policy": "replace_with_stop_for_user",
+    "unknown_candidate_policy": "reject",
+    "missing_observation_policy": "wait_and_observe",
+    "unexpected_argument_policy": "reject"
+  }
+}

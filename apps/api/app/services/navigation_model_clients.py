@@ -42,6 +42,13 @@ class ReflectionOutput:
     recovery_hint: str
 
 
+@dataclass(frozen=True)
+class GoalClassificationOutput:
+    goal_id: str | None
+    confidence: float
+    reason: str
+
+
 class OpenAICompatibleChatClient:
     def __init__(
         self,
@@ -128,6 +135,98 @@ class NavigationPlannerResearchClient:
     @property
     def configured(self) -> bool:
         return self.client.configured
+
+    def classify_goal(
+        self,
+        *,
+        goal_text: str,
+        locale: str,
+        goal_catalog: Sequence[Mapping[str, object]],
+    ) -> GoalClassificationOutput:
+        """Select one DB-owned goal ID without allowing the model to invent IDs."""
+
+        allowed_ids = tuple(
+            sorted(
+                {
+                    str(item.get("goal_id", "")).strip()
+                    for item in goal_catalog
+                    if str(item.get("goal_id", "")).strip()
+                }
+            )
+        )
+        if not allowed_ids:
+            raise ValueError("Goal Ontology DB returned no active goal IDs")
+        out_of_scope = "__out_of_scope__"
+        packet = {
+            "user_goal_text": goal_text,
+            "locale": locale,
+            "goal_ontology": list(goal_catalog),
+            "instruction": (
+                "Return one supplied goal_id when the intent is supported. "
+                "Otherwise return __out_of_scope__."
+            ),
+        }
+        response = self.client.complete(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are the Goal Ontology classifier for an Android navigation agent. "
+                        "Interpret the user's natural-language intent and select exactly one ID "
+                        "from the supplied Goal Ontology DB catalog. Never invent, rewrite, or "
+                        "combine goal IDs. Opposite operations such as join and cancel must remain "
+                        "distinct. Use __out_of_scope__ only when none of the supplied goals fit."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
+            ],
+            max_tokens=220,
+            temperature=0.0,
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "select_navigation_goal",
+                        "description": "Select one and only one Goal Ontology DB ID.",
+                        "parameters": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "goal_id": {
+                                    "type": "string",
+                                    "enum": [*allowed_ids, out_of_scope],
+                                },
+                                "confidence": {
+                                    "type": "number",
+                                    "minimum": 0.0,
+                                    "maximum": 1.0,
+                                },
+                                "reason": {"type": "string"},
+                            },
+                            "required": ["goal_id", "confidence", "reason"],
+                        },
+                    },
+                }
+            ],
+            tool_choice={
+                "type": "function",
+                "function": {"name": "select_navigation_goal"},
+            },
+        )
+        payload = _response_json(response, expected_tool="select_navigation_goal")
+        goal_id = str(payload.get("goal_id", "")).strip()
+        if goal_id == out_of_scope:
+            selected_goal_id = None
+        elif goal_id in allowed_ids:
+            selected_goal_id = goal_id
+        else:
+            raise ValueError("Goal classifier returned an ID outside the DB allowlist")
+        confidence = float(payload.get("confidence", 0.0))
+        return GoalClassificationOutput(
+            goal_id=selected_goal_id,
+            confidence=max(0.0, min(1.0, confidence)),
+            reason=str(payload.get("reason", ""))[:500],
+        )
 
     def plan(
         self,

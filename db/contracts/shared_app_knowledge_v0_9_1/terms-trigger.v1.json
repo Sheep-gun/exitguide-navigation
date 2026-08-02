@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/terms-trigger.v1.json",
+  "title": "ExitGuide Terms Retrieval Trigger",
+  "description": "어떤 앱 목적 또는 행동 단계에서 약관 RAG를 호출하고 결과를 어떻게 의사결정에 반영할지 정의한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trigger_id",
+    "goal_id",
+    "app_id",
+    "capability_id",
+    "transition_id",
+    "trigger_phase",
+    "terms_scope",
+    "retrieval_profile",
+    "query_template",
+    "decision_gate",
+    "minimum_evidence_level",
+    "priority",
+    "status",
+    "generation_id"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "trigger_id": {"type": "string", "minLength": 1},
+    "goal_id": {"type": ["string", "null"]},
+    "app_id": {"type": ["string", "null"]},
+    "capability_id": {"type": ["string", "null"]},
+    "transition_id": {"type": ["string", "null"]},
+    "trigger_phase": {
+      "enum": ["goal_resolution", "before_plan", "before_action", "before_commit", "after_action"]
+    },
+    "terms_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service_names", "document_types", "taxonomy_ids", "operation_ids", "locale"],
+      "properties": {
+        "service_names": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "document_types": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "taxonomy_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "operation_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "locale": {"type": "string", "minLength": 2}
+      }
+    },
+    "retrieval_profile": {"type": "string", "minLength": 1},
+    "query_template": {"type": "string"},
+    "decision_gate": {"enum": ["none", "inform", "warn", "require_confirmation", "block"]},
+    "minimum_evidence_level": {"enum": ["none", "snippet", "citation", "verified_frame"]},
+    "priority": {"type": "integer"},
+    "status": {"enum": ["draft", "validated", "active", "retired"]},
+    "generation_id": {"type": ["string", "null"]}
+  },
+  "anyOf": [
+    {"required": ["goal_id"], "properties": {"goal_id": {"type": "string", "minLength": 1}}},
+    {"required": ["capability_id"], "properties": {"capability_id": {"type": "string", "minLength": 1}}},
+    {"required": ["transition_id"], "properties": {"transition_id": {"type": "string", "minLength": 1}}}
+  ]
+}

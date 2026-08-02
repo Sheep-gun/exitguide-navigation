@@ -14,7 +14,11 @@ from app.navigation_contracts import (
     ObserveRequest,
     ObserveResponse,
 )
-from app.services.navigation_decision_memory import DecisionMemoryQuery, NavigationDecisionMemory
+from app.services.navigation_decision_memory import (
+    DecisionMemoryQuery,
+    NavigationDecisionMemory,
+    NormalizedGoal,
+)
 from app.services.navigation_planner import PlannerProposal
 from app.services.navigation_research_policy import (
     AndroidWorldResearchPolicy,
@@ -67,6 +71,8 @@ class NavigationRuntime:
             "decision_db": {
                 "schema_version": self.memory.metadata.get("schema_version"),
                 "database_kind": self.memory.metadata.get("database_kind"),
+                "standards_profile": self.memory.metadata.get("standards_profile", "legacy-v1"),
+                "profile_aware_retrieval": self.memory.profile_enabled,
                 "access_mode": "read_only",
             },
             "runtime_db": self.store.status(),
@@ -78,6 +84,7 @@ class NavigationRuntime:
                 "exaone_4_5_configured": self.policy.exaone_vlm.configured,
                 "fallback_allowed": self.policy.allow_model_fallback,
                 "planner_model_mode": self.policy.planner_mode,
+                "goal_classifier": "solar_db_allowlist_then_python_validation",
                 "exaone_4_5_mode": self.policy.vlm_mode,
             },
             "allowed_actions": [
@@ -97,16 +104,22 @@ class NavigationRuntime:
             screenshot_data_url=request.screenshot_data_url,
         )
         effective_screen = perception.screen
+        normalized_goal, goal_resolution = self._resolve_goal(
+            session_id=session_id,
+            goal_text=request.goal_text,
+            locale=request.locale,
+        )
         query = self.memory.retrieve(
             goal_text=request.goal_text,
-            window_title=request.screen.window_title,
-            activity_name=request.screen.activity_name,
+            window_title=effective_screen.window_title,
+            activity_name=effective_screen.activity_name,
             candidates=[candidate.model_dump(mode="json") for candidate in effective_screen.candidates],
             locale=request.locale,
             exclude_app_package=request.app_package,
             top_k=5,
+            normalized_goal=normalized_goal,
+            resolve_goal_from_text=False,
         )
-        goal_resolution = _goal_resolution(query)
         destination_threshold = _destination_threshold(query)
         forbidden = self.store.forbidden_candidates(session_id, query.screen.semantic_fingerprint)
         recent_history = self.store.recent_history(session_id, limit=5)
@@ -184,7 +197,9 @@ class NavigationRuntime:
             score_margin=score_margin,
             reflection_on_demand=reflection_on_demand,
             planner_provider=planner_provider,
-            planner_fallback_used=planner_fallback or proposal.fallback_used,
+            planner_fallback_used=(
+                goal_resolution.fallback_used or planner_fallback or proposal.fallback_used
+            ),
             safety_status=safety_status,
             safety_reason=safety_reason,
             destination_match_before=query.destination_match,
@@ -202,12 +217,91 @@ class NavigationRuntime:
             perception_provider=perception.provider,
             planner_provider=planner_provider,
             verifier_provider=verifier_provider,
-            planner_fallback_used=planner_fallback or proposal.fallback_used,
+            planner_fallback_used=(
+                goal_resolution.fallback_used or planner_fallback or proposal.fallback_used
+            ),
             safety_status=safety_status,
             safety_reason=safety_reason,
             destination_match=query.destination_match,
             candidate_values=candidate_values,
             evidence_case_ids=evidence_case_ids,
+        )
+
+    def _resolve_goal(
+        self,
+        *,
+        session_id: str,
+        goal_text: str,
+        locale: str,
+    ) -> tuple[NormalizedGoal | None, GoalResolution]:
+        cached = self.store.session(session_id)
+        if cached is not None:
+            cached_goal_id = str(cached.get("goal_id") or "")
+            if not cached_goal_id:
+                return None, GoalResolution(
+                    status="out_of_scope",
+                    goal_id=None,
+                    confidence=1.0,
+                    provider="session_cached_goal",
+                    validated_against_db=True,
+                    fallback_used=False,
+                )
+            cached_goal = self.memory.goal_by_id(
+                cached_goal_id,
+                confidence=1.0,
+                matched_phrase="session_cached_goal",
+            )
+            if cached_goal is None:
+                raise ValueError("cached navigation goal is no longer active in Goal Ontology DB")
+            return cached_goal, _goal_resolution(
+                cached_goal,
+                provider="session_cached_goal",
+                validated_against_db=True,
+                fallback_used=False,
+            )
+
+        if self.policy.planner_model.configured:
+            try:
+                classified = self.policy.planner_model.classify_goal(
+                    goal_text=goal_text,
+                    locale=locale,
+                    goal_catalog=self.memory.goal_catalog(locale=locale),
+                )
+                if classified.goal_id is None:
+                    return None, GoalResolution(
+                        status="out_of_scope",
+                        goal_id=None,
+                        confidence=classified.confidence,
+                        provider=f"{self.policy.planner_model.name}_goal_classifier",
+                        validated_against_db=True,
+                        fallback_used=False,
+                    )
+                classified_goal = self.memory.goal_by_id(
+                    classified.goal_id,
+                    confidence=classified.confidence,
+                    matched_phrase=classified.reason or "solar_goal_classifier",
+                )
+                if classified_goal is None:
+                    raise ValueError("goal classifier returned an inactive Goal Ontology ID")
+                return classified_goal, _goal_resolution(
+                    classified_goal,
+                    provider=f"{self.policy.planner_model.name}_goal_classifier",
+                    validated_against_db=True,
+                    fallback_used=False,
+                )
+            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
+                if not self.policy.allow_model_fallback:
+                    raise
+                fallback_used = True
+        else:
+            fallback_used = True
+
+        fallback_goal = self.memory.normalize_goal(goal_text, locale=locale)
+        return fallback_goal, _goal_resolution(
+            fallback_goal,
+            provider="python_phrase_fallback",
+            validated_against_db=fallback_goal is not None,
+            fallback_used=fallback_used,
         )
 
     def observe(self, request: ObserveRequest) -> ObserveResponse:
@@ -242,6 +336,12 @@ class NavigationRuntime:
                 locale=str(decision["locale"]),
                 exclude_app_package=str(decision["app_package"]),
                 top_k=0,
+                normalized_goal=self.memory.goal_by_id(
+                    str(decision.get("goal_id") or ""),
+                    confidence=1.0,
+                    matched_phrase="stored_decision_goal",
+                ),
+                resolve_goal_from_text=False,
             )
             next_fingerprint = next_query.screen.semantic_fingerprint
             verified = verify_transition(
@@ -486,14 +586,30 @@ def verify_transition(
     return VerifiedTransition("navigated", True, "unknown", destination_match_after, "", None)
 
 
-def _goal_resolution(query: DecisionMemoryQuery) -> GoalResolution:
-    if query.goal is None:
-        return GoalResolution(status="out_of_scope", goal_id=None, confidence=0.0)
-    status = "recognized" if query.goal.confidence >= 0.58 else "ambiguous"
+def _goal_resolution(
+    goal: NormalizedGoal | None,
+    *,
+    provider: str,
+    validated_against_db: bool,
+    fallback_used: bool,
+) -> GoalResolution:
+    if goal is None:
+        return GoalResolution(
+            status="out_of_scope",
+            goal_id=None,
+            confidence=0.0,
+            provider=provider,
+            validated_against_db=validated_against_db,
+            fallback_used=fallback_used,
+        )
+    status = "recognized" if goal.confidence >= 0.58 else "ambiguous"
     return GoalResolution(
         status=status,
-        goal_id=query.goal.goal_id,
-        confidence=query.goal.confidence,
+        goal_id=goal.goal_id,
+        confidence=goal.confidence,
+        provider=provider,
+        validated_against_db=validated_against_db,
+        fallback_used=fallback_used,
     )
 
 

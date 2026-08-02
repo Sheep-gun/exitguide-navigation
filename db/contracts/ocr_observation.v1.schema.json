@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.ai/schemas/ocr-observation.v1.schema.json",
+  "title": "ExitGuide OCR Observation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "labels": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "engine": { "type": "string" },
+    "engine_version": { "type": "string" }
+  },
+  "required": ["labels"]
+}

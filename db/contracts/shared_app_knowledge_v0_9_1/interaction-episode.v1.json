@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/interaction-episode.v1.json",
+  "title": "ExitGuide Interaction Episode",
+  "description": "한 사용자 목적을 수행하면서 관찰한 화면, 전체 행동 후보, 선택, 실행 결과, 검색 근거와 모델 호출을 append-only 경험으로 기록한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "episode_id",
+    "request_id",
+    "session_id",
+    "context",
+    "status",
+    "outcome",
+    "steps",
+    "started_at",
+    "finished_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "episode_id": {"type": "string", "minLength": 1},
+    "request_id": {"type": "string", "minLength": 1},
+    "session_id": {"type": "string", "minLength": 1},
+    "context": {"$ref": "#/$defs/context"},
+    "status": {"enum": ["active", "completed", "failed", "aborted", "expired"]},
+    "outcome": {"enum": ["success", "partial", "failure", "user_stopped", "unknown"]},
+    "steps": {"type": "array", "items": {"$ref": "#/$defs/step"}},
+    "started_at": {"type": "string", "format": "date-time"},
+    "finished_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "$defs": {
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_id",
+        "app_package",
+        "app_version",
+        "platform",
+        "locale",
+        "goal_id",
+        "user_intent_redacted",
+        "agent_version",
+        "navigation_generation_id",
+        "terms_generation_id",
+        "device_context"
+      ],
+      "properties": {
+        "app_id": {"type": ["string", "null"]},
+        "app_package": {"type": "string"},
+        "app_version": {"type": "string"},
+        "platform": {"enum": ["android", "ios", "system", "cross_platform"]},
+        "locale": {"type": "string", "minLength": 2},
+        "goal_id": {"type": ["string", "null"]},
+        "user_intent_redacted": {"type": "string", "minLength": 1},
+        "agent_version": {"type": "string", "minLength": 1},
+        "navigation_generation_id": {"type": ["string", "null"]},
+        "terms_generation_id": {"type": ["string", "null"]},
+        "device_context": {"type": "object"}
+      }
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_id",
+        "screen_fingerprint",
+        "matched_app_screen_id",
+        "accessibility_summary",
+        "ocr_summary",
+        "vision_summary",
+        "screenshot_ref",
+        "ui_tree_ref",
+        "privacy_status",
+        "captured_at"
+      ],
+      "properties": {
+        "observation_id": {"type": "string", "minLength": 1},
+        "screen_fingerprint": {"type": "string", "minLength": 1},
+        "matched_app_screen_id": {"type": ["string", "null"]},
+        "accessibility_summary": {"type": "object"},
+        "ocr_summary": {"type": "object"},
+        "vision_summary": {"type": "object"},
+        "screenshot_ref": {"type": ["string", "null"]},
+        "ui_tree_ref": {"type": ["string", "null"]},
+        "privacy_status": {"enum": ["synthetic", "redacted", "restricted", "discarded"]},
+        "captured_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "observed_payload",
+        "matched_affordance_id",
+        "memory_score",
+        "verifier_score",
+        "final_score",
+        "risk_class",
+        "terminal",
+        "dangerous_final",
+        "forbidden",
+        "selected"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "observed_payload": {"type": "object"},
+        "matched_affordance_id": {"type": ["string", "null"]},
+        "memory_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "verifier_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "final_score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "risk_class": {"enum": ["low", "medium", "high", "critical", "blocked"]},
+        "terminal": {"type": "boolean"},
+        "dangerous_final": {"type": "boolean"},
+        "forbidden": {"type": "boolean"},
+        "selected": {"type": "boolean"}
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "candidate_id", "parameters"],
+      "properties": {
+        "type": {
+          "enum": [
+            "click", "long_press", "input_text", "toggle", "select",
+            "scroll", "swipe", "back", "wait_and_observe", "open_deep_link",
+            "system_action", "stop_for_user"
+          ]
+        },
+        "candidate_id": {"type": ["string", "null"]},
+        "parameters": {"type": "object"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"type": {"enum": ["click", "long_press", "input_text", "toggle", "select"]}},
+            "required": ["type"]
+          },
+          "then": {"properties": {"candidate_id": {"type": "string", "minLength": 1}}}
+        },
+        {
+          "if": {
+            "properties": {"type": {"enum": ["scroll", "swipe", "back", "wait_and_observe", "open_deep_link", "system_action", "stop_for_user"]}},
+            "required": ["type"]
+          },
+          "then": {"properties": {"candidate_id": {"type": "null"}}}
+        }
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "safety_status",
+        "safety_reason",
+        "outcome_type",
+        "progress_label",
+        "failure_class",
+        "external_target",
+        "destination_match_before",
+        "destination_match_after",
+        "distance_before",
+        "distance_after",
+        "distance_method",
+        "reward"
+      ],
+      "properties": {
+        "status": {"enum": ["not_executed", "executed", "device_disconnected", "transport_error", "executor_error"]},
+        "safety_status": {"enum": ["allowed", "replaced", "blocked", "not_applicable"]},
+        "safety_reason": {"type": "string"},
+        "outcome_type": {
+          "enum": [
+            "navigated", "destination_reached", "state_changed", "no_change",
+            "wrong_destination", "external_app", "login_required", "popup",
+            "infinite_feed", "network_error", "blocked", "unknown"
+          ]
+        },
+        "progress_label": {"enum": ["reached", "advanced", "unchanged", "regressed", "unknown"]},
+        "failure_class": {"type": "string"},
+        "external_target": {"type": ["string", "null"]},
+        "destination_match_before": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "destination_match_after": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "distance_before": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "distance_after": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "distance_method": {"type": "string"},
+        "reward": {"type": ["number", "null"]}
+      }
+    },
+    "retrievalHit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "entity_type", "entity_id", "rank", "score", "generation_id", "used_in_decision"],
+      "properties": {
+        "domain": {"enum": ["navigation", "terms", "experience"]},
+        "entity_type": {"type": "string", "minLength": 1},
+        "entity_id": {"type": "string", "minLength": 1},
+        "rank": {"type": "integer", "minimum": 1},
+        "score": {"type": "number"},
+        "generation_id": {"type": ["string", "null"]},
+        "used_in_decision": {"type": "boolean"}
+      }
+    },
+    "modelCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["call_id", "role", "provider", "model_name", "prompt_contract_version", "status", "latency_ms"],
+      "properties": {
+        "call_id": {"type": "string", "minLength": 1},
+        "role": {"enum": ["goal_classifier", "perception", "planner", "verifier", "reflection", "terms_composer"]},
+        "provider": {"type": "string", "minLength": 1},
+        "model_name": {"type": "string", "minLength": 1},
+        "prompt_contract_version": {"type": "string", "minLength": 1},
+        "status": {"enum": ["completed", "failed", "timeout", "skipped"]},
+        "latency_ms": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "ordinal",
+        "plan_stage",
+        "immediate_subgoal",
+        "before",
+        "candidate_set_status",
+        "candidates",
+        "selected_action",
+        "execution",
+        "after",
+        "retrieval_hits",
+        "model_calls",
+        "rlds",
+        "latency_ms"
+      ],
+      "properties": {
+        "step_id": {"type": "string", "minLength": 1},
+        "ordinal": {"type": "integer", "minimum": 0},
+        "plan_stage": {"type": "string", "minLength": 1},
+        "immediate_subgoal": {"type": "string", "minLength": 1},
+        "before": {"$ref": "#/$defs/observation"},
+        "candidate_set_status": {"enum": ["complete", "partial", "unavailable"]},
+        "candidates": {"type": "array", "items": {"$ref": "#/$defs/candidate"}},
+        "selected_action": {"$ref": "#/$defs/action"},
+        "execution": {"$ref": "#/$defs/execution"},
+        "after": {"oneOf": [{"$ref": "#/$defs/observation"}, {"type": "null"}]},
+        "retrieval_hits": {"type": "array", "items": {"$ref": "#/$defs/retrievalHit"}},
+        "model_calls": {"type": "array", "items": {"$ref": "#/$defs/modelCall"}},
+        "rlds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["is_first", "is_last", "is_terminal", "discount"],
+          "properties": {
+            "is_first": {"type": "boolean"},
+            "is_last": {"type": "boolean"},
+            "is_terminal": {"type": "boolean"},
+            "discount": {"type": "number", "minimum": 0, "maximum": 1}
+          }
+        },
+        "latency_ms": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"candidate_set_status": {"const": "unavailable"}},
+            "required": ["candidate_set_status"]
+          },
+          "then": {
+            "properties": {"candidates": {"maxItems": 0}}
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "execution": {
+                "properties": {"status": {"enum": ["device_disconnected", "transport_error", "executor_error"]}},
+                "required": ["status"]
+              }
+            },
+            "required": ["execution"]
+          },
+          "then": {
+            "properties": {
+              "after": {"type": "null"},
+              "execution": {
+                "properties": {
+                  "outcome_type": {"const": "unknown"},
+                  "progress_label": {"const": "unknown"},
+                  "destination_match_after": {"type": "null"},
+                  "distance_after": {"type": "null"}
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/navigation-goal-classifier-output.v1.schema.json",
+  "title": "ExitGuide Solar Goal Classifier Output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "source_namespace", "goal_id", "confidence",
+    "conditions", "provider", "model_name", "prompt_contract_version"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source_namespace": {"const": "yanggeon.navigation.goal"},
+    "goal_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "conditions": {"type": "object"},
+    "provider": {"const": "solar"},
+    "model_name": {"type": "string", "minLength": 1},
+    "prompt_contract_version": {"type": "string", "minLength": 1}
+  }
+}

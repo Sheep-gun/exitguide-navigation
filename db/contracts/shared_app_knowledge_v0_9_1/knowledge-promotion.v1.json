@@ -1,0 +1,206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/knowledge-promotion.v1.json",
+  "title": "ExitGuide Knowledge Promotion Candidate",
+  "description": "실행 경험에서 추출한 지식 후보가 검증을 거쳐 canonical app knowledge로 승격되는 과정을 기록한다.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "candidate_type",
+    "target_entity_id",
+    "proposed_payload",
+    "sources",
+    "support_count",
+    "contradiction_count",
+    "confidence",
+    "risk_class",
+    "generator",
+    "status",
+    "validation_runs",
+    "promotion"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "candidate_id": {"type": "string", "minLength": 1},
+    "candidate_type": {
+      "enum": [
+        "goal_alias",
+        "capability",
+        "screen_concept",
+        "app_screen",
+        "affordance",
+        "destination_signature",
+        "transition",
+        "procedure",
+        "recovery_rule",
+        "policy_trigger"
+      ]
+    },
+    "target_entity_id": {"type": ["string", "null"]},
+    "proposed_payload": {"type": "object"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["episode_id", "step_id", "support_kind", "candidate_set_status", "weight"],
+        "properties": {
+          "episode_id": {"type": "string", "minLength": 1},
+          "step_id": {"type": ["string", "null"]},
+          "support_kind": {"enum": ["positive", "negative", "contradiction", "context_only"]},
+          "candidate_set_status": {"enum": ["complete", "partial", "unavailable", "not_applicable"]},
+          "weight": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "support_count": {"type": "integer", "minimum": 0},
+    "contradiction_count": {"type": "integer", "minimum": 0},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "risk_class": {"enum": ["low", "medium", "high", "critical"]},
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version", "generated_at"],
+      "properties": {
+        "kind": {"enum": ["rule", "human", "model_assisted", "model_generated", "import"]},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "generated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "ready_for_validation",
+        "validating",
+        "accepted",
+        "rejected",
+        "applied",
+        "superseded"
+      ]
+    },
+    "validation_runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["validation_id", "kind", "result", "validator_kind", "validator_version", "metrics", "evidence_refs"],
+        "properties": {
+          "validation_id": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["schema_check", "deterministic_replay", "holdout_replay", "real_device", "human_review", "consistency_check"]},
+          "result": {"enum": ["passed", "failed", "inconclusive"]},
+          "validator_kind": {"enum": ["rule", "replay", "human", "model_assisted"]},
+          "validator_version": {"type": "string", "minLength": 1},
+          "metrics": {"type": "object"},
+          "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "promotion": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["promotion_id", "target_entity_type", "target_entity_id", "target_generation_id", "decision", "reviewer_kind", "decision_reason", "rollback_of_promotion_id", "decided_at"],
+          "properties": {
+            "promotion_id": {"type": "string", "minLength": 1},
+            "target_entity_type": {"type": "string", "minLength": 1},
+            "target_entity_id": {"type": "string", "minLength": 1},
+            "target_generation_id": {"type": "string", "minLength": 1},
+            "decision": {"enum": ["accepted", "rejected", "rolled_back"]},
+            "reviewer_kind": {"enum": ["human", "rule", "replay_gate", "model_assisted"]},
+            "decision_reason": {"type": "string", "minLength": 1},
+            "rollback_of_promotion_id": {"type": ["string", "null"]},
+            "decided_at": {"type": "string", "format": "date-time"}
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"decision": {"const": "rolled_back"}},
+                "required": ["decision"]
+              },
+              "then": {
+                "properties": {
+                  "rollback_of_promotion_id": {"type": "string", "minLength": 1}
+                }
+              },
+              "else": {
+                "properties": {"rollback_of_promotion_id": {"type": "null"}}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "candidate_type": {"const": "transition"},
+          "status": {"enum": ["accepted", "applied"]}
+        },
+        "required": ["candidate_type", "status"]
+      },
+      "then": {
+        "properties": {
+          "sources": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "step_id": {"type": "string", "minLength": 1},
+                "support_kind": {"const": "positive"},
+                "candidate_set_status": {"const": "complete"}
+              },
+              "required": ["step_id", "support_kind", "candidate_set_status"]
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"enum": ["accepted", "applied"]}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "support_count": {"minimum": 1},
+          "confidence": {"minimum": 0.6},
+          "validation_runs": {
+            "minItems": 1,
+            "contains": {
+              "type": "object",
+              "properties": {
+                "kind": {"enum": ["deterministic_replay", "holdout_replay", "real_device", "human_review", "consistency_check"]},
+                "result": {"const": "passed"}
+              },
+              "required": ["kind", "result"]
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"status": {"const": "applied"}},
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "promotion": {
+            "type": "object",
+            "properties": {"decision": {"const": "accepted"}},
+            "required": ["decision"]
+          }
+        }
+      }
+    }
+  ]
+}

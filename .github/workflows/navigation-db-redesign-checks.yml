@@ -41,6 +41,12 @@ jobs:
       - name: Test decision memory
         run: python apps/api/tests/navigation_decision_memory_unit.py
 
+      - name: Test standards experience profile
+        run: python apps/api/tests/navigation_experience_profile_unit.py
+
+      - name: Test interaction episode adapter
+        run: python apps/api/tests/navigation_interaction_adapter_unit.py
+
       - name: Test research architecture
         run: python apps/api/tests/navigation_research_architecture_unit.py
 

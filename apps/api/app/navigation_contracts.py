@@ -82,6 +82,9 @@ class GoalResolution(BaseModel):
     status: Literal["recognized", "ambiguous", "out_of_scope"]
     goal_id: str | None
     confidence: float = Field(ge=0.0, le=1.0)
+    provider: str = "unknown"
+    validated_against_db: bool = False
+    fallback_used: bool = False
 
 
 class HierarchicalPlan(BaseModel):
@@ -112,6 +115,13 @@ class CandidateValue(BaseModel):
         "decision_memory_fallback"
     )
     verifier_reason: str = ""
+    memory_support_tier: str = "unknown"
+    supporting_cases: int = Field(default=0, ge=0)
+    supporting_apps: int = Field(default=0, ge=0)
+    conflicting_cases: int = Field(default=0, ge=0)
+    provenance_quality: float = Field(default=0.0, ge=0.0, le=1.0)
+    fast_path_eligible: bool = False
+    confidence_reasons: list[str] = Field(default_factory=list)
     forbidden: bool
     risk_level: RiskLevel
 

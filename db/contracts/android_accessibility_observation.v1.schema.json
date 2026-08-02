@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.ai/schemas/android-accessibility-observation.v1.schema.json",
+  "title": "ExitGuide Android Accessibility Observation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "window_title": { "type": "string" },
+    "activity_semantics": { "type": "string" },
+    "elements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["node_id", "parent_node_id", "label", "role", "clickable", "scrollable"],
+        "properties": {
+          "node_id": { "type": "string" },
+          "parent_node_id": { "type": "string" },
+          "label": { "type": "string" },
+          "content_description": { "type": "string" },
+          "class_name": { "type": "string" },
+          "role": { "type": "string" },
+          "clickable": { "type": "boolean" },
+          "scrollable": { "type": "boolean" },
+          "enabled": { "type": "boolean" },
+          "selected": { "type": "boolean" },
+          "checked": { "type": ["boolean", "null"] },
+          "actions": {
+            "type": "array",
+            "items": { "type": "string" },
+            "uniqueItems": true
+          }
+        }
+      }
+    }
+  },
+  "required": ["window_title", "activity_semantics", "elements"]
+}
