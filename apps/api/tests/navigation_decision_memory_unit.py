@@ -150,6 +150,53 @@ def main() -> None:
         assert membership_false_positive.goal.goal_id == "membership.join"
         assert membership_false_positive.destination_match < 0.62
 
+        membership_menu = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="전체 메뉴",
+            activity_name="android.widget.FrameLayout",
+            candidates=[
+                {
+                    "candidate_id": "travel-preference",
+                    "label": "내 여행 취향",
+                    "nearby_text": "내 여행 취향",
+                    "parent_semantics": "로그인 회원가입",
+                    "role": "clickable",
+                },
+                {
+                    "candidate_id": "members-category",
+                    "label": "J 멤버스",
+                    "nearby_text": "J 멤버스",
+                    "parent_semantics": "예약 여행 준비 여행 편의",
+                    "role": "clickable",
+                },
+                {
+                    "candidate_id": "members-entry",
+                    "label": "J 멤버스",
+                    "nearby_text": "J 멤버스",
+                    "parent_semantics": "J 멤버스",
+                    "role": "clickable",
+                },
+            ],
+            top_k=0,
+        )
+        assert membership_menu.candidate_scores["members-entry"] > membership_menu.candidate_scores[
+            "travel-preference"
+        ]
+        members_payload = next(
+            item
+            for item in membership_menu.screen.candidate_payloads
+            if item["candidate_id"] == "members-entry"
+        )
+        assert "membership.hub" in members_payload["inferred_function_roles"]
+        assert members_payload["function_role_scores"]["membership.hub"] >= 0.98
+        travel_payload = next(
+            item
+            for item in membership_menu.screen.candidate_payloads
+            if item["candidate_id"] == "travel-preference"
+        )
+        assert travel_payload["function_role_scores"].get("auth.signup.entry", 0.0) < 0.5
+        assert "auth.signup.entry" not in travel_payload["inferred_function_roles"]
+
         current_candidates = [
             {"element_id": "current-account", "label": "내 계정", "role": "button", "risk_level": "low"},
             {"element_id": "current-search", "label": "검색", "role": "button", "risk_level": "low"},

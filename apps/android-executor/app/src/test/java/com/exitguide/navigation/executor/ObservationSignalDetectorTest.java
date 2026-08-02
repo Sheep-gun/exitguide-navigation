@@ -32,4 +32,17 @@ public final class ObservationSignalDetectorTest {
                 ObservationSignalDetector.detect("none", "app.a", "app.a", "네트워크 오류. 다시 시도")
         );
     }
+
+    @Test
+    public void biometricBoundaryWinsOverExternalPackageDetection() {
+        assertEquals(
+                "blocked",
+                ObservationSignalDetector.detect(
+                        "none",
+                        "app.a",
+                        "android.systemui",
+                        "생체 인증 보안 지문을 입력하세요"
+                )
+        );
+    }
 }

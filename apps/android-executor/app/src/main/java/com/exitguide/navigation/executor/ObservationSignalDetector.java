@@ -15,6 +15,12 @@ final class ObservationSignalDetector {
         if (executionSignal != null && !"none".equals(executionSignal)) {
             return executionSignal;
         }
+        String text = normalize(screenSemantics);
+        if (containsAny(text,
+                "생체 인증", "생체인증", "지문을 입력", "지문 인증", "biometric",
+                "fingerprint authentication", "fingerprint scanner")) {
+            return "blocked";
+        }
         if (beforePackage != null
                 && !beforePackage.isEmpty()
                 && afterPackage != null
@@ -22,7 +28,6 @@ final class ObservationSignalDetector {
                 && !beforePackage.equals(afterPackage)) {
             return "external_app";
         }
-        String text = normalize(screenSemantics);
         if (containsAny(text,
                 "네트워크 오류", "연결할 수 없습니다", "다시 시도", "network error",
                 "connection failed", "offline")) {

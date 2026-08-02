@@ -32,6 +32,9 @@ LOGGER = logging.getLogger(__name__)
 
 STRICT_FAST_PATH_SCORE_FLOOR = 0.90
 STRICT_FAST_PATH_MARGIN_FLOOR = 0.25
+DIRECT_ROLE_GUARD_FLOOR = 0.78
+UNRELATED_ROLE_CEILING = 0.50
+DIRECT_ROLE_MODEL_FLOOR = 0.50
 
 
 @dataclass(frozen=True)
@@ -189,6 +192,11 @@ class AndroidWorldResearchPolicy:
                     prior_values=prior_values,
                 )
                 provider = f"{self.planner_model.name}_step_evaluator"
+                if any(
+                    value.verifier_reason.startswith("python_direct_role_guard:")
+                    for value in updated_values
+                ):
+                    provider += "->python_direct_role_guard"
                 fallback_used = False
             except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
                 LOGGER.warning(
@@ -424,6 +432,11 @@ class AndroidWorldResearchPolicy:
             key: (output.helpful_probability, output.reason)
             for key, output in outputs.items()
         }
+        scores = self._apply_direct_role_guard(
+            scores=scores,
+            prior_values=prior_values,
+            enumerated=enumerated,
+        )
         scored = [
             (scores[_action_key(item.action)][0], item)
             for item in enumerated
@@ -455,6 +468,73 @@ class AndroidWorldResearchPolicy:
             source="solar_pro3",
         )
         return refined_plan, scored, updated_values
+
+    def _apply_direct_role_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        prior_values: Sequence[CandidateValue],
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Prevent an unrelated click from outranking an observed direct role.
+
+        Solar still evaluates the complete bounded action set.  This guard is
+        only activated when Solar itself gives at least one safe, direct-role
+        click a useful score but selects a semantically weaker click instead.
+        It never creates a candidate ID and it leaves genuine same-role
+        ambiguity to Solar's scores and semantic context.
+        """
+
+        adjusted = dict(scores)
+        prior_by_key = {
+            f"click:{value.candidate_id}": value
+            for value in prior_values
+            if not value.forbidden and value.score_source != "safety_blocked"
+        }
+        if not adjusted or not prior_by_key:
+            return adjusted
+        ranked = sorted(adjusted.items(), key=lambda item: (-item[1][0], item[0]))
+        best_key = ranked[0][0]
+        best_prior = prior_by_key.get(best_key)
+        if best_prior is None or best_prior.role_score >= UNRELATED_ROLE_CEILING:
+            return adjusted
+        direct_keys = [
+            key
+            for key, value in prior_by_key.items()
+            if value.role_score >= DIRECT_ROLE_GUARD_FLOOR
+            and adjusted.get(key, (0.0, ""))[0] >= DIRECT_ROLE_MODEL_FLOOR
+        ]
+        if not direct_keys:
+            return adjusted
+        candidate_by_key = {
+            f"click:{item.action.candidate_id}": item.candidate
+            for item in enumerated
+            if item.action.name == "click" and item.candidate is not None
+        }
+
+        def direct_rank(key: str) -> tuple[float, float, int, int, str]:
+            value = prior_by_key[key]
+            candidate = candidate_by_key.get(key)
+            label = "" if candidate is None else candidate.label.strip()
+            parent = "" if candidate is None else candidate.parent_semantics.strip()
+            parent_consistent = int(bool(label) and label.casefold() == parent.casefold())
+            return (
+                adjusted[key][0],
+                value.role_score,
+                parent_consistent,
+                -len(label),
+                key,
+            )
+
+        selected_key = max(direct_keys, key=direct_rank)
+        best_score = adjusted[best_key][0]
+        selected_score, selected_reason = adjusted[selected_key]
+        adjusted[selected_key] = (
+            min(1.0, max(selected_score, best_score + 0.001)),
+            "python_direct_role_guard: direct candidate role outranks unrelated click; "
+            + selected_reason,
+        )
+        return adjusted
 
 
 class ReflectionTriggerPolicy:

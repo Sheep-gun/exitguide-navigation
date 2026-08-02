@@ -12,6 +12,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import (
     GOAL_ROLE_PRIORS,
     DecisionMemoryQuery,
+    _candidate_ontology_score,
     is_dangerous_final_candidate,
 )
 
@@ -110,10 +111,7 @@ class CandidateValueScorer:
         values: list[CandidateValue] = []
         for candidate in candidates:
             memory_candidate = memory_candidates.get(candidate.candidate_id, {})
-            inferred_roles = [
-                str(role) for role in memory_candidate.get("inferred_function_roles", [])
-            ]
-            role_score = max((goal_priors.get(role, 0.0) for role in inferred_roles), default=0.0)
+            role_score = _candidate_ontology_score(memory_candidate, goal_priors)
             memory_score = float(query.candidate_scores.get(candidate.candidate_id, 0.0))
             memory_confidence = query.candidate_confidence.get(candidate.candidate_id)
             value = max(memory_score, role_score * 0.78 + memory_score * 0.22)

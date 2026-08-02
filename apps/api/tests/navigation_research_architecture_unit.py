@@ -18,6 +18,7 @@ from app.navigation_contracts import (  # noqa: E402
     CandidateValue,
     DecideRequest,
     HierarchicalPlan,
+    NavigationAction,
     NavigationCandidate,
     ObserveRequest,
     ScreenObservation,
@@ -34,6 +35,7 @@ from app.services.navigation_model_clients import (  # noqa: E402
 )
 from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
+    EnumeratedAction,
     ReflectionTriggerPolicy,
 )
 from app.services.navigation_runtime import NavigationRuntime  # noqa: E402
@@ -467,6 +469,58 @@ def main() -> None:
             }
         ],
     ) is False
+
+    guarded = selective_policy._apply_direct_role_guard(
+        scores={
+            "click:travel": (0.70, "surrounding text suggests account access"),
+            "click:members-category": (0.60, "direct membership label"),
+            "click:members-entry": (0.60, "direct membership label"),
+            "wait_and_observe": (0.10, "no need to wait"),
+        },
+        prior_values=[
+            CandidateValue(
+                candidate_id="travel", value=0.30, memory_score=0.20, role_score=0.44,
+                final_score=0.30, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="members-category", value=0.78, memory_score=0.60,
+                role_score=0.82, final_score=0.78, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="members-entry", value=0.78, memory_score=0.60,
+                role_score=0.82, final_score=0.78, forbidden=False, risk_level="low",
+            ),
+        ],
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="travel"), 0.30,
+                NavigationCandidate(
+                    candidate_id="travel", label="내 여행 취향", role="clickable",
+                    nearby_text="내 여행 취향", parent_semantics="로그인 회원가입",
+                    position_bucket="top", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-category"), 0.78,
+                NavigationCandidate(
+                    candidate_id="members-category", label="J 멤버스", role="clickable",
+                    nearby_text="J 멤버스", parent_semantics="예약 여행 준비",
+                    position_bucket="top", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-entry"), 0.78,
+                NavigationCandidate(
+                    candidate_id="members-entry", label="J 멤버스", role="clickable",
+                    nearby_text="J 멤버스", parent_semantics="J 멤버스",
+                    position_bucket="middle", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(NavigationAction(name="wait_and_observe"), 0.10, None),
+        ],
+    )
+    assert max(guarded, key=lambda key: (guarded[key][0], key)) == "click:members-entry"
+    assert guarded["click:members-entry"][1].startswith("python_direct_role_guard:")
     near_tie_values = [
         high_confidence_values[0],
         high_confidence_values[1].model_copy(

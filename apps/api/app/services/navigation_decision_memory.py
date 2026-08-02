@@ -27,6 +27,7 @@ EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNO
 PHONE_PATTERN = re.compile(r"(?<!\d)(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}(?!\d)")
 LONG_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{7,}(?!\d)")
 ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
+DIRECT_FUNCTION_ROLE_THRESHOLD = 0.50
 KOREAN_TOKEN_SUFFIXES = tuple(
     sorted(
         (
@@ -507,10 +508,15 @@ class NavigationDecisionMemory:
             terminal_action_policy=str(row["terminal_action_policy"]),
         )
 
-    def infer_affordance_roles(self, text: str, *, locale: str = "ko-KR") -> tuple[str, ...]:
+    def infer_affordance_role_scores(
+        self,
+        text: str,
+        *,
+        locale: str = "ko-KR",
+    ) -> dict[str, float]:
         normalized = normalize_text(text)
         if not normalized:
-            return ()
+            return {}
         locale_prefix = locale.split("-", 1)[0].casefold()
         with closing(self._connect()) as connection:
             rows = connection.execute(
@@ -535,7 +541,13 @@ class NavigationDecisionMemory:
                 scored.get(role_id, 0.0),
                 float(row["confidence"]) * locale_weight,
             )
-        return tuple(role for role, _ in sorted(scored.items(), key=lambda item: (-item[1], item[0])))
+        return {
+            role: round(score, 4)
+            for role, score in sorted(scored.items(), key=lambda item: (-item[1], item[0]))
+        }
+
+    def infer_affordance_roles(self, text: str, *, locale: str = "ko-KR") -> tuple[str, ...]:
+        return tuple(self.infer_affordance_role_scores(text, locale=locale))
 
     def semantic_screen_state(
         self,
@@ -564,7 +576,32 @@ class NavigationDecisionMemory:
             semantic_context = " ".join(
                 value for value in (label, icon_semantics, nearby_text, parent_semantics) if value
             )
-            inferred_roles = self.infer_affordance_roles(semantic_context, locale=locale)
+            field_role_scores: dict[str, float] = {}
+            # A candidate's own label/icon is direct evidence. Nearby and
+            # parent text are useful context, but must not make an unrelated
+            # child inherit the parent's function at full strength.
+            for field_text, field_weight in (
+                (label, 1.0),
+                (icon_semantics, 0.95),
+                (nearby_text, 0.55),
+                (parent_semantics, 0.35),
+            ):
+                for function_role, alias_score in self.infer_affordance_role_scores(
+                    field_text,
+                    locale=locale,
+                ).items():
+                    field_role_scores[function_role] = max(
+                        field_role_scores.get(function_role, 0.0),
+                        alias_score * field_weight,
+                    )
+            inferred_roles = tuple(
+                role
+                for role, score in sorted(
+                    field_role_scores.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )
+                if score >= DIRECT_FUNCTION_ROLE_THRESHOLD
+            )
             labels.append(label)
             screen_tokens.update(tokenize(semantic_context))
             screen_tokens.update(inferred_roles)
@@ -581,6 +618,10 @@ class NavigationDecisionMemory:
                     "position_bucket": position_bucket,
                     "dangerous_final": is_dangerous_final_candidate(semantic_context),
                     "inferred_function_roles": list(inferred_roles),
+                    "function_role_scores": {
+                        role: round(score, 4)
+                        for role, score in sorted(field_role_scores.items())
+                    },
                 }
             )
         joined = " ".join((title, *labels)).casefold()
@@ -853,20 +894,14 @@ class NavigationDecisionMemory:
         scores: dict[str, float] = {}
         confidences: dict[str, CandidateMemoryConfidence] = {}
         ontology_scores = {
-            str(candidate["candidate_id"]): max(
-                (
-                    priors.get(str(role), 0.0)
-                    for role in candidate["inferred_function_roles"]  # type: ignore[union-attr]
-                ),
-                default=0.0,
-            )
+            str(candidate["candidate_id"]): _candidate_ontology_score(candidate, priors)
             for candidate in screen.candidate_payloads
         }
         for candidate in screen.candidate_payloads:
             candidate_id = str(candidate["candidate_id"])
             label = str(candidate["label"])
             roles = set(candidate["inferred_function_roles"])  # type: ignore[arg-type]
-            ontology = max((priors.get(role, 0.0) for role in roles), default=0.0)
+            ontology = _candidate_ontology_score(candidate, priors)
             memory_support = 0.0
             failure_support = 0.0
             positive_matches: list[tuple[float, DecisionEvidence]] = []
@@ -1016,6 +1051,26 @@ class NavigationDecisionMemory:
 def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value or "").translate(ZERO_WIDTH)
     return " ".join(normalized.casefold().split())
+
+
+def _candidate_ontology_score(
+    candidate: Mapping[str, object],
+    priors: Mapping[str, float],
+) -> float:
+    role_scores = candidate.get("function_role_scores", {})
+    if isinstance(role_scores, Mapping) and role_scores:
+        return max(
+            (
+                priors.get(str(role), 0.0) * float(alias_score)
+                for role, alias_score in role_scores.items()
+            ),
+            default=0.0,
+        )
+    roles = candidate.get("inferred_function_roles", ())
+    return max(
+        (priors.get(str(role), 0.0) for role in roles),  # type: ignore[union-attr]
+        default=0.0,
+    )
 
 
 def redact_text(value: str) -> str:

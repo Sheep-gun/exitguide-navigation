@@ -43,6 +43,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private boolean inFlight;
     private int stepOrdinal;
     private String sessionId = "";
+    private String sessionAppPackage = "";
     private String lastActivityName = "";
     private Runnable pendingDecision;
     private PowerManager.WakeLock screenWakeLock;
@@ -189,7 +190,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             if (!sessionId.isEmpty()) {
                 request.put("session_id", sessionId);
             }
-            request.put("app_package", snapshot.appPackage);
+            if (sessionAppPackage.isEmpty()) {
+                sessionAppPackage = snapshot.appPackage;
+            }
+            request.put("app_package", sessionAppPackage);
             request.put("locale", Locale.getDefault().toLanguageTag());
             request.put("goal_text", ExecutorPreferences.goal(this));
             request.put("step_ordinal", stepOrdinal);
@@ -449,7 +453,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         }
                         JSONObject recovery = response.optJSONObject("recovery_action");
                         if (recovery != null) {
-                            publish("복구 필요: " + recovery.optString("name", "reselect")
+                            String recoveryName = recovery.optString("name", "reselect");
+                            if ("stop_for_user".equals(recoveryName)) {
+                                stop("인증·위험·차단 경계가 감지되어 사용자의 확인이 필요합니다.");
+                                return;
+                            }
+                            publish("복구 필요: " + recoveryName
                                     + ". 다음 판단에서 안전하게 반영합니다.");
                         }
                         scheduleDecision(500);
@@ -542,6 +551,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void resetSession() {
         sessionId = "";
+        sessionAppPackage = "";
         stepOrdinal = 0;
         episodeStartedAtElapsed = 0L;
         inFlight = false;
