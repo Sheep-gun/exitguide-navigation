@@ -296,6 +296,60 @@ def main() -> None:
         assert signup_terminal.planner_provider == "python_terminal_boundary"
         assert signup_terminal.perception_provider == "structured_input_terminal_boundary"
 
+        already_member = auth_transition_runtime.decide(
+            DecideRequest(
+                request_id="request-already-member",
+                app_package="evaluation.membership.app",
+                goal_text="유료 멤버십에 가입하고 싶어",
+                screen=ScreenObservation(
+                    window_title="계정",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-status",
+                            label="Premium 회원",
+                            role="text",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="benefits",
+                            label="Premium 혜택",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert already_member.action.name == "stop_for_user"
+        assert already_member.planner_provider == "python_goal_already_satisfied"
+        already_member_observation = auth_transition_runtime.observe(
+            ObserveRequest(
+                request_id="request-already-member-observe",
+                decision_id=already_member.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=False,
+                next_screen=ScreenObservation(
+                    window_title="계정",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-status",
+                            label="Premium 회원",
+                            role="text",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="benefits",
+                            label="Premium 혜택",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert already_member_observation.outcome_type == "blocked"
+        assert already_member_observation.failure_class == "already_satisfied"
+        assert already_member_observation.candidate_forbidden is False
+        assert already_member_observation.session_status == "stopped"
+
         out_of_scope = runtime.decide(
             DecideRequest(
                 request_id="request-4",

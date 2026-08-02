@@ -19,6 +19,7 @@ from app.services.navigation_decision_memory import (
     NavigationDecisionMemory,
     NormalizedGoal,
     is_dangerous_final_candidate,
+    tokenize,
 )
 from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
 from app.services.navigation_model_clients import PerceptionOutput
@@ -230,6 +231,14 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_terminal_boundary"
+        elif _goal_already_satisfied(query):
+            proposal = PlannerProposal(
+                NavigationAction(name="stop_for_user"),
+                1.0,
+                "python_goal_already_satisfied",
+                False,
+            )
+            planner_provider = "python_goal_already_satisfied"
         elif (
             query.goal is not None
             and _requires_authenticated_account(query.goal.goal_id)
@@ -476,15 +485,27 @@ class NavigationRuntime:
             observed_signal = request.observed_signal
             if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
                 observed_signal = "login_required"
-            verified = verify_transition(
-                action_name=str(decision["action_name"]),
-                previous_fingerprint=str(decision["screen_fingerprint"]),
-                next_fingerprint=next_fingerprint,
-                destination_match_before=before_match,
-                destination_match_after=next_query.destination_match,
-                destination_threshold=_destination_threshold(next_query),
-                observed_signal=observed_signal,
-            )
+            if decision["planner_provider"] == "python_goal_already_satisfied":
+                verified = VerifiedTransition(
+                    outcome_type="blocked",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="unchanged",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="already_satisfied",
+                    recovery_action=None,
+                )
+            else:
+                verified = verify_transition(
+                    action_name=str(decision["action_name"]),
+                    previous_fingerprint=str(decision["screen_fingerprint"]),
+                    next_fingerprint=next_fingerprint,
+                    destination_match_before=before_match,
+                    destination_match_after=next_query.destination_match,
+                    destination_threshold=_destination_threshold(next_query),
+                    observed_signal=observed_signal,
+                )
         candidate_forbidden = False
         knowledge_revision_queued = False
         candidate_id = decision.get("candidate_id")
@@ -747,6 +768,31 @@ def _requires_authenticated_account(goal_id: str) -> bool:
         "membership.change",
         "membership.manage",
     }
+
+
+_ACTIVE_MEMBERSHIP_FEATURES = (
+    "프리미엄 회원",
+    "premium 회원",
+    "현재 멤버십",
+    "활성 멤버십",
+    "구독 중",
+    "premium member",
+    "current membership",
+    "active membership",
+    "already subscribed",
+)
+
+
+def _goal_already_satisfied(query: DecisionMemoryQuery) -> bool:
+    """Stop a join request when the observed account is already an active member."""
+
+    if query.goal is None or query.goal.goal_id != "membership.join":
+        return False
+    visible_tokens = set(query.screen.tokens)
+    return any(
+        set(tokenize(feature)).issubset(visible_tokens)
+        for feature in _ACTIVE_MEMBERSHIP_FEATURES
+    )
 
 
 def _is_authentication_boundary(
