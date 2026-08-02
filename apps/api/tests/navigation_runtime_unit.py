@@ -219,6 +219,40 @@ def main() -> None:
         )
         assert logged_out.action.name == "stop_for_user"
         assert logged_out.planner_provider == "python_authentication_boundary"
+        assert logged_out.perception_provider == "structured_input_auth_boundary"
+
+        auth_transition_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "auth-transition-runtime.sqlite"),
+            policy=_policy(),
+        )
+        auth_entry = auth_transition_runtime.decide(
+            DecideRequest(
+                request_id="request-auth-entry",
+                app_package="evaluation.auth.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                screen=_account_screen(),
+            )
+        )
+        auth_observation = auth_transition_runtime.observe(
+            ObserveRequest(
+                request_id="request-auth-observe",
+                decision_id=auth_entry.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=ScreenObservation(
+                    window_title="로그인",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(candidate_id="signup", label="회원가입", role="button"),
+                        NavigationCandidate(candidate_id="login", label="로그인", role="button"),
+                    ],
+                ),
+            )
+        )
+        assert auth_observation.outcome_type == "login_required"
+        assert auth_observation.recovery_action is not None
+        assert auth_observation.recovery_action.name == "stop_for_user"
 
         out_of_scope = runtime.decide(
             DecideRequest(

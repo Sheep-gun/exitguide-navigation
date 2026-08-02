@@ -21,6 +21,7 @@ from app.services.navigation_decision_memory import (
     is_dangerous_final_candidate,
 )
 from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
+from app.services.navigation_model_clients import PerceptionOutput
 from app.services.navigation_planner import PlannerProposal
 from app.services.navigation_research_policy import (
     AndroidWorldResearchPolicy,
@@ -122,17 +123,33 @@ class NavigationRuntime:
                 allow_locked_holdout=self.allow_locked_holdout,
             )
         session_id = request.session_id or f"navs_{uuid.uuid4().hex}"
-        perception = self.policy.perceive(
-            goal_text=request.goal_text,
-            screen=request.screen,
-            screenshot_data_url=request.screenshot_data_url,
-        )
-        effective_screen = perception.screen
         normalized_goal, goal_resolution = self._resolve_goal(
             session_id=session_id,
             goal_text=request.goal_text,
             locale=request.locale,
         )
+        structured_screen = self.memory.semantic_screen_state(
+            window_title=request.screen.window_title,
+            activity_name=request.screen.activity_name,
+            candidates=[
+                candidate.model_dump(mode="json") for candidate in request.screen.candidates
+            ],
+            locale=request.locale,
+            navigation_depth=request.screen.navigation_depth,
+        )
+        if _is_authentication_boundary(normalized_goal, structured_screen.auth_state):
+            perception = PerceptionOutput(
+                screen=request.screen,
+                semantic_summary="explicit authentication boundary from structured UI",
+                provider="structured_input_auth_boundary",
+            )
+        else:
+            perception = self.policy.perceive(
+                goal_text=request.goal_text,
+                screen=request.screen,
+                screenshot_data_url=request.screenshot_data_url,
+            )
+        effective_screen = perception.screen
         query = self.memory.retrieve(
             goal_text=request.goal_text,
             window_title=effective_screen.window_title,
@@ -377,11 +394,33 @@ class NavigationRuntime:
             next_fingerprint = None
         else:
             assert request.next_screen is not None
-            next_perception = self.policy.perceive(
-                goal_text=str(decision["goal_text_redacted"]),
-                screen=request.next_screen,
-                screenshot_data_url=request.after_screenshot_data_url,
+            stored_goal = self.memory.goal_by_id(
+                str(decision.get("goal_id") or ""),
+                confidence=1.0,
+                matched_phrase="stored_decision_goal",
             )
+            structured_next_screen = self.memory.semantic_screen_state(
+                window_title=request.next_screen.window_title,
+                activity_name=request.next_screen.activity_name,
+                candidates=[
+                    candidate.model_dump(mode="json")
+                    for candidate in request.next_screen.candidates
+                ],
+                locale=str(decision["locale"]),
+                navigation_depth=request.next_screen.navigation_depth,
+            )
+            if _is_authentication_boundary(stored_goal, structured_next_screen.auth_state):
+                next_perception = PerceptionOutput(
+                    screen=request.next_screen,
+                    semantic_summary="explicit authentication boundary from structured UI",
+                    provider="structured_input_auth_boundary",
+                )
+            else:
+                next_perception = self.policy.perceive(
+                    goal_text=str(decision["goal_text_redacted"]),
+                    screen=request.next_screen,
+                    screenshot_data_url=request.after_screenshot_data_url,
+                )
             effective_next_screen = next_perception.screen
             next_query = self.memory.retrieve(
                 goal_text=str(decision["goal_text_redacted"]),
@@ -394,14 +433,13 @@ class NavigationRuntime:
                 locale=str(decision["locale"]),
                 exclude_app_package=str(decision["app_package"]),
                 top_k=0,
-                normalized_goal=self.memory.goal_by_id(
-                    str(decision.get("goal_id") or ""),
-                    confidence=1.0,
-                    matched_phrase="stored_decision_goal",
-                ),
+                normalized_goal=stored_goal,
                 resolve_goal_from_text=False,
             )
             next_fingerprint = next_query.screen.semantic_fingerprint
+            observed_signal = request.observed_signal
+            if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
+                observed_signal = "login_required"
             verified = verify_transition(
                 action_name=str(decision["action_name"]),
                 previous_fingerprint=str(decision["screen_fingerprint"]),
@@ -409,7 +447,7 @@ class NavigationRuntime:
                 destination_match_before=before_match,
                 destination_match_after=next_query.destination_match,
                 destination_threshold=_destination_threshold(next_query),
-                observed_signal=request.observed_signal,
+                observed_signal=observed_signal,
             )
         candidate_forbidden = False
         knowledge_revision_queued = False
@@ -663,6 +701,17 @@ def _requires_authenticated_account(goal_id: str) -> bool:
         "membership.change",
         "membership.manage",
     }
+
+
+def _is_authentication_boundary(
+    goal: NormalizedGoal | None,
+    auth_state: str,
+) -> bool:
+    return (
+        goal is not None
+        and _requires_authenticated_account(goal.goal_id)
+        and auth_state in {"logged_out", "reauthentication"}
+    )
 
 
 def _goal_resolution(
