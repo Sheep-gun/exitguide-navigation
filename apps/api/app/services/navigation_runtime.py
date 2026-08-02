@@ -307,6 +307,7 @@ class NavigationRuntime:
     def observe(self, request: ObserveRequest) -> ObserveResponse:
         decision = self.store.decision(request.decision_id)
         before_match = float(decision["destination_match_before"])
+        effective_next_screen = None
         if request.connectivity_status != "observed":
             verified = VerifiedTransition(
                 outcome_type="unknown",
@@ -378,7 +379,7 @@ class NavigationRuntime:
             session_status = "reached"
         elif verified.outcome_type == "blocked":
             session_status = "stopped"
-        self.store.record_observation(
+        observation_id = self.store.record_observation(
             observation_id=f"navo_{uuid.uuid4().hex}",
             decision_id=request.decision_id,
             connectivity_status=request.connectivity_status,
@@ -389,6 +390,7 @@ class NavigationRuntime:
             destination_match_before=before_match,
             destination_match_after=verified.destination_match_after,
             failure_class=verified.failure_class,
+            next_screen=effective_next_screen,
             session_status=session_status,
         )
         if candidate_forbidden:
@@ -499,6 +501,17 @@ class NavigationRuntime:
                         verified.failure_class,
                         NavigationAction(name=reflection_result.recovery_hint),
                     )
+        self.store.record_execution_details(
+            decision_id=request.decision_id,
+            observation_id=observation_id,
+            connectivity_status=request.connectivity_status,
+            execution_succeeded=request.execution_succeeded,
+            observed_signal=request.observed_signal,
+            recovery_action=verified.recovery_action,
+            candidate_forbidden=candidate_forbidden,
+            reflection_level=reflection_level,
+            reflection_reason=reflection_reason,
+        )
         return ObserveResponse(
             request_id=request.request_id,
             session_id=str(decision["session_id"]),

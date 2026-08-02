@@ -30,7 +30,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private static final long EVENT_DEBOUNCE_MS = 700;
     private static final long OBSERVATION_DELAY_MS = 1_200;
-    private static final int MAX_ACTIONS = 16;
+    private static final int MAX_ACTIONS = 24;
     private static final int MAX_SCREENSHOT_EDGE = 900;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -96,33 +96,35 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         try {
             unregisterReceiver(configurationReceiver);
         } catch (IllegalArgumentException ignored) {
-            // Receiver was not registered because service startup did not finish.
+            // Service startup did not finish.
         }
         apiClient.close();
         super.onDestroy();
     }
 
     private void verifyApiAndSchedule() {
-        String baseUrl = ExecutorPreferences.apiBaseUrl(this);
         publish("Navigation API 상태를 확인하는 중입니다.");
-        apiClient.get(baseUrl, "/v1/navigation/status", new NavigationApiClient.Callback() {
-            @Override
-            public void onSuccess(JSONObject response) {
-                if (!response.optBoolean("ready", false)) {
-                    stop("Navigation API가 준비되지 않았습니다.");
-                    return;
-                }
-                String servingMode = response.optString("serving_mode", "unknown");
-                publish("Navigation API 연결됨: " + servingMode);
-                scheduleDecision(300);
-            }
+        apiClient.get(
+                ExecutorPreferences.apiBaseUrl(this),
+                "/v1/navigation/status",
+                new NavigationApiClient.Callback() {
+                    @Override
+                    public void onSuccess(JSONObject response) {
+                        if (!response.optBoolean("ready", false)) {
+                            stop("Navigation API가 준비되지 않았습니다.");
+                            return;
+                        }
+                        publish("Navigation API 연결됨: " + response.optString("serving_mode", "unknown"));
+                        scheduleDecision(300);
+                    }
 
-            @Override
-            public void onFailure(String failureClass, String detail) {
-                publish("Navigation API 연결 오류(" + failureClass + "). 화면 실패로 기록하지 않습니다.");
-                scheduleDecision(2_000);
-            }
-        });
+                    @Override
+                    public void onFailure(String failureClass, String detail) {
+                        publish("Navigation API 연결 오류(" + failureClass + "). 잠시 후 재확인합니다.");
+                        scheduleDecision(2_000);
+                    }
+                }
+        );
     }
 
     private void scheduleDecision(long delayMs) {
@@ -147,12 +149,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return;
         }
         if (stepOrdinal >= MAX_ACTIONS) {
-            stop("안전 제한 16회에 도달했습니다. 사용자가 화면을 확인해야 합니다.");
+            stop("안전 한도 24회에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
             return;
         }
         AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
         if (snapshot == null) {
-            publish("현재 접근성 화면을 읽을 수 없습니다. 잠시 후 다시 관찰합니다.");
+            publish("현재 화면의 접근성 구조를 읽지 못했습니다. 잠시 후 다시 관찰합니다.");
             scheduleDecision(1_000);
             return;
         }
@@ -165,9 +167,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             String screenshotDataUrl
     ) {
         try {
-            String requestId = UUID.randomUUID().toString();
             JSONObject request = new JSONObject();
-            request.put("request_id", requestId);
+            request.put("request_id", UUID.randomUUID().toString());
             if (!sessionId.isEmpty()) {
                 request.put("session_id", sessionId);
             }
@@ -193,8 +194,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         @Override
                         public void onFailure(String failureClass, String detail) {
                             inFlight = false;
-                            publish("판단 연결 오류(" + failureClass + "). UI 탐색 실패로 기록하지 않습니다.");
-                            scheduleDecision(2_000);
+                            stop("판단 요청 실패(" + failureClass + "). 화면 탐색 실패로 기록하지 않았습니다.");
                         }
                     }
             );
@@ -219,13 +219,27 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
         String actionName = action.optString("name", "");
         if (!NavigationSafetyPolicy.isAllowedAction(actionName)) {
-            inFlight = false;
-            stop("허용되지 않은 행동을 차단했습니다: " + actionName);
+            observeDecision(
+                    decisionId,
+                    beforeSnapshot,
+                    beforeScreenshot,
+                    false,
+                    "blocked",
+                    true,
+                    "허용되지 않은 행동을 차단했습니다: " + actionName
+            );
             return;
         }
         if ("stop_for_user".equals(actionName)) {
-            inFlight = false;
-            stop("목적지 또는 위험한 최종 행동 앞에서 멈췄습니다. 사용자가 직접 확인하세요.");
+            observeDecision(
+                    decisionId,
+                    beforeSnapshot,
+                    beforeScreenshot,
+                    false,
+                    "blocked",
+                    true,
+                    "목적지 또는 위험한 최종 행동 앞에서 멈췄습니다. 사용자가 직접 확인하세요."
+            );
             return;
         }
 
@@ -234,9 +248,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         handler.postDelayed(
                 () -> observeDecision(
                         decisionId,
+                        beforeSnapshot,
                         beforeScreenshot,
                         execution.succeeded,
-                        execution.observedSignal
+                        execution.observedSignal,
+                        false,
+                        ""
                 ),
                 "wait_and_observe".equals(actionName) ? 1_600 : OBSERVATION_DELAY_MS
         );
@@ -281,14 +298,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return new ActionExecution(false, "blocked", "클릭 직전 현재 화면을 다시 읽지 못했습니다.");
         }
         AccessibilityNodeInfo node = screenReader.resolve(root, binding);
-        if (node == null
-                || !node.isVisibleToUser()
-                || !node.isEnabled()
-                || !node.isClickable()) {
-            return new ActionExecution(false, "blocked", "후보가 변경되어 클릭을 취소했습니다.");
+        if (node == null || !node.isVisibleToUser() || !node.isEnabled() || !node.isClickable()) {
+            return new ActionExecution(false, "blocked", "후보가 바뀌어 클릭을 취소했습니다.");
         }
-        String currentRisk = NavigationSafetyPolicy.riskLevel(node, binding.semanticText);
-        if (!"low".equals(currentRisk)) {
+        if (!"low".equals(NavigationSafetyPolicy.riskLevel(node, binding.semanticText))) {
             return new ActionExecution(false, "blocked", "클릭 직전 안전 재검사에서 후보를 차단했습니다.");
         }
         boolean succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
@@ -300,10 +313,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private ActionExecution scroll(String direction) {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        AccessibilityNodeInfo scrollable = findScrollable(root);
+        AccessibilityNodeInfo scrollable = findScrollable(getRootInActiveWindow());
         if (scrollable == null) {
-            return new ActionExecution(false, "blocked", "실제 스크롤 가능한 영역을 찾지 못했습니다.");
+            return new ActionExecution(false, "blocked", "스크롤 가능한 영역을 찾지 못했습니다.");
         }
         int action = "up".equals(direction)
                 ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
@@ -334,15 +346,24 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void observeDecision(
             String decisionId,
+            AccessibilityScreenReader.ScreenSnapshot beforeSnapshot,
             String beforeScreenshot,
             boolean executionSucceeded,
-            String observedSignal
+            String executionSignal,
+            boolean stopAfterObserve,
+            String stopMessage
     ) {
         AccessibilityScreenReader.ScreenSnapshot afterSnapshot = currentSnapshot();
         if (afterSnapshot == null) {
-            postUnobservedOutcome(decisionId, executionSucceeded);
+            postUnobservedOutcome(decisionId, executionSucceeded, stopAfterObserve, stopMessage);
             return;
         }
+        String observedSignal = ObservationSignalDetector.detect(
+                executionSignal,
+                beforeSnapshot.appPackage,
+                afterSnapshot.appPackage,
+                afterSnapshot.payload.toString()
+        );
         captureScreenshot(afterScreenshot -> {
             try {
                 JSONObject request = new JSONObject();
@@ -358,33 +379,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     request.put("after_screenshot_data_url", afterScreenshot);
                 }
                 request.put("next_screen", afterSnapshot.payload);
-                apiClient.post(
-                        ExecutorPreferences.apiBaseUrl(this),
-                        "/v1/navigation/observe",
-                        request,
-                        new NavigationApiClient.Callback() {
-                            @Override
-                            public void onSuccess(JSONObject response) {
-                                inFlight = false;
-                                stepOrdinal++;
-                                String outcome = response.optString("outcome_type", "unknown");
-                                String progress = response.optString("progress_label", "unknown");
-                                publish("관찰 결과: " + outcome + " / " + progress);
-                                if ("destination_reached".equals(outcome)) {
-                                    stop("목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요.");
-                                } else {
-                                    scheduleDecision(500);
-                                }
-                            }
-
-                            @Override
-                            public void onFailure(String failureClass, String detail) {
-                                inFlight = false;
-                                publish("관찰 전송 오류(" + failureClass + "). UI 실패와 분리합니다.");
-                                scheduleDecision(2_000);
-                            }
-                        }
-                );
+                postObservation(request, stopAfterObserve, stopMessage);
             } catch (JSONException error) {
                 inFlight = false;
                 stop("관찰 요청을 만들 수 없습니다: " + error.getMessage());
@@ -392,7 +387,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         });
     }
 
-    private void postUnobservedOutcome(String decisionId, boolean executionSucceeded) {
+    private void postUnobservedOutcome(
+            String decisionId,
+            boolean executionSucceeded,
+            boolean stopAfterObserve,
+            String stopMessage
+    ) {
         try {
             JSONObject request = new JSONObject();
             request.put("request_id", UUID.randomUUID().toString());
@@ -400,30 +400,51 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             request.put("connectivity_status", "device_disconnected");
             request.put("observed_signal", "none");
             request.put("execution_succeeded", executionSucceeded);
-            apiClient.post(
-                    ExecutorPreferences.apiBaseUrl(this),
-                    "/v1/navigation/observe",
-                    request,
-                    new NavigationApiClient.Callback() {
-                        @Override
-                        public void onSuccess(JSONObject response) {
-                            inFlight = false;
-                            publish("화면 관찰 실패를 탐색 실패와 분리해 기록했습니다.");
-                            scheduleDecision(2_000);
-                        }
-
-                        @Override
-                        public void onFailure(String failureClass, String detail) {
-                            inFlight = false;
-                            publish("기기/전송 오류를 UI 실패로 기록하지 않았습니다.");
-                            scheduleDecision(2_000);
-                        }
-                    }
-            );
+            postObservation(request, stopAfterObserve, stopMessage);
         } catch (JSONException error) {
             inFlight = false;
-            scheduleDecision(2_000);
+            stop("기기 관찰 오류를 기록하지 못했습니다.");
         }
+    }
+
+    private void postObservation(
+            JSONObject request,
+            boolean stopAfterObserve,
+            String stopMessage
+    ) {
+        apiClient.post(
+                ExecutorPreferences.apiBaseUrl(this),
+                "/v1/navigation/observe",
+                request,
+                new NavigationApiClient.Callback() {
+                    @Override
+                    public void onSuccess(JSONObject response) {
+                        inFlight = false;
+                        stepOrdinal++;
+                        String outcome = response.optString("outcome_type", "unknown");
+                        String progress = response.optString("progress_label", "unknown");
+                        publish("관찰 결과: " + outcome + " / " + progress);
+                        if (stopAfterObserve || "destination_reached".equals(outcome)) {
+                            stop(stopMessage.isEmpty()
+                                    ? "목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요."
+                                    : stopMessage);
+                            return;
+                        }
+                        JSONObject recovery = response.optJSONObject("recovery_action");
+                        if (recovery != null) {
+                            publish("복구 필요: " + recovery.optString("name", "reselect")
+                                    + ". 다음 판단에서 안전하게 반영합니다.");
+                        }
+                        scheduleDecision(500);
+                    }
+
+                    @Override
+                    public void onFailure(String failureClass, String detail) {
+                        inFlight = false;
+                        stop("관찰 전송 실패(" + failureClass + "). UI 탐색 실패로 오인하지 않고 중지했습니다.");
+                    }
+                }
+        );
     }
 
     private AccessibilityScreenReader.ScreenSnapshot currentSnapshot() {

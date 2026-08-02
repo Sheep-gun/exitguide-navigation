@@ -26,6 +26,8 @@ public final class NavigationSafetyPolicy {
             "지금 결제",
             "구매하기",
             "개인정보 제출",
+            "회원가입 완료",
+            "가입 완료",
             "confirm deletion",
             "delete permanently",
             "confirm cancellation",

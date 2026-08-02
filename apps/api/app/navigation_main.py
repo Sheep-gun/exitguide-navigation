@@ -102,7 +102,15 @@ def navigation_status() -> dict[str, object]:
 @app.post("/v1/navigation/decide", response_model=DecideResponse)
 def navigation_decide(request: DecideRequest) -> DecideResponse:
     try:
-        return get_navigation_runtime().decide(request)
+        runtime = get_navigation_runtime()
+        cached = runtime.store.cached_api_response("decide", request.request_id)
+        if cached is not None:
+            return DecideResponse.model_validate(cached)
+        response = runtime.decide(request)
+        runtime.store.cache_api_response(
+            "decide", request.request_id, response.model_dump(mode="json")
+        )
+        return response
     except sqlite3.IntegrityError as error:
         raise HTTPException(status_code=409, detail="duplicate or invalid navigation decision") from error
     except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
@@ -112,10 +120,30 @@ def navigation_decide(request: DecideRequest) -> DecideResponse:
 @app.post("/v1/navigation/observe", response_model=ObserveResponse)
 def navigation_observe(request: ObserveRequest) -> ObserveResponse:
     try:
-        return get_navigation_runtime().observe(request)
+        runtime = get_navigation_runtime()
+        cached = runtime.store.cached_api_response("observe", request.request_id)
+        if cached is not None:
+            return ObserveResponse.model_validate(cached)
+        response = runtime.observe(request)
+        runtime.store.cache_api_response(
+            "observe", request.request_id, response.model_dump(mode="json")
+        )
+        return response
     except KeyError as error:
         raise HTTPException(status_code=404, detail="navigation decision was not found") from error
     except sqlite3.IntegrityError as error:
         raise HTTPException(status_code=409, detail="observation already recorded or invalid") from error
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.get("/v1/navigation/sessions/{session_id}/episode")
+def navigation_episode(session_id: str) -> dict[str, object]:
+    """Inspect the complete candidate/action/outcome record for one session."""
+
+    try:
+        return get_navigation_runtime().store.interaction_episode(session_id)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="navigation session was not found") from error
     except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error

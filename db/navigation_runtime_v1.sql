@@ -78,6 +78,79 @@ CREATE TABLE IF NOT EXISTS navigation_observations (
     )
 );
 
+-- A lossless, normalized projection of every screen that participated in a
+-- runtime decision.  `before` is captured by /decide and `after` by /observe.
+-- This is the collection substrate used to export the shared
+-- interaction-episode.v1 contract without reconstructing candidates later.
+CREATE TABLE IF NOT EXISTS navigation_screen_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL REFERENCES navigation_decisions(decision_id),
+    observation_id TEXT REFERENCES navigation_observations(observation_id),
+    phase TEXT NOT NULL CHECK (phase IN ('before', 'after')),
+    screen_fingerprint TEXT NOT NULL,
+    window_title_redacted TEXT NOT NULL,
+    activity_name_redacted TEXT NOT NULL,
+    navigation_depth INTEGER CHECK (navigation_depth IS NULL OR navigation_depth >= 0),
+    candidate_set_status TEXT NOT NULL DEFAULT 'complete'
+        CHECK (candidate_set_status IN ('complete', 'partial', 'unavailable')),
+    screen_payload_json TEXT NOT NULL CHECK (json_valid(screen_payload_json)),
+    captured_at TEXT NOT NULL,
+    UNIQUE(decision_id, phase),
+    CHECK (
+        (phase = 'before' AND observation_id IS NULL)
+        OR (phase = 'after' AND observation_id IS NOT NULL)
+    )
+);
+
+CREATE TABLE IF NOT EXISTS navigation_screen_candidates (
+    snapshot_id TEXT NOT NULL REFERENCES navigation_screen_snapshots(snapshot_id)
+        ON DELETE CASCADE,
+    candidate_id TEXT NOT NULL,
+    ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+    observed_payload_json TEXT NOT NULL CHECK (json_valid(observed_payload_json)),
+    memory_score REAL CHECK (memory_score IS NULL OR memory_score BETWEEN 0.0 AND 1.0),
+    verifier_score REAL CHECK (verifier_score IS NULL OR verifier_score BETWEEN 0.0 AND 1.0),
+    final_score REAL CHECK (final_score IS NULL OR final_score BETWEEN 0.0 AND 1.0),
+    score_source TEXT NOT NULL DEFAULT '',
+    risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'blocked')),
+    terminal INTEGER NOT NULL DEFAULT 0 CHECK (terminal IN (0, 1)),
+    dangerous_final INTEGER NOT NULL DEFAULT 0 CHECK (dangerous_final IN (0, 1)),
+    forbidden INTEGER NOT NULL DEFAULT 0 CHECK (forbidden IN (0, 1)),
+    selected INTEGER NOT NULL DEFAULT 0 CHECK (selected IN (0, 1)),
+    PRIMARY KEY(snapshot_id, candidate_id),
+    UNIQUE(snapshot_id, ordinal)
+);
+
+-- Execution details are deliberately separate from connectivity.  A lost
+-- device/API connection therefore cannot be mislabeled as a navigation miss.
+CREATE TABLE IF NOT EXISTS navigation_step_executions (
+    decision_id TEXT PRIMARY KEY REFERENCES navigation_decisions(decision_id),
+    observation_id TEXT NOT NULL UNIQUE REFERENCES navigation_observations(observation_id),
+    execution_status TEXT NOT NULL CHECK (execution_status IN (
+        'not_executed', 'executed', 'device_disconnected',
+        'transport_error', 'executor_error'
+    )),
+    execution_succeeded INTEGER CHECK (execution_succeeded IS NULL OR execution_succeeded IN (0, 1)),
+    observed_signal TEXT NOT NULL,
+    recovery_action TEXT CHECK (recovery_action IS NULL OR recovery_action IN (
+        'click', 'scroll', 'back', 'wait_and_observe', 'stop_for_user'
+    )),
+    candidate_forbidden INTEGER NOT NULL DEFAULT 0 CHECK (candidate_forbidden IN (0, 1)),
+    reflection_level TEXT NOT NULL CHECK (reflection_level IN (
+        'none', 'action', 'trajectory', 'global'
+    )),
+    reflection_reason TEXT NOT NULL DEFAULT '',
+    completed_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS navigation_api_response_cache (
+    request_kind TEXT NOT NULL CHECK (request_kind IN ('decide', 'observe')),
+    request_id TEXT NOT NULL,
+    response_json TEXT NOT NULL CHECK (json_valid(response_json)),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(request_kind, request_id)
+);
+
 CREATE TABLE IF NOT EXISTS navigation_recovery_memory (
     session_id TEXT NOT NULL REFERENCES navigation_sessions(session_id),
     screen_fingerprint TEXT NOT NULL,
@@ -119,10 +192,16 @@ CREATE INDEX IF NOT EXISTS idx_runtime_recovery_forbidden
     WHERE forbidden = 1;
 CREATE INDEX IF NOT EXISTS idx_runtime_revision_status
     ON navigation_knowledge_revision_queue(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_runtime_snapshots_session
+    ON navigation_screen_snapshots(decision_id, phase, captured_at);
+CREATE INDEX IF NOT EXISTS idx_runtime_candidates_selected
+    ON navigation_screen_candidates(selected, forbidden, risk_level)
+    WHERE selected = 1 OR forbidden = 1;
 
 INSERT OR REPLACE INTO navigation_runtime_metadata(key, value) VALUES
-    ('schema_version', '1'),
+    ('schema_version', '2'),
     ('database_kind', 'navigation_runtime_events'),
-    ('promotion_policy', 'offline_validation_required');
+    ('promotion_policy', 'offline_validation_required'),
+    ('interaction_contract', 'exitguide.interaction-episode.v1');
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;

@@ -22,6 +22,7 @@ final class NavigationApiClient {
     }
 
     private static final int MAX_RESPONSE_BYTES = 2_000_000;
+    private static final int MAX_TRANSPORT_ATTEMPTS = 3;
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -44,9 +45,47 @@ final class NavigationApiClient {
             JSONObject payload,
             Callback callback
     ) {
-        networkExecutor.execute(() -> {
-            HttpURLConnection connection = null;
+        networkExecutor.execute(() -> requestWithRetries(baseUrl, path, method, payload, callback));
+    }
+
+    private void requestWithRetries(
+            String baseUrl,
+            String path,
+            String method,
+            JSONObject payload,
+            Callback callback
+    ) {
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_TRANSPORT_ATTEMPTS; attempt++) {
             try {
+                requestOnce(baseUrl, path, method, payload, callback);
+                return;
+            } catch (Exception error) {
+                lastError = error;
+                if (attempt < MAX_TRANSPORT_ATTEMPTS) {
+                    try {
+                        Thread.sleep(500L * attempt);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        lastError = interrupted;
+                        break;
+                    }
+                }
+            }
+        }
+        Exception error = lastError == null ? new IOException("unknown transport error") : lastError;
+        fail(callback, "transport_error", error.getClass().getSimpleName() + ": " + error.getMessage());
+    }
+
+    private void requestOnce(
+            String baseUrl,
+            String path,
+            String method,
+            JSONObject payload,
+            Callback callback
+    ) throws Exception {
+        HttpURLConnection connection = null;
+        try {
                 URL url = new URL(stripTrailingSlash(baseUrl) + path);
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod(method);
@@ -77,14 +116,11 @@ final class NavigationApiClient {
                 }
                 JSONObject response = new JSONObject(responseBody);
                 mainHandler.post(() -> callback.onSuccess(response));
-            } catch (Exception error) {
-                fail(callback, "transport_error", error.getClass().getSimpleName() + ": " + error.getMessage());
-            } finally {
-                if (connection != null) {
-                    connection.disconnect();
-                }
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
             }
-        });
+        }
     }
 
     private void fail(Callback callback, String failureClass, String detail) {

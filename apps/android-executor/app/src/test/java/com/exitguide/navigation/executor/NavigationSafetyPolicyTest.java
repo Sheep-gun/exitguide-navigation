@@ -21,6 +21,7 @@ public final class NavigationSafetyPolicyTest {
     public void dangerousFinalTextIsBlocked() {
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("정말로 탈퇴 확정"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("지금 결제하기"));
+        assertTrue(NavigationSafetyPolicy.isDangerousFinalText("회원가입 완료"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Confirm cancellation"));
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("마이페이지"));
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("멤버십 관리"));

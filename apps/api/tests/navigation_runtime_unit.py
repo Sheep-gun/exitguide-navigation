@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sqlite3
 import sys
@@ -224,6 +225,33 @@ def main() -> None:
             )
             assert api_decision.status_code == 200
             assert api_decision.json()["action"]["candidate_id"] == "profile"
+            repeated_decision = client.post(
+                "/v1/navigation/decide",
+                json=json.loads(api_decision.request.content.decode("utf-8")),
+            )
+            assert repeated_decision.status_code == 200
+            assert repeated_decision.json()["decision_id"] == api_decision.json()["decision_id"]
+            api_observe_payload = {
+                "request_id": "api-observe-request",
+                "decision_id": api_decision.json()["decision_id"],
+                "connectivity_status": "observed",
+                "execution_succeeded": True,
+                "next_screen": _account_screen().model_dump(mode="json"),
+            }
+            api_observation = client.post("/v1/navigation/observe", json=api_observe_payload)
+            assert api_observation.status_code == 200
+            repeated_observation = client.post(
+                "/v1/navigation/observe", json=api_observe_payload
+            )
+            assert repeated_observation.status_code == 200
+            assert repeated_observation.json() == api_observation.json()
+            api_episode = client.get(
+                f"/v1/navigation/sessions/{api_decision.json()['session_id']}/episode"
+            )
+            assert api_episode.status_code == 200
+            assert api_episode.json()["candidate_set_status"] == "complete"
+            assert len(api_episode.json()["steps"][0]["screen"]["before"]["candidates"]) == 2
+            assert len(api_episode.json()["steps"][0]["screen"]["after"]["candidates"]) == 2
         navigation_main.get_navigation_runtime.cache_clear()
         for key, value in previous.items():
             if value is None:
@@ -235,7 +263,23 @@ def main() -> None:
         runtime_status = runtime.store.status()
         assert runtime_status["decisions"] == 4
         assert runtime_status["observations"] == 2
+        assert runtime_status["screen_snapshots"] == 5
+        assert runtime_status["screen_candidates"] == 9
+        assert runtime_status["complete_steps"] == 2
         assert runtime_status["pending_knowledge_revisions"] == 1
+        episode = runtime.store.interaction_episode(first.session_id)
+        assert episode["candidate_set_status"] == "complete"
+        assert len(episode["steps"]) == 2
+        assert len(episode["steps"][0]["screen"]["before"]["candidates"]) == 2
+        assert len(episode["steps"][0]["screen"]["after"]["candidates"]) == 2
+        selected = [
+            item
+            for item in episode["steps"][0]["screen"]["before"]["candidates"]
+            if item["selected"]
+        ]
+        assert [item["candidate_id"] for item in selected] == ["profile"]
+        assert episode["steps"][1]["connectivity_status"] == "transport_error"
+        assert "after" not in episode["steps"][1]["screen"]
     print("navigation_runtime_unit: ok")
 
 

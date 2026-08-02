@@ -78,12 +78,10 @@ public final class MainActivity extends Activity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(padding, padding, padding, padding);
 
-        TextView title = text("ExitGuide Navigation Executor", 24, Color.rgb(25, 32, 52));
-        content.addView(title, matchWrap());
-
+        content.addView(text("ExitGuide Navigation Executor", 24, Color.rgb(25, 32, 52)), matchWrap());
         TextView description = text(
-                "현재 화면에서 Accessibility로 발견된 후보 ID만 Navigation API가 선택할 수 있습니다. "
-                        + "좌표 클릭과 위험한 최종 행동은 실행하지 않습니다.",
+                "현재 화면에서 실제 발견된 후보 ID만 API가 선택할 수 있습니다. "
+                        + "좌표 클릭, 입력, 결제·탈퇴·해지 확정 같은 위험 행동은 실행하지 않습니다.",
                 15,
                 Color.DKGRAY
         );
@@ -100,7 +98,7 @@ public final class MainActivity extends Activity {
         content.addView(text("사용자 목적", 14, Color.DKGRAY), matchWrap());
         goal = new EditText(this);
         goal.setMinLines(2);
-        goal.setHint("예: 회원 탈퇴 메뉴를 찾고 싶어");
+        goal.setHint("예: 회원 탈퇴 메뉴를 찾아줘");
         goal.setText(ExecutorPreferences.goal(this));
         content.addView(goal, matchWrap());
 
@@ -154,7 +152,7 @@ public final class MainActivity extends Activity {
             return;
         }
         ExecutorPreferences.configure(this, baseUrl, goalText, true);
-        ExecutorPreferences.publishStatus(this, "화면을 관찰하는 중입니다.");
+        ExecutorPreferences.publishStatus(this, "현재 화면을 관찰하는 중입니다.");
         moveTaskToBack(true);
     }
 

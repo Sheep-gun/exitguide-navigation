@@ -47,21 +47,24 @@ final class ExecutorPreferences {
                 .putString(KEY_GOAL, goal.trim())
                 .putBoolean(KEY_ACTIVE, active)
                 .apply();
-        Intent intent = new Intent(ACTION_CONFIGURATION_CHANGED).setPackage(context.getPackageName());
-        context.sendBroadcast(intent);
+        context.sendBroadcast(
+                new Intent(ACTION_CONFIGURATION_CHANGED).setPackage(context.getPackageName())
+        );
     }
 
     static void setActive(Context context, boolean active) {
         preferences(context).edit().putBoolean(KEY_ACTIVE, active).apply();
-        Intent intent = new Intent(ACTION_CONFIGURATION_CHANGED).setPackage(context.getPackageName());
-        context.sendBroadcast(intent);
+        context.sendBroadcast(
+                new Intent(ACTION_CONFIGURATION_CHANGED).setPackage(context.getPackageName())
+        );
     }
 
     static void publishStatus(Context context, String status) {
         preferences(context).edit().putString(KEY_STATUS, status).apply();
-        Intent intent = new Intent(ACTION_STATUS_CHANGED)
-                .setPackage(context.getPackageName())
-                .putExtra("status", status);
-        context.sendBroadcast(intent);
+        context.sendBroadcast(
+                new Intent(ACTION_STATUS_CHANGED)
+                        .setPackage(context.getPackageName())
+                        .putExtra("status", status)
+        );
     }
 }
