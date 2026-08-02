@@ -127,9 +127,25 @@ class CandidateValueScorer:
             dangerous = bool(memory_candidate.get("dangerous_final")) or is_dangerous_final_candidate(
                 semantic_text
             )
-            blocked = candidate.risk_level in {"medium", "high", "blocked"} or dangerous or forbidden
+            blocked = (
+                candidate.risk_level in {"medium", "high", "blocked"}
+                or dangerous
+                or forbidden
+                or not candidate.clickable
+                or not candidate.enabled
+            )
             if blocked:
                 value = 0.0
+            elif candidate.selected:
+                # Clicking an already-selected tab/control rarely advances
+                # navigation. Keep it visible for comparison but strongly
+                # demote it instead of deleting it from the full inventory.
+                value *= 0.25
+            confidence_reasons = (
+                list(memory_confidence.reasons) if memory_confidence else []
+            )
+            if candidate.selected:
+                confidence_reasons.append("already_selected_state")
             values.append(
                 CandidateValue(
                     candidate_id=candidate.candidate_id,
@@ -155,10 +171,8 @@ class CandidateValueScorer:
                     ),
                     fast_path_eligible=(
                         bool(memory_confidence.fast_path_eligible) if memory_confidence else False
-                    ) and not blocked,
-                    confidence_reasons=(
-                        list(memory_confidence.reasons) if memory_confidence else []
-                    ),
+                    ) and not blocked and not candidate.selected,
+                    confidence_reasons=confidence_reasons,
                     forbidden=forbidden,
                     risk_level=candidate.risk_level,
                 )
@@ -187,6 +201,12 @@ class ActionSafetyGate:
                 NavigationAction(name="wait_and_observe"),
                 "replaced_with_safe_action",
                 "planner selected an ID not present on the observed screen",
+            )
+        if not candidate.clickable or not candidate.enabled:
+            return (
+                NavigationAction(name="wait_and_observe"),
+                "replaced_with_safe_action",
+                "candidate is not currently clickable and enabled",
             )
         if candidate.candidate_id in forbidden_candidate_ids:
             return (

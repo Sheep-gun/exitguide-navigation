@@ -160,6 +160,10 @@ final class AccessibilityScreenReader {
         candidate.put("nearby_text", truncate(nearbyText, MAX_TEXT_LENGTH));
         candidate.put("parent_semantics", truncate(parentSemantics, 300));
         candidate.put("position_bucket", positionBucket(node));
+        candidate.put("clickable", node.isClickable());
+        candidate.put("enabled", node.isEnabled());
+        candidate.put("selected", node.isSelected());
+        candidate.put("checked", node.isCheckable() ? node.isChecked() : JSONObject.NULL);
         candidates.put(candidate);
         bindings.put(
                 candidateId,

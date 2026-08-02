@@ -573,6 +573,11 @@ class NavigationDecisionMemory:
             nearby_text = redact_text(str(_value(candidate, "nearby_text", "")))
             parent_semantics = redact_text(str(_value(candidate, "parent_semantics", "")))
             position_bucket = str(_value(candidate, "position_bucket", "unknown"))
+            clickable = bool(_value(candidate, "clickable", True))
+            enabled = bool(_value(candidate, "enabled", True))
+            selected = bool(_value(candidate, "selected", False))
+            checked_value = _value(candidate, "checked", None)
+            checked = None if checked_value is None else bool(checked_value)
             semantic_context = " ".join(
                 value for value in (label, icon_semantics, nearby_text, parent_semantics) if value
             )
@@ -616,6 +621,10 @@ class NavigationDecisionMemory:
                     "nearby_text": nearby_text,
                     "parent_semantics": parent_semantics,
                     "position_bucket": position_bucket,
+                    "clickable": clickable,
+                    "enabled": enabled,
+                    "selected": selected,
+                    "checked": checked,
                     "dangerous_final": is_dangerous_final_candidate(semantic_context),
                     "inferred_function_roles": list(inferred_roles),
                     "function_role_scores": {
@@ -648,6 +657,15 @@ class NavigationDecisionMemory:
             "navigation_depth": navigation_depth,
             "role_counts": role_counts,
             "tokens": sorted(screen_tokens),
+            "candidate_states": sorted(
+                (
+                    normalize_text(str(item["label"])),
+                    bool(item["selected"]),
+                    item["checked"],
+                )
+                for item in candidate_payloads
+                if bool(item["selected"]) or item["checked"] is not None
+            ),
         }
         fingerprint = "dss_" + hashlib.sha256(
             canonical_json(semantic_payload).encode("utf-8")

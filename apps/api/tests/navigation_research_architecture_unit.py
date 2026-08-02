@@ -33,6 +33,7 @@ from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
 )
+from app.services.navigation_planner import ActionSafetyGate, CandidateValueScorer  # noqa: E402
 from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
     EnumeratedAction,
@@ -477,6 +478,39 @@ def main() -> None:
         destination_match=0.0,
         standards_profile="exitguide.navigation-experience.v1",
     )
+    selected_value = CandidateValueScorer().score(
+        fast_path_query,
+        [
+            NavigationCandidate(
+                candidate_id="signup",
+                label="회원가입",
+                role="tab",
+                position_bucket="middle",
+                risk_level="low",
+                selected=True,
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )[0]
+    assert selected_value.value == 0.235
+    assert selected_value.fast_path_eligible is False
+    assert "already_selected_state" in selected_value.confidence_reasons
+    disabled_action, disabled_status, _ = ActionSafetyGate().validate(
+        NavigationAction(name="click", candidate_id="disabled"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="disabled",
+                label="회원가입",
+                role="button",
+                position_bucket="middle",
+                risk_level="low",
+                enabled=False,
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )
+    assert disabled_action.name == "wait_and_observe"
+    assert disabled_status == "replaced_with_safe_action"
     assert selective_policy._should_invoke_planner(
         query=fast_path_query,
         plan=fast_path_plan,
@@ -527,7 +561,7 @@ def main() -> None:
                 NavigationCandidate(
                     candidate_id="members-category", label="J 멤버스", role="clickable",
                     nearby_text="J 멤버스", parent_semantics="예약 여행 준비",
-                    position_bucket="top", risk_level="low",
+                    position_bucket="top", risk_level="low", selected=True,
                 ),
             ),
             EnumeratedAction(
@@ -543,6 +577,49 @@ def main() -> None:
     )
     assert max(guarded, key=lambda key: (guarded[key][0], key)) == "click:members-entry"
     assert guarded["click:members-entry"][1].startswith("python_direct_role_guard:")
+    structurally_resolved = selective_policy._resolve_structural_direct_candidate(
+        prior_values=[
+            CandidateValue(
+                candidate_id="members-category", value=0.20, memory_score=0.53,
+                role_score=0.8036, final_score=0.20, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="members-entry", value=0.74, memory_score=0.53,
+                role_score=0.8036, final_score=0.74, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="benefits", value=0.74, memory_score=0.53,
+                role_score=0.8036, final_score=0.74, forbidden=False, risk_level="low",
+            ),
+        ],
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-category"), 0.20,
+                NavigationCandidate(
+                    candidate_id="members-category", label="J 멤버스", role="clickable",
+                    nearby_text="J 멤버스", parent_semantics="예약 여행 준비",
+                    position_bucket="top", risk_level="low", selected=True,
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="members-entry"), 0.74,
+                NavigationCandidate(
+                    candidate_id="members-entry", label="J 멤버스", role="clickable",
+                    nearby_text="J 멤버스", parent_semantics="J 멤버스",
+                    position_bucket="middle", risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="benefits"), 0.74,
+                NavigationCandidate(
+                    candidate_id="benefits", label="J 멤버스 혜택존", role="clickable",
+                    nearby_text="J 멤버스 혜택존", parent_semantics="J 멤버스 혜택존",
+                    position_bucket="bottom", risk_level="low",
+                ),
+            ),
+        ],
+    )
+    assert structurally_resolved == "click:members-entry"
     near_tie_values = [
         high_confidence_values[0],
         high_confidence_values[1].model_copy(

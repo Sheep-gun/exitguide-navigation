@@ -27,6 +27,10 @@ class NavigationCandidate(BaseModel):
     nearby_text: str = Field(default="", max_length=500)
     parent_semantics: str = Field(default="", max_length=300)
     position_bucket: Literal["top", "middle", "bottom", "overlay", "unknown"] = "unknown"
+    clickable: bool = True
+    enabled: bool = True
+    selected: bool = False
+    checked: bool | None = None
 
 
 class ScreenObservation(BaseModel):

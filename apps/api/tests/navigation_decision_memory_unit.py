@@ -134,6 +134,40 @@ def main() -> None:
             ],
         )
         assert logged_out_state.auth_state == "logged_out"
+        unselected_tab_state = memory.semantic_screen_state(
+            window_title="전체 메뉴",
+            activity_name="android.widget.FrameLayout",
+            candidates=[
+                {
+                    "candidate_id": "membership-tab",
+                    "label": "멤버십",
+                    "role": "tab",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "checked": None,
+                }
+            ],
+        )
+        selected_tab_state = memory.semantic_screen_state(
+            window_title="전체 메뉴",
+            activity_name="android.widget.FrameLayout",
+            candidates=[
+                {
+                    "candidate_id": "membership-tab",
+                    "label": "멤버십",
+                    "role": "tab",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": True,
+                    "checked": None,
+                }
+            ],
+        )
+        assert unselected_tab_state.semantic_fingerprint != selected_tab_state.semantic_fingerprint
+        assert selected_tab_state.candidate_payloads[0]["selected"] is True
+        assert selected_tab_state.candidate_payloads[0]["clickable"] is True
+        assert selected_tab_state.candidate_payloads[0]["enabled"] is True
         membership_false_positive = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",
             window_title="제주항공",

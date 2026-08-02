@@ -227,6 +227,36 @@ class AndroidWorldResearchPolicy:
                 else "decision_memory_fallback"
             )
             fallback_used = False
+        fallback_semantically_resolved = False
+        if fallback_used:
+            resolved_key = self._resolve_structural_direct_candidate(
+                prior_values=prior_values,
+                enumerated=enumerated,
+            )
+            if resolved_key is not None:
+                scored = [
+                    (
+                        1.0 if _action_key(item.action) == resolved_key else min(score, 0.74),
+                        item,
+                    )
+                    for score, item in scored
+                ]
+                updated_values = [
+                    value.model_copy(
+                        update={
+                            "final_score": 1.0,
+                            "verifier_reason": (
+                                "python_structural_direct_tiebreak: unique unselected direct-role "
+                                "candidate after model output failure"
+                            ),
+                        }
+                    )
+                    if f"click:{value.candidate_id}" == resolved_key
+                    else value
+                    for value in updated_values
+                ]
+                provider += "->python_structural_direct_tiebreak"
+                fallback_semantically_resolved = True
         scored.sort(key=lambda item: (-item[0], _action_sort_key(item[1].action)))
         if not scored:
             proposal = PlannerProposal(
@@ -241,6 +271,7 @@ class AndroidWorldResearchPolicy:
         margin = max(0.0, best_score - second_score)
         if (
             fallback_used
+            and not fallback_semantically_resolved
             and (
                 best_score < self.planner_score_threshold
                 or margin < self.planner_margin_threshold
@@ -285,6 +316,49 @@ class AndroidWorldResearchPolicy:
             score_margin=round(margin, 4),
             reflection_on_demand=reflect,
         )
+
+    def _resolve_structural_direct_candidate(
+        self,
+        *,
+        prior_values: Sequence[CandidateValue],
+        enumerated: Sequence[EnumeratedAction],
+    ) -> str | None:
+        """Resolve only a uniquely best, grounded direct-role structure.
+
+        This is a fail-safe for malformed/inconsistent Solar output, not an
+        app route. It uses standard accessibility state plus label/parent
+        structure and refuses equal semantic ties.
+        """
+
+        value_by_id = {value.candidate_id: value for value in prior_values}
+        ranked: list[tuple[tuple[int, int, float], str]] = []
+        for item in enumerated:
+            if item.action.name != "click" or item.candidate is None:
+                continue
+            candidate = item.candidate
+            value = value_by_id.get(candidate.candidate_id)
+            if (
+                value is None
+                or value.forbidden
+                or value.role_score < DIRECT_ROLE_GUARD_FLOOR
+                or value.risk_level != "low"
+                or not candidate.clickable
+                or not candidate.enabled
+                or candidate.selected
+            ):
+                continue
+            label = " ".join(candidate.label.casefold().split())
+            parent = " ".join(candidate.parent_semantics.casefold().split())
+            parent_consistent = int(bool(label) and label == parent)
+            token_count = max(1, len(label.split()))
+            semantic_rank = (parent_consistent, -token_count, round(value.role_score, 4))
+            ranked.append((semantic_rank, f"click:{candidate.candidate_id}"))
+        if not ranked:
+            return None
+        ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+        if len(ranked) > 1 and ranked[0][0] == ranked[1][0]:
+            return None
+        return ranked[0][1]
 
     def _plan_and_verify_actions_with_retry(
         self,
@@ -498,21 +572,25 @@ class AndroidWorldResearchPolicy:
         best_prior = prior_by_key.get(best_key)
         if best_prior is None or best_prior.role_score >= UNRELATED_ROLE_CEILING:
             return adjusted
-        direct_keys = [
-            key
-            for key, value in prior_by_key.items()
-            if value.role_score >= DIRECT_ROLE_GUARD_FLOOR
-            and adjusted.get(key, (0.0, ""))[0] >= DIRECT_ROLE_MODEL_FLOOR
-        ]
-        if not direct_keys:
-            return adjusted
         candidate_by_key = {
             f"click:{item.action.candidate_id}": item.candidate
             for item in enumerated
             if item.action.name == "click" and item.candidate is not None
         }
+        direct_keys = [
+            key
+            for key, value in prior_by_key.items()
+            if value.role_score >= DIRECT_ROLE_GUARD_FLOOR
+            and adjusted.get(key, (0.0, ""))[0] >= DIRECT_ROLE_MODEL_FLOOR
+            and candidate_by_key.get(key) is not None
+            and candidate_by_key[key].clickable
+            and candidate_by_key[key].enabled
+            and not candidate_by_key[key].selected
+        ]
+        if not direct_keys:
+            return adjusted
 
-        def direct_rank(key: str) -> tuple[float, float, int, int, str]:
+        def direct_rank(key: str) -> tuple[float, float, int, int, int, str]:
             value = prior_by_key[key]
             candidate = candidate_by_key.get(key)
             label = "" if candidate is None else candidate.label.strip()
@@ -521,6 +599,7 @@ class AndroidWorldResearchPolicy:
             return (
                 adjusted[key][0],
                 value.role_score,
+                int(candidate is not None and not candidate.selected),
                 parent_consistent,
                 -len(label),
                 key,
