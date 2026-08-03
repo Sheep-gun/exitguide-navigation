@@ -857,6 +857,48 @@ def main() -> None:
     assert membership_change_gateway_scores["click:billing-management"][0] > (
         membership_change_gateway_scores["click:navigate-up"][0]
     )
+    sparse_membership_gateway_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="store-management"),
+            0.30,
+            NavigationCandidate(
+                candidate_id="store-management",
+                label="Google Play에서 관리",
+                position_bucket="middle",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="content-subscriptions"),
+            0.40,
+            NavigationCandidate(
+                candidate_id="content-subscriptions",
+                label="구독",
+                position_bucket="bottom",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="navigate-up-sparse"),
+            0.20,
+            NavigationCandidate(
+                candidate_id="navigate-up-sparse",
+                label="위로 이동",
+                position_bucket="top",
+            ),
+        ),
+    ]
+    sparse_membership_gateway_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:store-management": (0.35, "model underestimated provider handoff"),
+            "click:content-subscriptions": (0.40, "model confused a content feed"),
+            "click:navigate-up-sparse": (0.20, "reverse navigation"),
+        },
+        goal_id="membership.change",
+        enumerated=sparse_membership_gateway_actions,
+        screen_tokens=("premium",),
+    )
+    assert sparse_membership_gateway_scores["click:store-management"][0] >= 0.96
+    assert sparse_membership_gateway_scores["click:content-subscriptions"][0] <= 0.10
+    assert sparse_membership_gateway_scores["click:navigate-up-sparse"][0] <= 0.10
     renewal_detail_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),

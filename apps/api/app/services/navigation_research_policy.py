@@ -181,6 +181,11 @@ def _is_membership_change_management_gateway(
             "billing",
             "manage subscription",
             "subscription management",
+            "google play",
+            "play store",
+            "app store",
+            "스토어",
+            "외부 결제",
         )
     )
     return has_manage_action and has_billing_or_subscription_context
@@ -218,6 +223,25 @@ def _has_active_membership_screen_context(screen_tokens: Sequence[str]) -> bool:
         )
     )
     return has_membership and has_lifecycle
+
+
+def _has_commercial_membership_screen_context(screen_tokens: Sequence[str]) -> bool:
+    """Recognize a paid-membership surface without accepting a bare content tab."""
+
+    text = " ".join(str(token).casefold() for token in screen_tokens)
+    return any(
+        marker in text
+        for marker in (
+            "premium",
+            "멤버십",
+            "멤버쉽",
+            "이용권",
+            "유료 구독",
+            "membership",
+            "paid subscription",
+            "subscription plan",
+        )
+    )
 
 
 def _is_safe_membership_join_entry_text(value: str) -> bool:
@@ -316,6 +340,19 @@ def _is_reverse_navigation_candidate(candidate: NavigationCandidate) -> bool:
             "back button",
         )
     )
+
+
+def _is_generic_content_subscription_navigation(
+    candidate: NavigationCandidate,
+) -> bool:
+    """Separate a bottom content feed tab from commercial plan management."""
+
+    label = " ".join(candidate.label.casefold().split())
+    return candidate.position_bucket == "bottom" and label in {
+        "구독",
+        "subscriptions",
+        "following",
+    }
 
 
 def _has_membership_forward_semantics(candidate: NavigationCandidate) -> bool:
@@ -1932,33 +1969,38 @@ class AndroidWorldResearchPolicy:
                     "nearby membership text is not the control role; "
                     + reason,
                 )
-        if goal_id == "membership.change" and _has_active_membership_screen_context(
-            screen_tokens
-        ):
+        if goal_id == "membership.change":
             management_gateways = [
                 item
                 for item in click_items
                 if not item.candidate.selected
                 and _is_membership_change_management_gateway(item.candidate)
             ]
-            if len(management_gateways) == 1:
+            if len(management_gateways) == 1 and (
+                _has_active_membership_screen_context(screen_tokens)
+                or _has_commercial_membership_screen_context(screen_tokens)
+            ):
                 gateway_key = _action_key(management_gateways[0].action)
                 gateway_score, gateway_reason = adjusted.get(gateway_key, (0.0, ""))
                 adjusted[gateway_key] = (
                     max(gateway_score, 0.96),
-                    "python_membership_hub_affordance_guard: active membership "
-                    "lifecycle and a unique billing/subscription management gateway; "
+                    "python_membership_hub_affordance_guard: commercial membership "
+                    "screen and a unique billing/subscription management gateway; "
                     + gateway_reason,
                 )
                 for item in click_items:
-                    if not _is_reverse_navigation_candidate(item.candidate):
+                    if not (
+                        _is_reverse_navigation_candidate(item.candidate)
+                        or _is_generic_content_subscription_navigation(item.candidate)
+                    ):
                         continue
                     key = _action_key(item.action)
                     score, reason = adjusted.get(key, (0.0, ""))
                     adjusted[key] = (
                         min(score, 0.10),
-                        "python_membership_hub_affordance_guard: reverse navigation "
-                        "must not outrank the grounded membership-management gateway; "
+                        "python_membership_hub_affordance_guard: reverse or content-feed "
+                        "navigation must not outrank the grounded membership-management "
+                        "gateway; "
                         + reason,
                     )
                 return adjusted
