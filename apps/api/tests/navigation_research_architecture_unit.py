@@ -41,6 +41,7 @@ from app.services.navigation_planner import (  # noqa: E402
     CandidateValueScorer,
     PlannerProposal,
 )
+from app.services.navigation_public_prior import PublicPriorEvidence  # noqa: E402
 from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
     EnumeratedAction,
@@ -88,6 +89,7 @@ class ScriptedPlannerClient:
         self.plan_calls = 0
         self.verifier_actions: list[str] = []
         self.fail_first_step_evaluation = fail_first_step_evaluation
+        self.last_step_packet: dict[str, object] | None = None
 
     def complete(self, *, messages, **_kwargs):
         system = str(messages[0]["content"])
@@ -111,6 +113,7 @@ class ScriptedPlannerClient:
             )
             parameters = _kwargs["tools"][0]["function"]["parameters"]
             packet = json.loads(messages[1]["content"])
+            self.last_step_packet = packet
             expected_keys = [item["action_key"] for item in packet["candidate_actions"]]
             assert parameters["properties"]["best_action_key"]["enum"] == expected_keys
             score_schema = parameters["properties"]["scores"]
@@ -329,6 +332,99 @@ def main() -> None:
         planner_mode="always",
         vlm_mode="always",
     )
+
+    public_prior_query = DecisionMemoryQuery(
+        goal=NormalizedGoal(
+            goal_id="account.delete",
+            family="account",
+            operation="delete",
+            confidence=1.0,
+            matched_phrase="delete account",
+            terminal_action_policy="stop_before_final_confirmation",
+        ),
+        screen=SemanticScreenState(
+            semantic_fingerprint="public-prior-screen",
+            title="home",
+            auth_state="logged_in",
+            surface_type="native",
+            navigation_depth=0,
+            tokens=("home",),
+            candidate_payloads=(),
+        ),
+        destination_signatures=(),
+        evidence=(),
+        candidate_scores={},
+        candidate_confidence={},
+        action_scores={},
+        destination_match=0.0,
+        standards_profile="exitguide.navigation-experience.v1",
+        public_prior_evidence=(
+            PublicPriorEvidence(
+                evidence_id="service:fixture:transition-1",
+                evidence_kind="service",
+                dataset="fixture",
+                source_role="curated_service_experience",
+                relevance=0.42,
+                goal="Open account settings",
+                before_text="Home",
+                selected_target="Profile",
+                selected_action="click",
+                after_text="Account hub",
+                outcome_type="navigated",
+                progress_label="advanced",
+            ),
+        ),
+    )
+    public_prior_plan = HierarchicalPlan(
+        goal_id="account.delete",
+        stage="hub_discovery",
+        target_roles=["account.hub"],
+        immediate_subgoal="open account hub",
+        expected_outcome="account controls appear",
+        completion_rule="choose one safe intermediate hub",
+        source="decision_memory_fallback",
+    )
+    public_prior_candidates = _screen().candidates
+    public_prior_values = [
+        CandidateValue(
+            candidate_id="profile",
+            value=0.7,
+            memory_score=0.7,
+            role_score=0.7,
+            final_score=0.7,
+            forbidden=False,
+            risk_level="low",
+        ),
+        CandidateValue(
+            candidate_id="search",
+            value=0.2,
+            memory_score=0.2,
+            role_score=0.1,
+            final_score=0.2,
+            forbidden=False,
+            risk_level="low",
+        ),
+    ]
+    policy._plan_and_verify_actions(
+        query=public_prior_query,
+        plan=public_prior_plan,
+        recent_history=(),
+        enumerated=policy._enumerate_actions(
+            candidates=public_prior_candidates,
+            prior_values=public_prior_values,
+            plan=public_prior_plan,
+            recent_history=(),
+        ),
+        prior_values=public_prior_values,
+    )
+    assert planner_transport.last_step_packet is not None
+    model_evidence = planner_transport.last_step_packet["cross_app_decision_evidence"]
+    assert isinstance(model_evidence, list)
+    assert model_evidence[0]["evidence_class"] == "unverified_public_prior"
+    assert model_evidence[0]["runtime_execution_allowed"] is False
+    planner_transport.plan_calls = 0
+    planner_transport.verifier_actions.clear()
+    planner_transport.last_step_packet = None
 
     profile_management_candidates = [
         NavigationCandidate(
