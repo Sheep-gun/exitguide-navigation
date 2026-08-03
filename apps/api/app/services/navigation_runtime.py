@@ -216,6 +216,14 @@ class NavigationRuntime:
             forbidden_candidate_ids=forbidden,
         )
         memory_candidate_values = list(candidate_values)
+        semantic_fast_path_candidate_id = (
+            self.policy.semantic_intermediate_fast_path_candidate(
+                query=query,
+                plan=plan,
+                prior_values=memory_candidate_values,
+                recent_history=recent_history,
+            )
+        )
         score_margin = 0.0
         reflection_on_demand = False
         verifier_provider = "not_invoked"
@@ -278,7 +286,10 @@ class NavigationRuntime:
             )
             planner_provider = "python_state_change_boundary"
         else:
-            if _can_request_visual_reobserve(request, perception, self.policy):
+            if (
+                semantic_fast_path_candidate_id is None
+                and _can_request_visual_reobserve(request, perception, self.policy)
+            ):
                 visual_reobserve_reason = _candidate_score_visual_reason(
                     memory_candidate_values,
                     effective_screen.candidates,
@@ -302,8 +313,12 @@ class NavigationRuntime:
                     recent_history=recent_history,
                 )
                 plan = research_decision.plan
-                planner_provider = plan.source
                 proposal = research_decision.proposal
+                # Keep the hierarchy source in plan.source, but report the
+                # component that actually selected the next action here.  The
+                # runtime metrics otherwise misclassify semantic/structural
+                # fast paths as generic decision-memory planning.
+                planner_provider = proposal.provider
                 candidate_values = list(research_decision.candidate_values)
                 verifier_provider = research_decision.verifier_provider
                 score_margin = research_decision.score_margin

@@ -286,6 +286,57 @@ def main() -> None:
             "decision_memory_fallback",
         }
 
+        visual_gate_policy = _policy()
+        visual_gate_policy.exaone_vlm = Exaone45VisionClient(
+            OpenAICompatibleChatClient(
+                api_key="",
+                base_url="http://127.0.0.1:9/v1",
+                model="test-exaone-4.5",
+            )
+        )
+        visual_gate_policy.semantic_intermediate_fast_path_candidate = (
+            lambda **_: "account"
+        )
+        visual_gate_policy._structural_continuation_fast_path_candidate = (
+            lambda **_: None
+        )
+        visual_gate_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "visual-gate-runtime.sqlite"),
+            policy=visual_gate_policy,
+        )
+        obvious_intermediate = visual_gate_runtime.decide(
+            DecideRequest(
+                request_id="request-obvious-intermediate-before-visual-gate",
+                app_package="evaluation.visual-gate.app",
+                locale="ko-KR",
+                goal_text="cancel subscription",
+                screen=ScreenObservation(
+                    app_package="evaluation.visual-gate.app",
+                    window_title="profile management",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="account",
+                            label="account",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="app-settings",
+                            label="app settings",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert obvious_intermediate.action.name == "click"
+        assert obvious_intermediate.action.candidate_id == "account"
+        assert obvious_intermediate.planner_provider == "semantic_intermediate_role_fast_path", (
+            obvious_intermediate.model_dump(mode="json")
+        )
+        assert obvious_intermediate.visual_reobserve_required is False
+
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
             store=NavigationRuntimeStore(temporary_path / "execution-failure-runtime.sqlite"),

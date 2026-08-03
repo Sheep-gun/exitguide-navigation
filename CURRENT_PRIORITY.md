@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: implementation
-updated_at: 2026-08-03T19:10:19+09:00
-priority: 실기기에서 발견한 단독 `계정` 후보의 account.hub 역할 점수 누락 보정
+phase: device_validation
+updated_at: 2026-08-03T19:23:51+09:00
+priority: 명확한 중간 목표 fast path를 VLM 재관찰보다 먼저 적용하도록 판단 순서 보정
 decision_db_collection: paused
-next_action: idempotent Decision DB alias patch를 백업된 N100 DB에 적용하고 Netflix 계정 후보 선택을 재검증한다.
+next_action: 보정된 Navigation API를 N100에 배포한 뒤 Netflix `계정` 후보가 VLM·Solar 없이 선택되고 화면이 바뀌는지 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16

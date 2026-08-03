@@ -237,7 +237,7 @@ class AndroidWorldResearchPolicy:
         semantic_fast_path_candidate_id = (
             None
             if structural_continuation_candidate_id is not None
-            else self._semantic_stage_fast_path_candidate(
+            else self.semantic_intermediate_fast_path_candidate(
                 query=query,
                 plan=plan,
                 prior_values=prior_values,
@@ -607,7 +607,7 @@ class AndroidWorldResearchPolicy:
             ):
                 return False
             if semantic_fast_path_candidate_id is None:
-                semantic_fast_path_candidate_id = self._semantic_stage_fast_path_candidate(
+                semantic_fast_path_candidate_id = self.semantic_intermediate_fast_path_candidate(
                     query=query,
                     plan=plan,
                     prior_values=prior_values,
@@ -633,7 +633,7 @@ class AndroidWorldResearchPolicy:
             and best - second >= self.planner_margin_threshold
         )
 
-    def _semantic_stage_fast_path_candidate(
+    def semantic_intermediate_fast_path_candidate(
         self,
         *,
         query: DecisionMemoryQuery,
@@ -701,6 +701,23 @@ class AndroidWorldResearchPolicy:
         if not safe_values or safe_values[0].candidate_id != eligible[0]:
             return None
         return eligible[0]
+
+    def _semantic_stage_fast_path_candidate(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        prior_values: Sequence[CandidateValue],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> str | None:
+        """Backward-compatible private alias retained for focused policy tests."""
+
+        return self.semantic_intermediate_fast_path_candidate(
+            query=query,
+            plan=plan,
+            prior_values=prior_values,
+            recent_history=recent_history,
+        )
 
     def _structural_continuation_fast_path_candidate(
         self,
