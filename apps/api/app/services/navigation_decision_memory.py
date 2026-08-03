@@ -25,6 +25,25 @@ ALLOWED_ACTIONS = (
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 USER_HANDLE_PATTERN = re.compile(r"(?<![\w@])@[0-9A-Za-z._-]{2,64}\b")
+CONTEXTUAL_ACCOUNT_SUFFIX_PATTERN = re.compile(
+    r"(?P<identifier>"
+    r"(?=[0-9A-Za-z._-]{3,64}(?:\s|$))"
+    r"(?=[0-9A-Za-z._-]*[A-Za-z])"
+    r"(?=[0-9A-Za-z._-]*[0-9._-])"
+    r"[0-9A-Za-z._-]{3,64}"
+    r")(?P<gap>\s*)(?P<context>프로필|계정|아이디|profile|account)\b?",
+    re.IGNORECASE,
+)
+CONTEXTUAL_ACCOUNT_PREFIX_PATTERN = re.compile(
+    r"(?P<context>프로필|계정|아이디|profile|account|username|user\s*id)\b?"
+    r"(?P<gap>\s*[:：]?\s*)(?P<identifier>"
+    r"(?=[0-9A-Za-z._-]{3,64}(?:\s|$))"
+    r"(?=[0-9A-Za-z._-]*[A-Za-z])"
+    r"(?=[0-9A-Za-z._-]*[0-9._-])"
+    r"[0-9A-Za-z._-]{3,64}"
+    r")",
+    re.IGNORECASE,
+)
 MASKED_KOREAN_NAME_PATTERN = re.compile(
     r"(?<![가-힣])(?:[가-힣]{1,2}\*+[가-힣]{1,2})(?![가-힣])"
 )
@@ -1179,6 +1198,14 @@ def redact_text(value: str) -> str:
     value = unicodedata.normalize("NFKC", value or "").translate(ZERO_WIDTH)
     value = EMAIL_PATTERN.sub("[email]", value)
     value = USER_HANDLE_PATTERN.sub("[account]", value)
+    value = CONTEXTUAL_ACCOUNT_SUFFIX_PATTERN.sub(
+        lambda match: f"[account]{match.group('gap')}{match.group('context')}",
+        value,
+    )
+    value = CONTEXTUAL_ACCOUNT_PREFIX_PATTERN.sub(
+        lambda match: f"{match.group('context')}{match.group('gap')}[account]",
+        value,
+    )
     value = MASKED_KOREAN_NAME_PATTERN.sub("[account]", value)
     value = PHONE_PATTERN.sub("[phone]", value)
     value = CURRENCY_AMOUNT_PATTERN.sub("[amount]", value)

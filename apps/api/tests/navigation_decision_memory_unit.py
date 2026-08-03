@@ -124,6 +124,9 @@ def main() -> None:
         "고객센터 [phone] / 서울 [phone]"
     )
     assert redact_text("프로필 @sample_user") == "프로필 [account]"
+    assert redact_text("carson0306 프로필 설정") == "[account] 프로필 설정"
+    assert redact_text("계정: member_2026") == "계정: [account]"
+    assert redact_text("Netflix 계정") == "Netflix 계정"
     assert redact_text("우*하 님 쿠페이 머니 169 원, 총 312,717원, $19.99") == (
         "[account] 님 쿠페이 머니 [amount], 총 [amount], [amount]"
     )

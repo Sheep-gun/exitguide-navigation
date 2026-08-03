@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
-status: completed
-phase: device_validation
-updated_at: 2026-08-03T21:07:15+09:00
-priority: Netflix 성공 Runtime 경험의 개인정보·중복·승격 적격성 감사
-decision_db_collection: active
-next_action: Netflix `membership.cancel` 성공 세션 `navs_7f48b731e5b5485bab18159ccd584be3`에서 잘못된 중간 동작을 제외하고 계정 진입·하단 스크롤 경험만 Decision Memory 승격 후보로 검증한다.
+status: verifying
+phase: implementation
+updated_at: 2026-08-03T21:15:55+09:00
+priority: 계정·프로필 문맥의 평문 식별자 마스킹 누락 수정
+decision_db_collection: paused
+next_action: 기존 Runtime 기록은 보존하고 Android Executor와 Runtime 저장 경계에 문맥 기반 계정 식별자 마스킹을 추가한 뒤 개인정보 관련 영향 조건만 재검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T20:35:50+09:00
 verified_device: Samsung SM-S936N, Android 16

@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -42,6 +43,21 @@ final class VisualScreenAugmenter implements AutoCloseable {
     );
     private static final Pattern USER_HANDLE = Pattern.compile(
             "(?<![\\w@])@[0-9A-Za-z._-]{2,64}\\b"
+    );
+    private static final String MIXED_ACCOUNT_IDENTIFIER =
+            "(?=[0-9A-Za-z._-]{3,64}(?:\\s|$))"
+                    + "(?=[0-9A-Za-z._-]*[A-Za-z])"
+                    + "(?=[0-9A-Za-z._-]*[0-9._-])"
+                    + "[0-9A-Za-z._-]{3,64}";
+    private static final Pattern CONTEXTUAL_ACCOUNT_SUFFIX = Pattern.compile(
+            "(" + MIXED_ACCOUNT_IDENTIFIER + ")(\\s*)"
+                    + "(프로필|계정|아이디|profile|account)\\b?",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern CONTEXTUAL_ACCOUNT_PREFIX = Pattern.compile(
+            "(프로필|계정|아이디|profile|account|username|user\\s*id)\\b?"
+                    + "(\\s*[:：]?\\s*)(" + MIXED_ACCOUNT_IDENTIFIER + ")",
+            Pattern.CASE_INSENSITIVE
     );
     private static final Pattern MASKED_KOREAN_NAME = Pattern.compile(
             "(?<![가-힣])(?:[가-힣]{1,2}\\*+[가-힣]{1,2})(?![가-힣])"
@@ -94,6 +110,8 @@ final class VisualScreenAugmenter implements AutoCloseable {
         }
         return EMAIL.matcher(normalized).find()
                 || USER_HANDLE.matcher(normalized).find()
+                || CONTEXTUAL_ACCOUNT_SUFFIX.matcher(normalized).find()
+                || CONTEXTUAL_ACCOUNT_PREFIX.matcher(normalized).find()
                 || MASKED_KOREAN_NAME.matcher(normalized).find()
                 || PHONE.matcher(normalized).find()
                 || CURRENCY.matcher(normalized).find()
@@ -108,6 +126,55 @@ final class VisualScreenAugmenter implements AutoCloseable {
                 || normalized.contains("인증번호");
     }
 
+    static String redactSensitiveText(String value) {
+        String source = value == null ? "" : value;
+        String redacted = replaceContextualAccountSuffix(source);
+        redacted = replaceContextualAccountPrefix(redacted);
+        if (EMAIL.matcher(source).find()
+                || USER_HANDLE.matcher(source).find()
+                || MASKED_KOREAN_NAME.matcher(source).find()
+                || PHONE.matcher(source).find()
+                || CURRENCY.matcher(source).find()
+                || LONG_NUMBER.matcher(source).find()
+                || HONORIFIC_NAME.matcher(source.toLowerCase(Locale.ROOT)).matches()
+                || STREET_ADDRESS.matcher(source.toLowerCase(Locale.ROOT)).matches()
+                || source.toLowerCase(Locale.ROOT).contains("bearer ")
+                || source.toLowerCase(Locale.ROOT).contains("access token")
+                || source.toLowerCase(Locale.ROOT).contains("session token")
+                || source.toLowerCase(Locale.ROOT).contains("password")
+                || source.contains("비밀번호")
+                || source.contains("인증번호")) {
+            return "[redacted]";
+        }
+        return redacted;
+    }
+
+    private static String replaceContextualAccountSuffix(String value) {
+        Matcher matcher = CONTEXTUAL_ACCOUNT_SUFFIX.matcher(value);
+        StringBuffer output = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(
+                    output,
+                    Matcher.quoteReplacement("[account]" + matcher.group(2) + matcher.group(3))
+            );
+        }
+        matcher.appendTail(output);
+        return output.toString();
+    }
+
+    private static String replaceContextualAccountPrefix(String value) {
+        Matcher matcher = CONTEXTUAL_ACCOUNT_PREFIX.matcher(value);
+        StringBuffer output = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(
+                    output,
+                    Matcher.quoteReplacement(matcher.group(1) + matcher.group(2) + "[account]")
+            );
+        }
+        matcher.appendTail(output);
+        return output.toString();
+    }
+
     static void redactSnapshotInPlace(AccessibilityScreenReader.ScreenSnapshot snapshot) {
         JSONArray nodes = snapshot.payload.optJSONArray("nodes");
         if (nodes != null) {
@@ -118,8 +185,9 @@ final class VisualScreenAugmenter implements AutoCloseable {
                 }
                 for (String field : new String[] {"text", "content_description"}) {
                     String value = node.optString(field, "");
-                    if (isSensitiveText(value)) {
-                        put(node, field, "[redacted]");
+                    String redacted = redactSensitiveText(value);
+                    if (!redacted.equals(value)) {
+                        put(node, field, redacted);
                     }
                 }
             }
@@ -138,14 +206,15 @@ final class VisualScreenAugmenter implements AutoCloseable {
             }
             for (String field : semanticFields) {
                 String value = candidate.optString(field, "");
-                if (isSensitiveText(value)) {
-                    put(candidate, field, "[redacted]");
+                String redacted = redactSensitiveText(value);
+                if (!redacted.equals(value)) {
+                    put(candidate, field, redacted);
                 }
             }
         }
         String title = snapshot.payload.optString("window_title", "");
         if (isSensitiveText(title)) {
-            put(snapshot.payload, "window_title", "[redacted]");
+            put(snapshot.payload, "window_title", redactSensitiveText(title));
         }
     }
 
