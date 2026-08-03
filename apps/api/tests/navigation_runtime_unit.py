@@ -39,6 +39,7 @@ from app.services.navigation_model_clients import (  # noqa: E402
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
 from app.services.navigation_runtime import (  # noqa: E402
     NavigationRuntime,
+    _contextualize_membership_cancellation_safety,
     _interleaved_repeat_guard,
     _selected_reverse_navigation_guard,
     _successful_back_recovery,
@@ -102,6 +103,40 @@ def _account_screen() -> ScreenObservation:
 
 
 def main() -> None:
+    contextual_cancel_screen = _contextualize_membership_cancellation_safety(
+        ScreenObservation(
+            window_title="YouTube Premium",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="cancel",
+                    text="취소",
+                    clickable=True,
+                ),
+                AccessibilityNodeSummary(
+                    node_id="billing",
+                    text="다음 결제일: 9월 3일",
+                ),
+            ],
+            candidates=[NavigationCandidate(candidate_id="cancel", label="취소")],
+        ),
+        "membership.cancel",
+    )
+    assert contextual_cancel_screen.candidates[0].risk_level == "high"
+    dismiss_cancel_screen = _contextualize_membership_cancellation_safety(
+        ScreenObservation(
+            window_title="알림",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="cancel",
+                    text="취소",
+                    clickable=True,
+                )
+            ],
+            candidates=[NavigationCandidate(candidate_id="cancel", label="취소")],
+        ),
+        "membership.cancel",
+    )
+    assert dismiss_cancel_screen.candidates[0].risk_level == "low"
     failed_screen_history = [
         {
             "action_name": "click",

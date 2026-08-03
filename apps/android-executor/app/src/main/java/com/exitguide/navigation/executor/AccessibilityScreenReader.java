@@ -136,6 +136,7 @@ final class AccessibilityScreenReader {
         Map<String, CandidateBinding> bindings = new LinkedHashMap<>();
         boolean visualSurfaceAmbiguous = containsVisualSurface(root, 0);
         traverse(root, null, new ArrayList<>(), 0, nodes, candidates, bindings);
+        applyContextualScreenSafety(nodes, candidates, bindings);
 
         JSONObject screen = new JSONObject();
         screen.put("app_package", truncate(string(root.getPackageName()), 240));
@@ -311,6 +312,50 @@ final class AccessibilityScreenReader {
                         candidateId, path, fingerprint, riskLevel, label, semanticText, bounds
                 )
         );
+    }
+
+    private static void applyContextualScreenSafety(
+            JSONArray nodes,
+            JSONArray candidates,
+            Map<String, CandidateBinding> bindings
+    ) throws JSONException {
+        StringBuilder context = new StringBuilder();
+        for (int index = 0; index < nodes.length(); index++) {
+            JSONObject node = nodes.optJSONObject(index);
+            if (node == null || node.optBoolean("private_input", false)) {
+                continue;
+            }
+            context.append(' ').append(node.optString("text", ""));
+            context.append(' ').append(node.optString("content_description", ""));
+        }
+        String screenContext = context.toString();
+        for (int index = 0; index < candidates.length(); index++) {
+            JSONObject candidate = candidates.optJSONObject(index);
+            if (candidate == null || !NavigationSafetyPolicy
+                    .isContextualMembershipCancellationAction(
+                            candidate.optString("label", ""),
+                            screenContext
+                    )) {
+                continue;
+            }
+            candidate.put("risk_level", "high");
+            String candidateId = candidate.optString("candidate_id", "");
+            CandidateBinding binding = bindings.get(candidateId);
+            if (binding != null) {
+                bindings.put(
+                        candidateId,
+                        new CandidateBinding(
+                                binding.candidateId,
+                                binding.path,
+                                binding.fingerprint,
+                                "high",
+                                binding.label,
+                                binding.semanticText,
+                                binding.bounds
+                        )
+                );
+            }
+        }
     }
 
     private JSONObject nodeSummary(

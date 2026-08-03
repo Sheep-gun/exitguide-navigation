@@ -107,6 +107,22 @@ public final class NavigationSafetyPolicy {
             "submit"
     );
 
+    private static final Set<String> GENERIC_CANCELLATION_ACTION_LABELS = Set.of(
+            "취소",
+            "취소하기",
+            "cancel"
+    );
+
+    private static final String[] MEMBERSHIP_CONTEXT_MARKERS = {
+            "멤버십", "멤버쉽", "구독", "이용권",
+            "membership", "subscription", "premium", "plan"
+    };
+
+    private static final String[] MEMBERSHIP_BILLING_OR_END_MARKERS = {
+            "다음 결제", "결제일", "결제 수단", "혜택을 종료",
+            "billing", "next payment", "payment method", "end benefit", "end membership"
+    };
+
     private NavigationSafetyPolicy() {}
 
     public static boolean isAllowedAction(String action) {
@@ -140,6 +156,27 @@ public final class NavigationSafetyPolicy {
 
     public static boolean isStateChangingActionLabel(String value) {
         return STATE_CHANGING_ACTION_LABELS.contains(normalize(value));
+    }
+
+    public static boolean isContextualMembershipCancellationAction(
+            String label,
+            String screenContext
+    ) {
+        if (!GENERIC_CANCELLATION_ACTION_LABELS.contains(normalize(label))) {
+            return false;
+        }
+        String normalizedContext = normalize(screenContext);
+        return containsAny(normalizedContext, MEMBERSHIP_CONTEXT_MARKERS)
+                && containsAny(normalizedContext, MEMBERSHIP_BILLING_OR_END_MARKERS);
+    }
+
+    private static boolean containsAny(String value, String[] markers) {
+        for (String marker : markers) {
+            if (value.contains(normalize(marker))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static String normalize(String value) {

@@ -18,12 +18,14 @@ from app.navigation_contracts import (
     NavigationCandidate,
     ObserveRequest,
     ObserveResponse,
+    ScreenObservation,
 )
 from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     NavigationDecisionMemory,
     NormalizedGoal,
     is_dangerous_final_candidate,
+    is_contextual_membership_cancellation_action,
     is_state_changing_action_label,
     tokenize,
 )
@@ -166,6 +168,14 @@ class NavigationRuntime:
             session_id=session_id,
             goal_text=request.goal_text,
             locale=request.locale,
+        )
+        request = request.model_copy(
+            update={
+                "screen": _contextualize_membership_cancellation_safety(
+                    request.screen,
+                    None if normalized_goal is None else normalized_goal.goal_id,
+                )
+            }
         )
         structured_screen = self.memory.semantic_screen_state(
             window_title=request.screen.window_title,
@@ -671,6 +681,15 @@ class NavigationRuntime:
 
     def observe(self, request: ObserveRequest) -> ObserveResponse:
         decision = self.store.decision(request.decision_id)
+        if request.next_screen is not None:
+            request = request.model_copy(
+                update={
+                    "next_screen": _contextualize_membership_cancellation_safety(
+                        request.next_screen,
+                        str(decision.get("goal_id") or ""),
+                    )
+                }
+            )
         before_match = float(decision["destination_match_before"])
         effective_next_screen = None
         if request.connectivity_status != "observed":
@@ -1073,6 +1092,47 @@ def _can_request_visual_reobserve(
         and policy.exaone_vlm.configured
         and policy.vlm_mode != "disabled"
     )
+
+
+def _contextualize_membership_cancellation_safety(
+    screen: ScreenObservation,
+    goal_id: str | None,
+) -> ScreenObservation:
+    """Raise generic cancellation CTAs to high risk using grounded screen text."""
+
+    if goal_id != "membership.cancel" or not screen.candidates:
+        return screen
+    context_parts = [screen.window_title, screen.activity_name]
+    for node in screen.nodes:
+        if node.private_input:
+            continue
+        context_parts.extend((node.text, node.content_description))
+    for candidate in screen.candidates:
+        context_parts.extend(
+            (
+                candidate.label,
+                candidate.icon_semantics,
+                candidate.nearby_text,
+                candidate.parent_semantics,
+                candidate.child_semantics,
+            )
+        )
+    screen_context = " ".join(part for part in context_parts if part)
+    updated = []
+    changed = False
+    for candidate in screen.candidates:
+        if (
+            candidate.risk_level not in {"high", "blocked"}
+            and is_contextual_membership_cancellation_action(
+                candidate.label,
+                screen_context,
+            )
+        ):
+            updated.append(candidate.model_copy(update={"risk_level": "high"}))
+            changed = True
+        else:
+            updated.append(candidate)
+    return screen.model_copy(update={"candidates": updated}) if changed else screen
 
 
 def _transient_navigation_control_waits(

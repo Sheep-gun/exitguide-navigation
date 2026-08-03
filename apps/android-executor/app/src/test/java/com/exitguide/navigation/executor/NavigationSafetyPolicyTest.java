@@ -50,4 +50,24 @@ public final class NavigationSafetyPolicyTest {
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("갱신일: 9월 3일"));
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 갱신 안내"));
     }
+
+    @Test
+    public void genericCancelRequiresMembershipBillingContext() {
+        assertTrue(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "취소",
+                "YouTube Premium 개인 멤버십 다음 결제일: 9월 3일"
+        ));
+        assertTrue(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "Cancel",
+                "Premium membership next payment September 3"
+        ));
+        assertFalse(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "취소",
+                "알림 팝업 닫기"
+        ));
+        assertFalse(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "취소 안내",
+                "Premium membership next payment September 3"
+        ));
+    }
 }

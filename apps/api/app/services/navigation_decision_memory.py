@@ -149,6 +149,37 @@ MEMBERSHIP_RENEWAL_ACTION_LABELS = frozenset(
     }
 )
 
+GENERIC_CANCELLATION_ACTION_LABELS = frozenset(
+    {
+        "취소",
+        "취소하기",
+        "cancel",
+    }
+)
+
+MEMBERSHIP_CONTEXT_MARKERS = (
+    "멤버십",
+    "멤버쉽",
+    "구독",
+    "이용권",
+    "membership",
+    "subscription",
+    "premium",
+    "plan",
+)
+
+MEMBERSHIP_BILLING_OR_END_MARKERS = (
+    "다음 결제",
+    "결제일",
+    "결제 수단",
+    "혜택을 종료",
+    "billing",
+    "next payment",
+    "payment method",
+    "end benefit",
+    "end membership",
+)
+
 STATE_CHANGING_ACTION_LABELS = frozenset(
     {
         # Exact cancellation CTA labels are terminal safety boundaries even
@@ -1380,6 +1411,26 @@ def is_membership_renewal_action_label(label: str) -> bool:
     """Return true for an exact paid renewal or resubscription CTA."""
 
     return normalize_text(label) in MEMBERSHIP_RENEWAL_ACTION_LABELS
+
+
+def is_contextual_membership_cancellation_action(
+    label: str,
+    screen_context: str,
+) -> bool:
+    """Identify a generic Cancel CTA only on a commercial membership screen.
+
+    A bare ``취소``/``Cancel`` is commonly a harmless dialog-dismiss button, so
+    it cannot be placed in the global exact-label blocklist.  It becomes a
+    dangerous membership action only when the full observed screen also
+    contains both membership identity and billing/end-of-benefit semantics.
+    """
+
+    if normalize_text(label) not in GENERIC_CANCELLATION_ACTION_LABELS:
+        return False
+    normalized_context = normalize_text(screen_context)
+    return any(marker in normalized_context for marker in MEMBERSHIP_CONTEXT_MARKERS) and any(
+        marker in normalized_context for marker in MEMBERSHIP_BILLING_OR_END_MARKERS
+    )
 
 
 def tokenize(value: str) -> tuple[str, ...]:
