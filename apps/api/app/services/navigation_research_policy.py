@@ -1688,19 +1688,33 @@ class AndroidWorldResearchPolicy:
         explicit = [
             item
             for item in click_items
-            if _has_explicit_commercial_membership_semantics(item.candidate)
+            if not item.candidate.selected
+            and not _is_unrelated_membership_utility(item.candidate)
+            and _has_explicit_commercial_membership_semantics(item.candidate)
         ]
         active_plan_rows = [
             item
             for item in click_items
-            if _has_active_membership_plan_semantics(item.candidate)
+            if not item.candidate.selected
+            and _has_active_membership_plan_semantics(item.candidate)
         ]
         account_hubs = [
-            item for item in click_items if _has_account_hub_semantics(item.candidate)
+            item
+            for item in click_items
+            if not item.candidate.selected
+            and _has_account_hub_semantics(item.candidate)
         ]
         for item in click_items:
             key = _action_key(item.action)
             score, reason = adjusted.get(key, (0.0, ""))
+            if item.candidate.selected:
+                adjusted[key] = (
+                    min(score, 0.05),
+                    "python_membership_hub_affordance_guard: already-selected "
+                    "navigation state cannot advance the goal; "
+                    + reason,
+                )
+                continue
             if _is_unrelated_membership_utility(item.candidate):
                 adjusted[key] = (
                     min(score, 0.20),

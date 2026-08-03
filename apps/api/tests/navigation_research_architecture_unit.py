@@ -685,6 +685,34 @@ def main() -> None:
     assert membership_home_scores["click:notifications"][0] <= 0.20
     assert membership_home_scores["click:my-page"][0] >= 0.80
 
+    selected_content_tab_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="content-subscriptions"),
+            0.6,
+            NavigationCandidate(
+                candidate_id="content-subscriptions",
+                label="구독",
+                visual_role="subscription navigation tab",
+                selected=True,
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="my-page"),
+            0.3,
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ),
+    ]
+    selected_content_tab_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:content-subscriptions": (0.60, "model repeated selected tab"),
+            "click:my-page": (0.30, "account hub"),
+        },
+        goal_id="membership.cancel",
+        enumerated=selected_content_tab_actions,
+    )
+    assert selected_content_tab_scores["click:content-subscriptions"][0] <= 0.05
+    assert selected_content_tab_scores["click:my-page"][0] >= 0.80
+
     membership_page_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="premium-benefits"),
