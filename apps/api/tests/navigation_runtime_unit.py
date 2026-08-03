@@ -347,6 +347,8 @@ def main() -> None:
         assert no_change.connection_error is False
         assert no_change.candidate_forbidden is True
         assert no_change.knowledge_revision_queued is True
+        first_history = runtime.store.recent_history(first.session_id, limit=5)
+        assert first_history[-1]["selected_candidate_label"] == "마이페이지"
 
         changed_account_screen = _account_screen().model_copy(
             update={"window_title": "Account screen refreshed"}

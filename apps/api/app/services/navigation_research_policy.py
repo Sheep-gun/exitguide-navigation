@@ -384,6 +384,120 @@ def _external_app_regression_requires_stop(
     )
 
 
+def _trusted_membership_management_handoff(
+    *,
+    goal_id: str | None,
+    screen_tokens: Sequence[str],
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    """Allow a grounded subscription-manager handoff to continue safely.
+
+    Paid services commonly delegate plan management to a billing provider.
+    Treating every package transition as a regression prevents the agent from
+    inspecting that legitimate intermediate screen.  The exception remains
+    narrow: the selected control itself must be a management handoff and the
+    newly observed screen must contain active-subscription management context.
+    Final purchase/cancellation controls remain blocked by the safety gate.
+    """
+
+    if not str(goal_id or "").startswith("membership."):
+        return False
+    if not _external_app_regression_requires_stop(recent_history):
+        return False
+    latest = recent_history[-1]
+    selected_primary = " ".join(
+        str(latest.get(key) or "").casefold()
+        for key in (
+            "selected_candidate_label",
+            "selected_candidate_icon_semantics",
+            "selected_candidate_visual_role",
+        )
+    )
+    selected_context = " ".join(
+        (
+            selected_primary,
+            *(
+                str(latest.get(key) or "").casefold()
+                for key in (
+                    "selected_candidate_nearby_text",
+                    "selected_candidate_parent_semantics",
+                    "selected_candidate_child_semantics",
+                )
+            ),
+        )
+    )
+    has_manage_action = any(
+        marker in selected_primary for marker in ("관리", "manage", "management")
+    )
+    has_handoff_target = any(
+        marker in selected_context
+        for marker in (
+            "결제",
+            "구독",
+            "멤버십",
+            "멤버쉽",
+            "스토어",
+            "브라우저",
+            "웹",
+            "billing",
+            "subscription",
+            "payment",
+            "store",
+            "browser",
+            "web",
+        )
+    )
+    if not (has_manage_action and has_handoff_target):
+        return False
+
+    screen_text = " ".join(str(token).casefold() for token in screen_tokens)
+    has_subscription = any(
+        marker in screen_text
+        for marker in (
+            "premium",
+            "멤버십",
+            "멤버쉽",
+            "구독",
+            "정기 결제",
+            "membership",
+            "subscription",
+            "recurring",
+        )
+    )
+    has_management_context = any(
+        marker in screen_text
+        for marker in (
+            "결제 관리",
+            "정기 결제 관리",
+            "결제 수단",
+            "다음 결제",
+            "갱신",
+            "구독 관리",
+            "subscription management",
+            "manage subscription",
+            "payment method",
+            "next billing",
+            "renewal",
+        )
+    )
+    return has_subscription and has_management_context
+
+
+def _external_app_stop_guard_applies(
+    *,
+    goal_id: str | None,
+    screen_tokens: Sequence[str],
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    return _external_app_regression_requires_stop(
+        recent_history
+    ) and not _trusted_membership_management_handoff(
+        goal_id=goal_id,
+        screen_tokens=screen_tokens,
+        recent_history=recent_history,
+    )
+
+
 def _wrong_destination_requires_back(
     recent_history: Sequence[Mapping[str, object]],
 ) -> bool:
@@ -819,7 +933,11 @@ class AndroidWorldResearchPolicy:
                     for value in updated_values
                 ):
                     provider += "->python_membership_profile_management_guard"
-                if _external_app_regression_requires_stop(recent_history):
+                if _external_app_stop_guard_applies(
+                    goal_id=None if query.goal is None else query.goal.goal_id,
+                    screen_tokens=query.screen.tokens,
+                    recent_history=recent_history,
+                ):
                     provider += "->python_external_app_stop_guard"
                 fallback_used = False
             except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
@@ -1595,6 +1713,8 @@ class AndroidWorldResearchPolicy:
         scores = self._apply_external_app_stop_guard(
             scores=scores,
             enumerated=enumerated,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            screen_tokens=query.screen.tokens,
             recent_history=recent_history,
         )
         scores = self._apply_immediate_repeat_guard(
@@ -1715,6 +1835,8 @@ class AndroidWorldResearchPolicy:
         *,
         scores: Mapping[str, tuple[float, str]],
         enumerated: Sequence[EnumeratedAction],
+        goal_id: str | None = None,
+        screen_tokens: Sequence[str] = (),
         recent_history: Sequence[Mapping[str, object]],
     ) -> dict[str, tuple[float, str]]:
         """End an episode after it regresses into another app.
@@ -1725,7 +1847,11 @@ class AndroidWorldResearchPolicy:
         """
 
         adjusted = dict(scores)
-        if not _external_app_regression_requires_stop(recent_history):
+        if not _external_app_stop_guard_applies(
+            goal_id=goal_id,
+            screen_tokens=screen_tokens,
+            recent_history=recent_history,
+        ):
             return adjusted
         for item in enumerated:
             key = _action_key(item.action)

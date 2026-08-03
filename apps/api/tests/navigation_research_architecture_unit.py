@@ -619,6 +619,40 @@ def main() -> None:
     assert foreign_app_scores["stop_for_user"][0] >= 0.99
     assert foreign_app_scores["click:foreign-membership"][0] <= 0.05
     assert foreign_app_scores["back"][0] <= 0.05
+    trusted_handoff_history = [
+        {
+            "outcome_type": "external_app",
+            "progress_label": "regressed",
+            "connectivity_status": "observed",
+            "selected_candidate_label": "외부 결제 서비스에서 관리",
+            "selected_candidate_nearby_text": "현재 Premium 구독",
+        }
+    ]
+    trusted_handoff_scores = policy._apply_external_app_stop_guard(
+        scores={
+            "click:foreign-membership": (0.95, "model"),
+            "back": (0.40, "model"),
+            "stop_for_user": (0.05, "model"),
+        },
+        enumerated=foreign_app_actions,
+        goal_id="membership.change",
+        screen_tokens=("premium", "다음 결제", "정기 결제 관리"),
+        recent_history=trusted_handoff_history,
+    )
+    assert trusted_handoff_scores["click:foreign-membership"] == (0.95, "model")
+    assert trusted_handoff_scores["stop_for_user"] == (0.05, "model")
+    non_membership_handoff_scores = policy._apply_external_app_stop_guard(
+        scores={
+            "click:foreign-membership": (0.95, "model"),
+            "back": (0.40, "model"),
+            "stop_for_user": (0.05, "model"),
+        },
+        enumerated=foreign_app_actions,
+        goal_id="account.delete",
+        screen_tokens=("premium", "다음 결제", "정기 결제 관리"),
+        recent_history=trusted_handoff_history,
+    )
+    assert non_membership_handoff_scores["stop_for_user"][0] >= 0.99
     icon_picker_candidates = [
         NavigationCandidate(candidate_id="avatar-one", label="Avatar One"),
         NavigationCandidate(candidate_id="avatar-two", label="Avatar Two"),

@@ -448,11 +448,27 @@ class NavigationRuntimeStore:
                 """
                 SELECT d.step_ordinal, d.screen_fingerprint, d.action_name, d.candidate_id,
                        d.scroll_direction, d.confidence, d.plan_stage,
+                       json_extract(c.observed_payload_json, '$.label')
+                           AS selected_candidate_label,
+                       json_extract(c.observed_payload_json, '$.icon_semantics')
+                           AS selected_candidate_icon_semantics,
+                       json_extract(c.observed_payload_json, '$.nearby_text')
+                           AS selected_candidate_nearby_text,
+                       json_extract(c.observed_payload_json, '$.parent_semantics')
+                           AS selected_candidate_parent_semantics,
+                       json_extract(c.observed_payload_json, '$.child_semantics')
+                           AS selected_candidate_child_semantics,
+                       json_extract(c.observed_payload_json, '$.visual_role')
+                           AS selected_candidate_visual_role,
                        o.connectivity_status, o.outcome_type, o.progress_label, o.failure_class,
                        x.recovery_action
                 FROM navigation_decisions AS d
                 LEFT JOIN navigation_observations AS o ON o.decision_id = d.decision_id
                 LEFT JOIN navigation_step_executions AS x ON x.decision_id = d.decision_id
+                LEFT JOIN navigation_screen_snapshots AS b
+                       ON b.decision_id = d.decision_id AND b.phase = 'before'
+                LEFT JOIN navigation_screen_candidates AS c
+                       ON c.snapshot_id = b.snapshot_id AND c.candidate_id = d.candidate_id
                 WHERE d.session_id = ?
                 ORDER BY d.step_ordinal DESC
                 LIMIT ?
