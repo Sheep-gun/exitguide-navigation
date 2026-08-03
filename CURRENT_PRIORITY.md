@@ -2,7 +2,7 @@
 
 status: completed
 phase: device_validation
-updated_at: 2026-08-04T03:32:36+09:00
+updated_at: 2026-08-04T03:57:46+09:00
 priority: Build a frozen validation-only case DB for public-prior OFF/ON evaluation
 decision_db_collection: paused
 next_action: Connect the phone and record isolated candidate-complete cases from a validation app (KB Insurance or NH Nonghyup Insurance); do not use collection apps or the locked holdout, and do not promote these validation observations into Decision DB.
@@ -45,6 +45,17 @@ deployed_commit: `c1a8466`
 - fixed_validation_cases: 0
 - improvement_claim: not permitted until the frozen validation OFF/ON A/B gate passes
 - evidence: `docs/evidence/navigation-public-prior-integration-audit-20260804.md`
+
+## Goal coverage tracking
+
+- human_readable_matrix: `docs/NAVIGATION_GOAL_COVERAGE.md`
+- machine_readable_source: `db/navigation_goal_coverage_v1.json`
+- contract: `db/navigation_goal_coverage_v1.schema.json`
+- validator: `scripts/Validate-NavigationGoalCoverage.py`
+- current_scope: 3 collection apps, 5 goals per app, 15 cells
+- destination_reached: 1 (`Jeju Air / membership.join`)
+- dangerous_action_auto_executed: 0
+- validation_and_locked_holdout_results: not mixed into this collection matrix
 
 ## 작업 원칙
 

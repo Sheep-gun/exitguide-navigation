@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/navigation-goal-coverage.v1.schema.json",
+  "title": "ExitGuide Navigation Goal Coverage v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "updated_at",
+    "source_scope",
+    "success_definition",
+    "holdout_policy",
+    "goal_order",
+    "apps"
+  ],
+  "properties": {
+    "schema_version": {"const": "navigation-goal-coverage.v1"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "source_scope": {"const": "real_device_exploration_status"},
+    "success_definition": {
+      "const": "destination_observed_without_automatic_dangerous_final_action"
+    },
+    "holdout_policy": {
+      "const": "locked_holdout_is_not_explored_or_used_for_tuning"
+    },
+    "goal_order": {
+      "const": [
+        "account.signup",
+        "account.delete",
+        "membership.join",
+        "membership.change",
+        "membership.cancel"
+      ]
+    },
+    "apps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/appCoverage"}
+    }
+  },
+  "$defs": {
+    "appCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "app_package",
+        "app_name",
+        "split",
+        "app_version",
+        "goals"
+      ],
+      "properties": {
+        "app_package": {"type": "string", "minLength": 1},
+        "app_name": {"type": "string", "minLength": 1},
+        "split": {"enum": ["collection", "validation", "locked_holdout"]},
+        "app_version": {"type": ["string", "null"]},
+        "goals": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/goalCoverage"}
+        }
+      }
+    },
+    "goalCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal_id",
+        "status",
+        "display_status_ko",
+        "evidence_level",
+        "evidence_refs",
+        "last_observed_at",
+        "blocking_issue",
+        "dangerous_action_auto_executed",
+        "notes"
+      ],
+      "properties": {
+        "goal_id": {
+          "enum": [
+            "account.signup",
+            "account.delete",
+            "membership.join",
+            "membership.change",
+            "membership.cancel"
+          ]
+        },
+        "status": {
+          "enum": [
+            "not_explored",
+            "in_progress",
+            "state_observed",
+            "destination_reached",
+            "stopped_before_final_confirmation",
+            "not_supported",
+            "blocked_login_or_permission",
+            "blocked_environment",
+            "navigation_failed"
+          ]
+        },
+        "display_status_ko": {"type": "string", "minLength": 1},
+        "evidence_level": {
+          "enum": ["none", "operator_report", "recorded_observation", "real_device_verified"]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "last_observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "blocking_issue": {
+          "type": ["string", "null"],
+          "enum": [
+            null,
+            "connection_error",
+            "app_rendering_error",
+            "login_required",
+            "permission_required",
+            "executor_error"
+          ]
+        },
+        "dangerous_action_auto_executed": {"const": false},
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}

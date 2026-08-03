@@ -50,6 +50,9 @@ jobs:
       - name: Test public prior A/B gate
         run: python apps/api/tests/navigation_public_prior_ab_unit.py
 
+      - name: Test navigation goal coverage contract
+        run: python apps/api/tests/navigation_goal_coverage_contract_unit.py
+
       - name: Test standards experience profile
         run: python apps/api/tests/navigation_experience_profile_unit.py
 

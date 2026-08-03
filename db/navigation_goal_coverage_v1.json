@@ -1,0 +1,219 @@
+{
+  "schema_version": "navigation-goal-coverage.v1",
+  "updated_at": "2026-08-04T03:54:52+09:00",
+  "source_scope": "real_device_exploration_status",
+  "success_definition": "destination_observed_without_automatic_dangerous_final_action",
+  "holdout_policy": "locked_holdout_is_not_explored_or_used_for_tuning",
+  "goal_order": [
+    "account.signup",
+    "account.delete",
+    "membership.join",
+    "membership.change",
+    "membership.cancel"
+  ],
+  "apps": [
+    {
+      "app_package": "com.netflix.mediaclient",
+      "app_name": "Netflix",
+      "split": "collection",
+      "app_version": "9.77.0 build 9 64328+64328",
+      "goals": [
+        {
+          "goal_id": "account.signup",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "account.delete",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.join",
+          "status": "blocked_environment",
+          "display_status_ko": "미확인(렌더링 오류)",
+          "evidence_level": "recorded_observation",
+          "evidence_refs": ["docs/REAL_DEVICE_COLLECTION_2026-08-03.md"],
+          "last_observed_at": "2026-08-03T09:15:48+09:00",
+          "blocking_issue": "app_rendering_error",
+          "dangerous_action_auto_executed": false,
+          "notes": "SignupNativeActivity 검은 화면이 지속되어 탐색 결과로 판정하지 않음"
+        },
+        {
+          "goal_id": "membership.change",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.cancel",
+          "status": "in_progress",
+          "display_status_ko": "탐색 중",
+          "evidence_level": "recorded_observation",
+          "evidence_refs": [
+            "docs/evidence/netflix-membership-cancel-accepted-candidates-20260803.jsonl",
+            "runtime:navs_7f6ce7935cb443acbc22817a23eaba09",
+            "runtime:navs_d9dd31688a5642ecaacf2c2c5aa662da"
+          ],
+          "last_observed_at": "2026-08-04T02:11:13+09:00",
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": "경로 일부는 관찰됐지만 최종 목적지 도달은 아직 확정하지 않음"
+        }
+      ]
+    },
+    {
+      "app_package": "com.google.android.youtube",
+      "app_name": "YouTube",
+      "split": "collection",
+      "app_version": "21.31.524+1561190182",
+      "goals": [
+        {
+          "goal_id": "account.signup",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "account.delete",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.join",
+          "status": "state_observed",
+          "display_status_ko": "상태 확인(이미 가입됨)",
+          "evidence_level": "real_device_verified",
+          "evidence_refs": [
+            "docs/REAL_DEVICE_COLLECTION_2026-08-03.md",
+            "runtime:navs_4add085e43b54c808ad3f70b76a9f50d"
+          ],
+          "last_observed_at": "2026-08-03T09:15:48+09:00",
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": "활성 멤버십을 가입 목적지로 오인하지 않고 already_satisfied로 안전 중지"
+        },
+        {
+          "goal_id": "membership.change",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.cancel",
+          "status": "in_progress",
+          "display_status_ko": "탐색 중",
+          "evidence_level": "recorded_observation",
+          "evidence_refs": [
+            "docs/evidence/youtube-membership-cancel-promotion-candidates-20260803.jsonl",
+            "runtime:navs_8efdb2a16ba64a1791eda071a33d305e",
+            "runtime:navs_db91292904fb4ac0913d562e58c9c06c"
+          ],
+          "last_observed_at": "2026-08-04T02:11:13+09:00",
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": "멤버십 관리 방향의 중간 전이는 있으나 최종 해지 목적지 도달은 미확정"
+        }
+      ]
+    },
+    {
+      "app_package": "com.parksmt.jejuair.android16",
+      "app_name": "제주항공",
+      "split": "collection",
+      "app_version": null,
+      "goals": [
+        {
+          "goal_id": "account.signup",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "account.delete",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.join",
+          "status": "destination_reached",
+          "display_status_ko": "목적지 도달",
+          "evidence_level": "real_device_verified",
+          "evidence_refs": [
+            "docs/REAL_DEVICE_COLLECTION_2026-08-03.md",
+            "runtime:navs_a22e45b9ba144c58b56e08707c0149f9"
+          ],
+          "last_observed_at": "2026-08-03T09:15:48+09:00",
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": "4개 안전 행동으로 J 멤버스 혜택·가입 안내 목적지 도달"
+        },
+        {
+          "goal_id": "membership.change",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.cancel",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}
