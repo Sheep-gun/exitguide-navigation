@@ -135,6 +135,7 @@ final class AccessibilityScreenReader {
         traverse(root, null, new ArrayList<>(), 0, nodes, candidates, bindings);
 
         JSONObject screen = new JSONObject();
+        screen.put("app_package", truncate(string(root.getPackageName()), 240));
         screen.put("window_title", truncate(windowTitle(root), MAX_TEXT_LENGTH));
         screen.put("activity_name", truncate(activityName, MAX_TEXT_LENGTH));
         screen.put("nodes", nodes);

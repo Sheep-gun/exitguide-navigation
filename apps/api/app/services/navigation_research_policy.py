@@ -887,7 +887,11 @@ class AndroidWorldResearchPolicy:
             immediate_subgoal=model_plan.immediate_subgoal or plan.immediate_subgoal,
             expected_outcome=model_plan.expected_outcome or plan.expected_outcome,
             completion_rule=plan.completion_rule,
-            source="solar_pro3",
+            source=(
+                "solar_pro4"
+                if self.planner_model.name == "solar_pro4"
+                else "solar_pro3"
+            ),
         )
         return refined_plan, scored, updated_values
 

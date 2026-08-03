@@ -2,10 +2,10 @@
 
 status: verifying
 phase: implementation
-updated_at: 2026-08-03T18:01:35+09:00
-priority: 지속적인 Accessibility 이벤트에서도 관찰을 시작하는 Executor debounce 수정
+updated_at: 2026-08-03T18:43:16+09:00
+priority: Solar Pro 4 전환과 동적 화면 동일 실패 후보 반복 방지
 decision_db_collection: paused
-next_action: 최대 debounce 대기 시간을 구현·테스트하고 새 APK에서 Netflix 후보 수집을 재검증한다.
+next_action: 회귀 테스트를 통과한 API·Executor 통합 커밋을 N100과 실기기에 배포한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16

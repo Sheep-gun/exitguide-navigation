@@ -526,7 +526,29 @@ class NavigationRuntime:
             observed_signal = request.observed_signal
             if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
                 observed_signal = "login_required"
-            if decision["planner_provider"] == "python_visual_reobserve_gate":
+            session_app_package = str(decision.get("app_package") or "")
+            previous_app_package = str(
+                decision.get("screen_payload", {}).get("app_package") or ""
+            )
+            returned_to_session_app = (
+                observed_signal == "external_app"
+                and bool(session_app_package)
+                and bool(previous_app_package)
+                and previous_app_package != session_app_package
+                and effective_next_screen.app_package == session_app_package
+            )
+            if returned_to_session_app:
+                verified = VerifiedTransition(
+                    outcome_type="navigated",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="advanced",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=None,
+                )
+            elif decision["planner_provider"] == "python_visual_reobserve_gate":
                 verified = VerifiedTransition(
                     outcome_type="navigated",
                     state_changed=(

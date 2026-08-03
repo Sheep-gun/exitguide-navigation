@@ -131,6 +131,9 @@ def main() -> None:
         assert no_change.candidate_forbidden is True
         assert no_change.knowledge_revision_queued is True
 
+        changed_account_screen = _account_screen().model_copy(
+            update={"window_title": "Account screen refreshed"}
+        )
         retry = runtime.decide(
             DecideRequest(
                 request_id="request-2",
@@ -138,8 +141,12 @@ def main() -> None:
                 app_package="evaluation.unseen.app",
                 goal_text="회원 탈퇴 메뉴를 찾고 싶어",
                 step_ordinal=1,
-                screen=_account_screen(),
+                screen=changed_account_screen,
             )
+        )
+        assert (
+            runtime.store.decision(first.decision_id)["screen_fingerprint"]
+            != runtime.store.decision(retry.decision_id)["screen_fingerprint"]
         )
         assert retry.action.candidate_id != "profile"
         assert any(value.candidate_id == "profile" and value.forbidden for value in retry.candidate_values)
@@ -161,6 +168,81 @@ def main() -> None:
         assert disconnected.connection_error is True
         assert disconnected.screen_changed is None
         assert disconnected.navigation_progressed is None
+
+        recovery_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "external-recovery-runtime.sqlite"),
+            policy=_policy(),
+        )
+        original_package = "evaluation.recovery.app"
+        origin_screen = _account_screen().model_copy(
+            update={"app_package": original_package}
+        )
+        first_recovery_decision = recovery_runtime.decide(
+            DecideRequest(
+                request_id="request-external-origin",
+                app_package=original_package,
+                goal_text="Find account deletion settings",
+                screen=origin_screen,
+            )
+        )
+        first_external_observation = recovery_runtime.observe(
+            ObserveRequest(
+                request_id="request-external-observe",
+                decision_id=first_recovery_decision.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                observed_signal="external_app",
+                next_screen=ScreenObservation(
+                    app_package="com.android.settings",
+                    window_title="Notification settings",
+                    activity_name="android.settings.NOTIFICATION_SETTINGS",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="return-to-app",
+                            label="Back",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert first_external_observation.outcome_type == "external_app"
+        external_screen_decision = recovery_runtime.decide(
+            DecideRequest(
+                request_id="request-external-recovery",
+                session_id=first_recovery_decision.session_id,
+                app_package=original_package,
+                goal_text="Find account deletion settings",
+                step_ordinal=1,
+                screen=ScreenObservation(
+                    app_package="com.android.settings",
+                    window_title="Notification settings",
+                    activity_name="android.settings.NOTIFICATION_SETTINGS",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="return-to-app",
+                            label="Back",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        returned_observation = recovery_runtime.observe(
+            ObserveRequest(
+                request_id="request-returned-observe",
+                decision_id=external_screen_decision.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                observed_signal="external_app",
+                next_screen=origin_screen,
+            )
+        )
+        assert returned_observation.outcome_type == "navigated", returned_observation
+        assert returned_observation.progress_label == "advanced"
+        assert returned_observation.failure_class == ""
+        assert returned_observation.candidate_forbidden is False
 
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),

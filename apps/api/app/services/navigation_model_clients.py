@@ -130,7 +130,7 @@ class NavigationPlannerResearchClient:
         self,
         client: OpenAICompatibleChatClient,
         *,
-        provider_name: str = "solar_pro3",
+        provider_name: str = "solar_pro4",
     ) -> None:
         self.client = client
         self.name = provider_name.strip() or "planner_model"

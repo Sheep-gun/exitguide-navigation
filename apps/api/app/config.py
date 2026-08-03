@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     The models never receive database credentials. The API reads the validated
     decision-memory SQLite file and sends a bounded evidence packet to the
-    configured Solar Pro 3 planner and EXAONE 4.5 vision endpoints.
+    configured Solar Pro 4 planner and EXAONE 4.5 vision endpoints.
     """
 
     navigation_decision_db_path: str = ""
@@ -25,10 +25,10 @@ class Settings(BaseSettings):
     navigation_planner_margin_threshold: float = 0.25
     navigation_vlm_mode: str = "selective"
 
-    navigation_planner_provider: str = "solar_pro3"
+    navigation_planner_provider: str = "solar_pro4"
     navigation_planner_api_key: str = ""
     navigation_planner_base_url: str = "https://api.upstage.ai/v1"
-    navigation_planner_model: str = "solar-pro3"
+    navigation_planner_model: str = "solar-pro4"
 
     exaone_vlm_api_key: str = ""
     exaone_vlm_base_url: str = ""

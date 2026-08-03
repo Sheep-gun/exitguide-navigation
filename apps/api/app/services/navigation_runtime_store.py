@@ -45,6 +45,7 @@ def _node_payload(node: AccessibilityNodeSummary) -> dict[str, object]:
 
 def _screen_payload(screen: ScreenObservation) -> dict[str, object]:
     return {
+        "app_package": screen.app_package,
         "window_title": redact_text(screen.window_title),
         "activity_name": redact_text(screen.activity_name),
         "navigation_depth": screen.navigation_depth,
@@ -785,12 +786,20 @@ class NavigationRuntimeStore:
             connection.commit()
 
     def forbidden_candidates(self, session_id: str, screen_fingerprint: str) -> set[str]:
+        """Return failed candidates for the whole active episode.
+
+        Candidate IDs already include the accessibility resource/class/label/path
+        identity.  Scoping the ban only to a full-screen fingerprint allowed the
+        same stable candidate to be clicked again whenever dynamic screen content
+        changed the fingerprint.
+        """
+
         with self._lock, closing(self._connect()) as connection:
             rows = connection.execute(
                 """
                 SELECT DISTINCT candidate_id FROM navigation_recovery_memory
-                WHERE session_id = ? AND screen_fingerprint = ? AND forbidden = 1
+                WHERE session_id = ? AND forbidden = 1
                 """,
-                (session_id, screen_fingerprint),
+                (session_id,),
             ).fetchall()
         return {str(row["candidate_id"]) for row in rows}

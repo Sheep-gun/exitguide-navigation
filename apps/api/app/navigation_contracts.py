@@ -67,6 +67,7 @@ class NavigationCandidate(BaseModel):
 class ScreenObservation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    app_package: str = Field(default="", max_length=240)
     window_title: str = Field(default="", max_length=500)
     activity_name: str = Field(default="", max_length=500)
     navigation_depth: int | None = Field(default=None, ge=0, le=100)
@@ -152,7 +153,9 @@ class HierarchicalPlan(BaseModel):
     immediate_subgoal: str
     expected_outcome: str
     completion_rule: str
-    source: Literal["solar_pro3", "decision_memory_fallback", "python_safety_gate"]
+    source: Literal[
+        "solar_pro3", "solar_pro4", "decision_memory_fallback", "python_safety_gate"
+    ]
 
 
 class CandidateValue(BaseModel):
