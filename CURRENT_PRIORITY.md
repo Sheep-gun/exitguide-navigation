@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T06:56:00+09:00
+updated_at: 2026-08-04T07:59:19+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: active
-next_action: YouTube membership.cancel의 기존 중간 전이에서 탐색을 재개해 안전한 해지 경계를 검증하고 커버리지 셀을 확정한다.
+next_action: 활성 Premium 계정과 현재 결제 관리 화면을 이용해 YouTube membership.change 목적지를 실기기에서 검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
-deployed_commit: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
+integration_commit: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
+deployed_commit: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
 
 ## 고정 정책
 
@@ -43,7 +43,7 @@ deployed_commit: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 5셀, 미완료 50셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 6셀, 미완료 49셀
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -52,14 +52,14 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-ff6b3ae-repo`
-- deployed_git_head: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-38fcbf8-repo`
+- deployed_git_head: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
 - Decision DB: read-only patched immutable clone
-- Runtime DB: coverage 전용, sessions 3, decisions 15, observations 14
+- Runtime DB: coverage 전용, sessions 14, decisions 71, observations 64
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
 - target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
@@ -136,7 +136,8 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - Accessibility nodes/candidates: 13/5
 - B Navigation API ready/public prior: true/true
 - Runtime sessions/decisions before and after diagnostic: 2/14, 변화 없음
-- APK SHA-256: `776044989FDCC7A3BD601173E63EB2A25F5F57FE13D714358D4092DD5E86F3BA`
+- APK SHA-256: `A2057CA4ACCA73D43827181AD18EDA17C542D4ED44C7B9304475052155D202B2`
+- latest diagnostic request ID: `2db8297dba4f426e8c17506bdffbb52e`
 - evidence: `docs/evidence/navigation-executor-auto-rebind-20260804.md`
 
 ## Netflix membership.cancel 안전 경계
@@ -149,6 +150,22 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - outcome: `destination_reached`, session `reached`
 - dangerous auto click: 0
 - evidence: `docs/evidence/netflix-membership-cancel-safe-boundary-20260804.md`
+
+## YouTube membership.cancel 안전 경계
+
+- discovery session: `navs_24c124f68beb48b7af815e736097f43e`
+- recovery/destination session: `navs_a08c470f59ed4a8ba5e172837fc70b3a`
+- final safety session: `navs_e86d731eecd444c8b2fde916006b49d4`
+- recovered wrong destination: expired channel membership, bounded `back()`
+- active-plan evidence: `YouTube Premium`, `갱신일: 9월 3일`
+- final candidate: `a11y_5d26c90368edb5f18c11`, label `취소`
+- candidate safety: `risk_level=high`
+- final action: `stop_for_user`, executor action not executed
+- outcome: `destination_reached`, match `0.85`, session `reached`
+- dangerous auto click: 0
+- interaction episodes: 2 episodes / 5 steps
+- promotion candidates: 1 draft, support 1; generation/projection 0
+- evidence: `docs/evidence/youtube-membership-cancel-safe-boundary-20260804.md`
 
 ## 안전 불변조건
 
