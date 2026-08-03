@@ -132,7 +132,6 @@ def _has_active_membership_plan_semantics(
             "다음 결제",
             "결제 예정",
             "청구 예정",
-            "만료일",
             "현재 요금제",
             "현재 플랜",
             "이용 중",
@@ -140,8 +139,6 @@ def _has_active_membership_plan_semantics(
             "renews",
             "next billing",
             "next payment",
-            "expires",
-            "expiration",
             "current plan",
             "active plan",
         )
@@ -1705,9 +1702,9 @@ class AndroidWorldResearchPolicy:
             active_key = _action_key(active_plan_rows[0].action)
             active_score, active_reason = adjusted.get(active_key, (0.0, ""))
             adjusted[active_key] = (
-                max(active_score, 0.94),
-                "python_membership_hub_affordance_guard: unique active membership "
-                "plan row with lifecycle or billing state; "
+                max(active_score, 0.99),
+                "python_membership_hub_affordance_guard: unique renewing/current "
+                "membership plan row with billing state; "
                 + active_reason,
             )
             for item in account_hubs:

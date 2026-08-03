@@ -732,6 +732,7 @@ def main() -> None:
             NavigationCandidate(
                 candidate_id="expired-content",
                 label="콘텐츠 후원 만료일: 2026. 1. 24.",
+                visual_role="membership item with expiration date",
             ),
         ),
     ]
@@ -739,12 +740,12 @@ def main() -> None:
         scores={
             "click:current-plan": (0.42, "model underestimated current plan"),
             "click:my-page": (0.60, "model tried to regress to account hub"),
-            "click:expired-content": (0.30, "unrelated expiry date"),
+            "click:expired-content": (0.95, "model preferred expired membership"),
         },
         goal_id="membership.cancel",
         enumerated=active_plan_actions,
     )
-    assert active_plan_scores["click:current-plan"][0] >= 0.94
+    assert active_plan_scores["click:current-plan"][0] >= 0.99
     assert active_plan_scores["click:my-page"][0] <= 0.25
     assert active_plan_scores["click:current-plan"][0] > active_plan_scores[
         "click:expired-content"
