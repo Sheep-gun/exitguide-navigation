@@ -484,6 +484,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (!"low".equals(binding.riskLevel)) {
             return new ActionExecution(false, "blocked", "위험하거나 입력 상태를 바꾸는 후보를 차단했습니다.");
         }
+        if (NavigationSafetyPolicy.isStateChangingActionLabel(binding.label)) {
+            return new ActionExecution(false, "blocked", "상태 변경 행동은 사용자가 직접 수행해야 합니다.");
+        }
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {
             return new ActionExecution(false, "blocked", "클릭 직전 현재 화면을 다시 읽지 못했습니다.");
@@ -494,7 +497,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             if (node == null || !node.isVisibleToUser() || !node.isEnabled() || !node.isClickable()) {
                 return new ActionExecution(false, "blocked", "후보가 바뀌어 클릭을 취소했습니다.");
             }
-            if (!"low".equals(NavigationSafetyPolicy.riskLevel(node, binding.semanticText))) {
+            if (NavigationSafetyPolicy.isStateChangingActionLabel(binding.label)
+                    || !"low".equals(NavigationSafetyPolicy.riskLevel(node, binding.semanticText))) {
                 return new ActionExecution(false, "blocked", "클릭 직전 안전 재검사에서 후보를 차단했습니다.");
             }
             boolean succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);

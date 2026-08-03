@@ -29,4 +29,13 @@ public final class NavigationSafetyPolicyTest {
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("마이페이지"));
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("멤버십 관리"));
     }
+
+    @Test
+    public void stateChangingActionLabelsAreBlockedWithoutSubstringOverreach() {
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("저장하기"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel(" Save Changes "));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("적용"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("저장된 결제수단"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("변경 내역"));
+    }
 }

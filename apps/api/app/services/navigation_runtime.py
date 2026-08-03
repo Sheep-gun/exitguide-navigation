@@ -21,6 +21,7 @@ from app.services.navigation_decision_memory import (
     NavigationDecisionMemory,
     NormalizedGoal,
     is_dangerous_final_candidate,
+    is_state_changing_action_label,
     tokenize,
 )
 from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
@@ -272,6 +273,7 @@ class NavigationRuntime:
             planner_provider = "python_authentication_boundary"
         elif effective_screen.candidates and all(
             candidate.risk_level in {"medium", "high", "blocked"}
+            or is_state_changing_action_label(candidate.label)
             or is_dangerous_final_candidate(
                 " ".join(
                     (

@@ -16,6 +16,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     is_dangerous_final_candidate,
+    is_state_changing_action_label,
 )
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
@@ -480,6 +481,7 @@ class AndroidWorldResearchPolicy:
                     or not bool(payload.get("clickable", True))
                     or not bool(payload.get("enabled", True))
                     or bool(payload.get("selected", False))
+                    or is_state_changing_action_label(candidate.label)
                     or is_dangerous_final_candidate(semantic_text)
                     or not isinstance(role_scores, Mapping)
                     or not any(
@@ -845,6 +847,7 @@ class AndroidWorldResearchPolicy:
                 or not candidate.enabled
                 or candidate.selected
                 or candidate.risk_level != "low"
+                or is_state_changing_action_label(candidate.label)
                 or is_dangerous_final_candidate(semantic_text)
                 or not isinstance(role_scores, Mapping)
                 or not any(

@@ -471,6 +471,27 @@ def main() -> None:
         )
         assert state_changing.action.name == "stop_for_user"
 
+        save_boundary = safety_runtime.decide(
+            DecideRequest(
+                request_id="request-save-boundary",
+                app_package="evaluation.another.app",
+                goal_text="멤버십 해지 메뉴를 찾고 싶어",
+                screen=ScreenObservation(
+                    window_title="프로필 수정",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="save",
+                            label="저장하기",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert save_boundary.action.name == "stop_for_user"
+        assert save_boundary.planner_provider == "python_state_change_boundary"
+
         logged_out = safety_runtime.decide(
             DecideRequest(
                 request_id="request-auth-boundary",

@@ -29,6 +29,7 @@ final class AccessibilityScreenReader {
         final List<Integer> path;
         final String fingerprint;
         final String riskLevel;
+        final String label;
         final String semanticText;
         final Rect bounds;
 
@@ -37,6 +38,7 @@ final class AccessibilityScreenReader {
                 List<Integer> path,
                 String fingerprint,
                 String riskLevel,
+                String label,
                 String semanticText,
                 Rect bounds
         ) {
@@ -44,6 +46,7 @@ final class AccessibilityScreenReader {
             this.path = Collections.unmodifiableList(new ArrayList<>(path));
             this.fingerprint = fingerprint;
             this.riskLevel = riskLevel;
+            this.label = label;
             this.semanticText = semanticText;
             this.bounds = new Rect(bounds);
         }
@@ -277,7 +280,9 @@ final class AccessibilityScreenReader {
                 parentSemantics,
                 nearbyText
         );
-        String riskLevel = NavigationSafetyPolicy.riskLevel(node, semanticText);
+        String riskLevel = NavigationSafetyPolicy.isStateChangingActionLabel(label)
+                ? "high"
+                : NavigationSafetyPolicy.riskLevel(node, semanticText);
         String fingerprint = nodeFingerprint(node, path);
         if (bindings.containsKey(candidateId)) {
             return;
@@ -303,7 +308,7 @@ final class AccessibilityScreenReader {
         bindings.put(
                 candidateId,
                 new CandidateBinding(
-                        candidateId, path, fingerprint, riskLevel, semanticText, bounds
+                        candidateId, path, fingerprint, riskLevel, label, semanticText, bounds
                 )
         );
     }

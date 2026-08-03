@@ -14,6 +14,7 @@ from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     _candidate_ontology_score,
     is_dangerous_final_candidate,
+    is_state_changing_action_label,
 )
 
 
@@ -139,8 +140,10 @@ class CandidateValueScorer:
                     candidate.parent_semantics,
                 )
             )
-            dangerous = bool(memory_candidate.get("dangerous_final")) or is_dangerous_final_candidate(
-                semantic_text
+            dangerous = (
+                bool(memory_candidate.get("dangerous_final"))
+                or is_state_changing_action_label(candidate.label)
+                or is_dangerous_final_candidate(semantic_text)
             )
             blocked = (
                 candidate.risk_level in {"medium", "high", "blocked"}
@@ -244,7 +247,9 @@ class ActionSafetyGate:
                 "replaced_with_safe_action",
                 f"candidate risk level is {candidate.risk_level}",
             )
-        if is_dangerous_final_candidate(semantic_text):
+        if is_state_changing_action_label(candidate.label) or is_dangerous_final_candidate(
+            semantic_text
+        ):
             return (
                 NavigationAction(name="stop_for_user"),
                 "replaced_with_safe_action",

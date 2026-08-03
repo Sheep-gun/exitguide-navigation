@@ -17,9 +17,18 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     ALLOWED_ACTIONS,
     NavigationDecisionMemory,
     canonical_json,
+    is_state_changing_action_label,
     redact_text,
     stable_id,
 )
+
+
+def test_state_changing_action_labels_are_exact() -> None:
+    assert is_state_changing_action_label("저장하기") is True
+    assert is_state_changing_action_label(" Save Changes ") is True
+    assert is_state_changing_action_label("적용") is True
+    assert is_state_changing_action_label("저장된 결제수단") is False
+    assert is_state_changing_action_label("변경 내역") is False
 
 
 def _load_migration_module():

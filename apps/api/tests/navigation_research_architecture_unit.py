@@ -773,6 +773,22 @@ def main() -> None:
     )
     assert disabled_action.name == "wait_and_observe"
     assert disabled_status == "replaced_with_safe_action"
+    save_action, save_status, save_reason = ActionSafetyGate().validate(
+        NavigationAction(name="click", candidate_id="save"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="save",
+                label="저장하기",
+                role="button",
+                position_bucket="bottom",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )
+    assert save_action.name == "stop_for_user"
+    assert save_status == "replaced_with_safe_action"
+    assert "dangerous final" in save_reason
     planner_calls_before_loop_guard = planner_transport.plan_calls
     loop_guarded = selective_policy.decide_action(
         query=fast_path_query,

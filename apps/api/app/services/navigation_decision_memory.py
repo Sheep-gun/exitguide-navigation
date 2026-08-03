@@ -111,6 +111,29 @@ DANGEROUS_FINAL_PHRASES = (
     "start subscription",
 )
 
+# Exact labels that commit a state change but are too generic to search as
+# substrings in the whole candidate context.  For example, a harmless menu
+# can have "저장하기" in nearby text, while a button whose own label is
+# "저장하기" must stop for the user.
+STATE_CHANGING_ACTION_LABELS = frozenset(
+    {
+        "저장",
+        "저장하기",
+        "변경 저장",
+        "변경 내용 저장",
+        "변경사항 저장",
+        "적용",
+        "적용하기",
+        "제출",
+        "제출하기",
+        "save",
+        "save changes",
+        "apply",
+        "apply changes",
+        "submit",
+    }
+)
+
 GOAL_ROLE_PRIORS: dict[str, dict[str, float]] = {
     "account.signup": {
         "auth.signup.entry": 1.0,
@@ -671,7 +694,10 @@ class NavigationDecisionMemory:
                     "enabled": enabled,
                     "selected": selected,
                     "checked": checked,
-                    "dangerous_final": is_dangerous_final_candidate(semantic_context),
+                    "dangerous_final": (
+                        is_state_changing_action_label(label)
+                        or is_dangerous_final_candidate(semantic_context)
+                    ),
                     "inferred_function_roles": list(inferred_roles),
                     "function_role_scores": {
                         role: round(score, 4)
@@ -1163,6 +1189,12 @@ def redact_text(value: str) -> str:
 def is_dangerous_final_candidate(label: str) -> bool:
     normalized = normalize_text(label)
     return any(phrase in normalized for phrase in DANGEROUS_FINAL_PHRASES)
+
+
+def is_state_changing_action_label(label: str) -> bool:
+    """Return true only when the candidate's own label commits a mutation."""
+
+    return normalize_text(label) in STATE_CHANGING_ACTION_LABELS
 
 
 def tokenize(value: str) -> tuple[str, ...]:

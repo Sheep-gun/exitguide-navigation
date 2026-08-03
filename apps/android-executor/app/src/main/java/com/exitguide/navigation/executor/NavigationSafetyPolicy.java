@@ -59,6 +59,23 @@ public final class NavigationSafetyPolicy {
             "start subscription"
     };
 
+    private static final Set<String> STATE_CHANGING_ACTION_LABELS = Set.of(
+            "저장",
+            "저장하기",
+            "변경 저장",
+            "변경 내용 저장",
+            "변경사항 저장",
+            "적용",
+            "적용하기",
+            "제출",
+            "제출하기",
+            "save",
+            "save changes",
+            "apply",
+            "apply changes",
+            "submit"
+    );
+
     private NavigationSafetyPolicy() {}
 
     public static boolean isAllowedAction(String action) {
@@ -74,6 +91,10 @@ public final class NavigationSafetyPolicy {
                 || node.isEditable()) {
             return "blocked";
         }
+        if (isStateChangingActionLabel(string(node.getText()))
+                || isStateChangingActionLabel(string(node.getContentDescription()))) {
+            return "high";
+        }
         return isDangerousFinalText(semanticText) ? "high" : "low";
     }
 
@@ -85,6 +106,10 @@ public final class NavigationSafetyPolicy {
             }
         }
         return false;
+    }
+
+    public static boolean isStateChangingActionLabel(String value) {
+        return STATE_CHANGING_ACTION_LABELS.contains(normalize(value));
     }
 
     static String normalize(String value) {
