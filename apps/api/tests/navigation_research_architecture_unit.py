@@ -15,6 +15,7 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.navigation_contracts import (  # noqa: E402
+    AccessibilityNodeSummary,
     CandidateValue,
     DecideRequest,
     HierarchicalPlan,
@@ -34,13 +35,21 @@ from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
     NavigationPlannerResearchClient,
 )
-from app.services.navigation_planner import ActionSafetyGate, CandidateValueScorer  # noqa: E402
+from app.services.navigation_planner import (  # noqa: E402
+    ActionSafetyGate,
+    CandidateValueScorer,
+    PlannerProposal,
+)
 from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
     EnumeratedAction,
     ReflectionTriggerPolicy,
 )
-from app.services.navigation_runtime import NavigationRuntime  # noqa: E402
+from app.services.navigation_runtime import (  # noqa: E402
+    NavigationRuntime,
+    _candidate_score_visual_reason,
+    _db_solar_conflict_visual_reason,
+)
 from app.services.navigation_runtime_store import NavigationRuntimeStore  # noqa: E402
 
 
@@ -219,9 +228,16 @@ class ScriptedVisionClient:
                 {
                     "semantic_summary": "홈 하단에 계정 진입점이 있는 화면",
                     "candidate_annotations": [
-                        {"candidate_id": "profile", "icon_semantics": "사람 모양 프로필"},
+                        {
+                            "candidate_id": "profile",
+                            "icon_semantics": "사람 모양 프로필",
+                            "visual_role": "계정 프로필 허브",
+                            "visual_region": "하단 탐색 영역",
+                            "goal_relevance": 0.91,
+                        },
                         {"candidate_id": "invented-id", "icon_semantics": "환각 후보"},
                     ],
+                    "recommended_candidate_id": "profile",
                 }
             )
         if "on-demand action reflector" in system:
@@ -284,6 +300,59 @@ def main() -> None:
     )
     assert [item.candidate_id for item in perceived.screen.candidates] == ["profile", "search"]
     assert perceived.screen.candidates[0].icon_semantics == "사람 모양 프로필"
+    assert perceived.screen.candidates[0].visual_role == "계정 프로필 허브"
+    assert perceived.screen.candidates[0].visual_relevance == 0.91
+    assert perceived.recommended_candidate_id == "profile"
+
+    grounded_screen = ScreenObservation(
+        window_title="홈",
+        nodes=[
+            AccessibilityNodeSummary(
+                node_id="profile",
+                child_ids=["search"],
+                text="프로필",
+                clickable=True,
+            ),
+            AccessibilityNodeSummary(
+                node_id="search", parent_id="profile", text="검색", clickable=True
+            ),
+        ],
+        candidates=list(_screen().candidates),
+    )
+    assert grounded_screen.nodes[1].parent_id == "profile"
+    try:
+        ScreenObservation(
+            nodes=[AccessibilityNodeSummary(node_id="profile")],
+            candidates=[NavigationCandidate(candidate_id="invented", label="환각")],
+        )
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("ungrounded candidate_id must be rejected")
+
+    selective_visual_policy = AndroidWorldResearchPolicy(
+        planner_model=planner_model,
+        exaone_vlm=exaone_vlm,
+        allow_model_fallback=False,
+        planner_mode="selective",
+        vlm_mode="selective",
+    )
+    visual_calls_before = vision_transport.perception_calls
+    clear_perception = selective_visual_policy.perceive(
+        goal_text="open account settings",
+        screen=_screen(),
+        screenshot_data_url="data:image/png;base64,AA==",
+    )
+    assert clear_perception.provider == "structured_input"
+    assert vision_transport.perception_calls == visual_calls_before
+    forced_perception = selective_visual_policy.perceive(
+        goal_text="open account settings",
+        screen=_screen(),
+        screenshot_data_url="data:image/png;base64,AA==",
+        force_visual_reasoning=True,
+    )
+    assert forced_perception.provider == "exaone_4_5"
+    assert vision_transport.perception_calls == visual_calls_before + 1
 
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
@@ -785,6 +854,41 @@ def main() -> None:
             risk_level="low",
         ),
     ]
+    ambiguous_candidates = [
+        NavigationCandidate(candidate_id="my-page", label="마이페이지"),
+        NavigationCandidate(candidate_id="search", label="검색"),
+        NavigationCandidate(candidate_id="full-menu", label="전체 메뉴"),
+    ]
+    assert _candidate_score_visual_reason(
+        ambiguous_values,
+        ambiguous_candidates,
+        0.25,
+    ) == "candidate_scores_too_close"
+    memory_confident_values = [
+        value.model_copy(update={"supporting_cases": 2})
+        if value.candidate_id == "my-page"
+        else value
+        for value in semantic_fast_path_values
+    ]
+    assert _db_solar_conflict_visual_reason(
+        memory_confident_values,
+        ambiguous_candidates,
+        PlannerProposal(
+            NavigationAction(name="click", candidate_id="search"),
+            0.8,
+            "solar_pro3",
+            False,
+        ),
+        [
+            value.model_copy(
+                update={
+                    "score_source": "planner_model_verifier",
+                    "verifier_score": 0.8,
+                }
+            )
+            for value in memory_confident_values
+        ],
+    ) == "db_solar_candidate_conflict"
     assert selective_policy._should_invoke_planner(
         query=ambiguous_semantic_query,
         plan=semantic_fast_path_plan,

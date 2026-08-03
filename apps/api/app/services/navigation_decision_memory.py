@@ -591,6 +591,15 @@ class NavigationDecisionMemory:
             icon_semantics = redact_text(str(_value(candidate, "icon_semantics", "")))
             nearby_text = redact_text(str(_value(candidate, "nearby_text", "")))
             parent_semantics = redact_text(str(_value(candidate, "parent_semantics", "")))
+            child_semantics = redact_text(str(_value(candidate, "child_semantics", "")))
+            visual_role = redact_text(str(_value(candidate, "visual_role", "")))
+            visual_region = redact_text(str(_value(candidate, "visual_region", "")))
+            visual_relevance_value = _value(candidate, "visual_relevance", None)
+            visual_relevance = (
+                None
+                if visual_relevance_value is None
+                else max(0.0, min(1.0, float(visual_relevance_value)))
+            )
             position_bucket = str(_value(candidate, "position_bucket", "unknown"))
             clickable = bool(_value(candidate, "clickable", True))
             enabled = bool(_value(candidate, "enabled", True))
@@ -598,7 +607,17 @@ class NavigationDecisionMemory:
             checked_value = _value(candidate, "checked", None)
             checked = None if checked_value is None else bool(checked_value)
             semantic_context = " ".join(
-                value for value in (label, icon_semantics, nearby_text, parent_semantics) if value
+                value
+                for value in (
+                    label,
+                    icon_semantics,
+                    nearby_text,
+                    parent_semantics,
+                    child_semantics,
+                    visual_role,
+                    visual_region,
+                )
+                if value
             )
             field_role_scores: dict[str, float] = {}
             # A candidate's own label/icon is direct evidence. Nearby and
@@ -609,6 +628,9 @@ class NavigationDecisionMemory:
                 (icon_semantics, 0.95),
                 (nearby_text, 0.55),
                 (parent_semantics, 0.35),
+                (child_semantics, 0.75),
+                (visual_role, 0.9),
+                (visual_region, 0.2),
             ):
                 for function_role, alias_score in self.infer_affordance_role_scores(
                     field_text,
@@ -640,6 +662,10 @@ class NavigationDecisionMemory:
                     "icon_semantics": icon_semantics,
                     "nearby_text": nearby_text,
                     "parent_semantics": parent_semantics,
+                    "child_semantics": child_semantics,
+                    "visual_role": visual_role,
+                    "visual_region": visual_region,
+                    "visual_relevance": visual_relevance,
                     "position_bucket": position_bucket,
                     "clickable": clickable,
                     "enabled": enabled,
@@ -1229,7 +1255,15 @@ def _destination_match(
     for candidate in candidate_payloads:
         candidate_context = " ".join(
             str(candidate.get(field, ""))
-            for field in ("label", "icon_semantics", "nearby_text", "parent_semantics")
+            for field in (
+                "label",
+                "icon_semantics",
+                "nearby_text",
+                "parent_semantics",
+                "child_semantics",
+                "visual_role",
+                "visual_region",
+            )
         )
         semantic_regions.append(title_tokens | set(tokenize(candidate_context)))
 

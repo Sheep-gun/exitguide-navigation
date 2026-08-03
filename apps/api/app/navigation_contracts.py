@@ -10,6 +10,33 @@ RiskLevel = Literal["low", "medium", "high", "blocked"]
 ConnectivityStatus = Literal["observed", "device_disconnected", "transport_error"]
 
 
+class AccessibilityNodeSummary(BaseModel):
+    """Privacy-safe semantic node tree captured by AccessibilityService.
+
+    Absolute bounds are intentionally omitted. The node/candidate identifier
+    remains the only executable grounding and coordinates never reach a model.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    node_id: str = Field(min_length=1, max_length=200)
+    parent_id: str | None = Field(default=None, min_length=1, max_length=200)
+    child_ids: list[str] = Field(default_factory=list, max_length=100)
+    text: str = Field(default="", max_length=500)
+    content_description: str = Field(default="", max_length=500)
+    view_id: str = Field(default="", max_length=300)
+    role: str = Field(default="unknown", max_length=120)
+    position_bucket: Literal["top", "middle", "bottom", "overlay", "unknown"] = "unknown"
+    clickable: bool = False
+    enabled: bool = True
+    visible: bool = True
+    scrollable: bool = False
+    checkable: bool = False
+    selected: bool = False
+    checked: bool | None = None
+    private_input: bool = False
+
+
 class NavigationCandidate(BaseModel):
     """A candidate that was actually observed on the current screen.
 
@@ -26,6 +53,10 @@ class NavigationCandidate(BaseModel):
     icon_semantics: str = Field(default="", max_length=200)
     nearby_text: str = Field(default="", max_length=500)
     parent_semantics: str = Field(default="", max_length=300)
+    child_semantics: str = Field(default="", max_length=500)
+    visual_role: str = Field(default="", max_length=200)
+    visual_region: str = Field(default="", max_length=200)
+    visual_relevance: float | None = Field(default=None, ge=0.0, le=1.0)
     position_bucket: Literal["top", "middle", "bottom", "overlay", "unknown"] = "unknown"
     clickable: bool = True
     enabled: bool = True
@@ -39,6 +70,7 @@ class ScreenObservation(BaseModel):
     window_title: str = Field(default="", max_length=500)
     activity_name: str = Field(default="", max_length=500)
     navigation_depth: int | None = Field(default=None, ge=0, le=100)
+    nodes: list[AccessibilityNodeSummary] = Field(default_factory=list, max_length=500)
     candidates: list[NavigationCandidate] = Field(default_factory=list, max_length=300)
 
     @model_validator(mode="after")
@@ -46,6 +78,19 @@ class ScreenObservation(BaseModel):
         identifiers = [candidate.candidate_id for candidate in self.candidates]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("candidate_id values must be unique within one screen")
+        if self.nodes:
+            node_ids = [node.node_id for node in self.nodes]
+            known_ids = set(node_ids)
+            if len(node_ids) != len(known_ids):
+                raise ValueError("node_id values must be unique within one screen")
+            if not set(identifiers).issubset(known_ids):
+                raise ValueError("every candidate_id must ground to a captured node_id")
+            for node in self.nodes:
+                references = set(node.child_ids)
+                if node.parent_id is not None:
+                    references.add(node.parent_id)
+                if not references.issubset(known_ids):
+                    raise ValueError("node relationships must reference captured node_id values")
         return self
 
 
@@ -75,9 +120,11 @@ class DecideRequest(BaseModel):
     request_id: str = Field(min_length=1, max_length=200)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
     app_package: str = Field(default="", max_length=240)
+    app_version: str = Field(default="", max_length=120)
     locale: str = Field(default="ko-KR", min_length=2, max_length=32)
     goal_text: str = Field(min_length=1, max_length=1000)
     step_ordinal: int = Field(default=0, ge=0, le=1000)
+    visual_reasoning_required: bool = False
     screenshot_data_url: str | None = Field(default=None, max_length=12_000_000)
     screen: ScreenObservation
 
@@ -147,6 +194,9 @@ class DecideResponse(BaseModel):
     destination_match: float = Field(ge=0.0, le=1.0)
     candidate_values: list[CandidateValue]
     evidence_case_ids: list[str]
+    visual_reobserve_required: bool = False
+    visual_reobserve_reason: str = ""
+    vlm_recommended_candidate_id: str | None = None
 
 
 class ObserveRequest(BaseModel):
@@ -208,3 +258,8 @@ class ObserveResponse(BaseModel):
     reflection_reason: str
     knowledge_revision_queued: bool
     session_status: Literal["active", "stopped", "reached", "failed"]
+    planner_decision_succeeded: bool
+    executor_action_succeeded: bool | None
+    screen_changed: bool | None
+    navigation_progressed: bool | None
+    connection_error: bool

@@ -130,8 +130,13 @@ class AndroidWorldResearchPolicy:
         goal_text: str,
         screen: ScreenObservation,
         screenshot_data_url: str | None,
+        force_visual_reasoning: bool = False,
     ) -> PerceptionOutput:
-        should_invoke_vlm = self.vlm_mode == "always" or _needs_visual_reasoning(screen)
+        should_invoke_vlm = (
+            self.vlm_mode == "always"
+            or force_visual_reasoning
+            or _needs_visual_reasoning(screen)
+        )
         if (
             screenshot_data_url
             and self.exaone_vlm.configured

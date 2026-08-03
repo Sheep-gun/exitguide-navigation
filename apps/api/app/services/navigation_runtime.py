@@ -7,10 +7,12 @@ from typing import Sequence
 import httpx
 
 from app.navigation_contracts import (
+    CandidateValue,
     DecideRequest,
     DecideResponse,
     GoalResolution,
     NavigationAction,
+    NavigationCandidate,
     ObserveRequest,
     ObserveResponse,
 )
@@ -185,6 +187,7 @@ class NavigationRuntime:
                 goal_text=request.goal_text,
                 screen=request.screen,
                 screenshot_data_url=request.screenshot_data_url,
+                force_visual_reasoning=request.visual_reasoning_required,
             )
         effective_screen = perception.screen
         query = self.memory.retrieve(
@@ -212,9 +215,11 @@ class NavigationRuntime:
             effective_screen.candidates,
             forbidden_candidate_ids=forbidden,
         )
+        memory_candidate_values = list(candidate_values)
         score_margin = 0.0
         reflection_on_demand = False
         verifier_provider = "not_invoked"
+        visual_reobserve_reason = ""
         if goal_resolution.status != "recognized":
             proposal = PlannerProposal(
                 NavigationAction(name="stop_for_user"),
@@ -273,20 +278,52 @@ class NavigationRuntime:
             )
             planner_provider = "python_state_change_boundary"
         else:
-            research_decision = self.policy.decide_action(
-                query=query,
-                plan=plan,
-                candidates=effective_screen.candidates,
-                forbidden_candidate_ids=forbidden,
-                recent_history=recent_history,
-            )
-            plan = research_decision.plan
-            planner_provider = plan.source
-            proposal = research_decision.proposal
-            candidate_values = list(research_decision.candidate_values)
-            verifier_provider = research_decision.verifier_provider
-            score_margin = research_decision.score_margin
-            reflection_on_demand = research_decision.reflection_on_demand
+            if _can_request_visual_reobserve(request, perception, self.policy):
+                visual_reobserve_reason = _candidate_score_visual_reason(
+                    memory_candidate_values,
+                    effective_screen.candidates,
+                    self.policy.planner_margin_threshold,
+                )
+            if visual_reobserve_reason:
+                proposal = PlannerProposal(
+                    NavigationAction(name="wait_and_observe"),
+                    1.0,
+                    "python_visual_reobserve_gate",
+                    False,
+                )
+                planner_provider = "python_visual_reobserve_gate"
+                verifier_provider = "deferred_until_visual_context"
+            else:
+                research_decision = self.policy.decide_action(
+                    query=query,
+                    plan=plan,
+                    candidates=effective_screen.candidates,
+                    forbidden_candidate_ids=forbidden,
+                    recent_history=recent_history,
+                )
+                plan = research_decision.plan
+                planner_provider = plan.source
+                proposal = research_decision.proposal
+                candidate_values = list(research_decision.candidate_values)
+                verifier_provider = research_decision.verifier_provider
+                score_margin = research_decision.score_margin
+                reflection_on_demand = research_decision.reflection_on_demand
+                if _can_request_visual_reobserve(request, perception, self.policy):
+                    visual_reobserve_reason = _db_solar_conflict_visual_reason(
+                        memory_candidate_values,
+                        effective_screen.candidates,
+                        proposal,
+                        candidate_values,
+                    )
+                if visual_reobserve_reason:
+                    proposal = PlannerProposal(
+                        NavigationAction(name="wait_and_observe"),
+                        1.0,
+                        "python_visual_reobserve_gate",
+                        False,
+                    )
+                    planner_provider = "python_visual_reobserve_gate"
+                    verifier_provider += "->visual_reobserve_deferred"
         safe_action, safety_status, safety_reason = self.policy.safety_gate.validate(
             proposal.action,
             candidates=effective_screen.candidates,
@@ -298,6 +335,7 @@ class NavigationRuntime:
             session_id=session_id,
             request_id=request.request_id,
             app_package=request.app_package,
+            app_version=request.app_version,
             locale=request.locale,
             goal_text=request.goal_text,
             goal_id=None if query.goal is None else query.goal.goal_id,
@@ -344,6 +382,9 @@ class NavigationRuntime:
             destination_match=query.destination_match,
             candidate_values=candidate_values,
             evidence_case_ids=evidence_case_ids,
+            visual_reobserve_required=bool(visual_reobserve_reason),
+            visual_reobserve_reason=visual_reobserve_reason,
+            vlm_recommended_candidate_id=perception.recommended_candidate_id,
         )
 
     def _resolve_goal(
@@ -485,7 +526,18 @@ class NavigationRuntime:
             observed_signal = request.observed_signal
             if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
                 observed_signal = "login_required"
-            if (
+            if decision["planner_provider"] == "python_visual_reobserve_gate":
+                verified = VerifiedTransition(
+                    outcome_type="navigated",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="unknown",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=None,
+                )
+            elif (
                 decision["planner_provider"] == "python_goal_already_satisfied"
                 or _goal_already_satisfied(next_query)
             ):
@@ -714,7 +766,90 @@ class NavigationRuntime:
             reflection_reason=reflection_reason,
             knowledge_revision_queued=knowledge_revision_queued,
             session_status=final_session_status,
+            planner_decision_succeeded=decision["safety_status"] == "allowed",
+            executor_action_succeeded=request.execution_succeeded,
+            screen_changed=verified.state_changed,
+            navigation_progressed=(
+                True
+                if verified.progress_label in {"advanced", "reached"}
+                else False
+                if verified.progress_label in {"unchanged", "regressed"}
+                else None
+            ),
+            connection_error=request.connectivity_status != "observed",
         )
+
+
+def _can_request_visual_reobserve(
+    request: DecideRequest,
+    perception: PerceptionOutput,
+    policy: AndroidWorldResearchPolicy,
+) -> bool:
+    return (
+        not request.visual_reasoning_required
+        and perception.provider != policy.exaone_vlm.name
+        and policy.exaone_vlm.configured
+        and policy.vlm_mode != "disabled"
+    )
+
+
+def _safe_ranked_values(
+    values: Sequence[CandidateValue],
+    candidates: Sequence[NavigationCandidate],
+) -> list[CandidateValue]:
+    allowed = {
+        candidate.candidate_id
+        for candidate in candidates
+        if candidate.clickable and candidate.enabled and candidate.risk_level == "low"
+    }
+    return sorted(
+        (
+            value
+            for value in values
+            if value.candidate_id in allowed and not value.forbidden
+        ),
+        key=lambda value: (-value.final_score, value.candidate_id),
+    )
+
+
+def _candidate_score_visual_reason(
+    values: Sequence[CandidateValue],
+    candidates: Sequence[NavigationCandidate],
+    margin_threshold: float,
+) -> str:
+    ranked = _safe_ranked_values(values, candidates)
+    if len(ranked) < 2:
+        return ""
+    if ranked[0].final_score - ranked[1].final_score < margin_threshold:
+        return "candidate_scores_too_close"
+    return ""
+
+
+def _db_solar_conflict_visual_reason(
+    memory_values: Sequence[CandidateValue],
+    candidates: Sequence[NavigationCandidate],
+    proposal: PlannerProposal,
+    model_values: Sequence[CandidateValue],
+) -> str:
+    model_was_used = proposal.provider.startswith("solar") or any(
+        value.score_source == "planner_model_verifier"
+        or value.verifier_score is not None
+        for value in model_values
+    )
+    if not model_was_used:
+        return ""
+    ranked = _safe_ranked_values(memory_values, candidates)
+    if not ranked:
+        return ""
+    memory_best = ranked[0]
+    if memory_best.supporting_cases <= 0:
+        return ""
+    selected_id = (
+        proposal.action.candidate_id if proposal.action.name == "click" else None
+    )
+    if selected_id != memory_best.candidate_id:
+        return "db_solar_candidate_conflict"
+    return ""
 
 
 def verify_transition(

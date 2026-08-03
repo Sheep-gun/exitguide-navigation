@@ -125,6 +125,9 @@ def main() -> None:
             )
         )
         assert no_change.outcome_type == "no_change"
+        assert no_change.screen_changed is False
+        assert no_change.navigation_progressed is False
+        assert no_change.connection_error is False
         assert no_change.candidate_forbidden is True
         assert no_change.knowledge_revision_queued is True
 
@@ -155,6 +158,9 @@ def main() -> None:
         assert disconnected.recovery_action is not None
         assert disconnected.recovery_action.name == "wait_and_observe"
         assert disconnected.session_status == "active"
+        assert disconnected.connection_error is True
+        assert disconnected.screen_changed is None
+        assert disconnected.navigation_progressed is None
 
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
@@ -186,6 +192,9 @@ def main() -> None:
         )
         assert not_executed_observation.outcome_type == "blocked"
         assert not_executed_observation.failure_class == "executor_action_not_executed"
+        assert not_executed_observation.planner_decision_succeeded is True
+        assert not_executed_observation.executor_action_succeeded is False
+        assert not_executed_observation.connection_error is False
         assert not_executed_observation.candidate_forbidden is False
         assert not_executed_observation.knowledge_revision_queued is False
         assert not_executed_observation.session_status == "stopped"
@@ -463,7 +472,7 @@ def main() -> None:
         )
         split_status = split_runtime.status()["dataset_split"]
         assert split_status["counts"]["locked_holdout"] == 3
-        assert split_runtime.store.status()["schema_version"] == 3
+        assert split_runtime.store.status()["schema_version"] == 4
         assert len(split_runtime.store.dataset_split_manifest()) == len(split_manifest.entries)
         try:
             split_runtime.decide(
@@ -485,6 +494,7 @@ def main() -> None:
             session_id="legacy-session",
             request_id="legacy-request",
             app_package="legacy.app",
+            app_version="1.0.0",
             locale="ko-KR",
             goal_text="회원 탈퇴",
             goal_id="account.delete",
@@ -498,13 +508,16 @@ def main() -> None:
             connection.execute(
                 "DELETE FROM navigation_runtime_metadata WHERE key LIKE 'dataset_split_manifest_%'"
             )
+            connection.execute("ALTER TABLE navigation_sessions DROP COLUMN app_version")
             connection.execute("PRAGMA user_version=2")
             connection.commit()
         finally:
             connection.close()
         upgraded_store = NavigationRuntimeStore(legacy_runtime_path)
-        assert upgraded_store.status()["schema_version"] == 3
-        assert upgraded_store.session("legacy-session") is not None
+        assert upgraded_store.status()["schema_version"] == 4
+        upgraded_session = upgraded_store.session("legacy-session")
+        assert upgraded_session is not None
+        assert upgraded_session["app_version"] == ""
 
         previous = {key: os.environ.get(key) for key in (
             "NAVIGATION_DECISION_DB_PATH",

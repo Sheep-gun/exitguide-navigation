@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
@@ -10,6 +11,7 @@ import httpx
 from app.navigation_contracts import NavigationCandidate, ScreenObservation
 
 
+LOGGER = logging.getLogger(__name__)
 JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
@@ -33,6 +35,7 @@ class PerceptionOutput:
     screen: ScreenObservation
     semantic_summary: str
     provider: str
+    recommended_candidate_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -791,6 +794,7 @@ class Exaone45VisionClient:
                 "icon_semantics": candidate.icon_semantics,
                 "nearby_text": candidate.nearby_text,
                 "parent_semantics": candidate.parent_semantics,
+                "child_semantics": candidate.child_semantics,
                 "position_bucket": candidate.position_bucket,
             }
             for candidate in screen.candidates
@@ -810,8 +814,12 @@ class Exaone45VisionClient:
                         "icon_semantics": "",
                         "nearby_text": "",
                         "parent_semantics": "",
+                        "visual_role": "candidate function inferred from the image",
+                        "visual_region": "screen region containing the candidate",
+                        "goal_relevance": "number between 0 and 1",
                     }
                 ],
+                "recommended_candidate_id": "one supplied ID or null",
             },
         }
         response = self.client.complete(
@@ -849,11 +857,28 @@ class Exaone45VisionClient:
             if isinstance(annotation, Mapping)
         }
         allowed_ids = {candidate.candidate_id for candidate in screen.candidates}
+        returned_ids = set(annotation_by_id)
         annotation_by_id = {
             candidate_id: annotation
             for candidate_id, annotation in annotation_by_id.items()
             if candidate_id in allowed_ids
         }
+        LOGGER.info(
+            "vlm_candidate_allowlist supplied=%d returned=%d accepted=%d rejected=%d",
+            len(allowed_ids),
+            len(returned_ids),
+            len(annotation_by_id),
+            len(returned_ids - allowed_ids),
+        )
+        raw_recommended_candidate_id = str(payload.get("recommended_candidate_id") or "")
+        recommended_candidate_id = raw_recommended_candidate_id
+        if recommended_candidate_id not in allowed_ids:
+            recommended_candidate_id = ""
+        LOGGER.info(
+            "vlm_recommendation_allowlist returned=%s accepted=%s",
+            bool(raw_recommended_candidate_id),
+            bool(recommended_candidate_id),
+        )
         enriched = []
         for candidate in screen.candidates:
             annotation = annotation_by_id.get(candidate.candidate_id, {})
@@ -865,6 +890,11 @@ class Exaone45VisionClient:
                         "parent_semantics": _prefer(
                             candidate.parent_semantics, annotation.get("parent_semantics")
                         ),
+                        "visual_role": str(annotation.get("visual_role", ""))[:200],
+                        "visual_region": str(annotation.get("visual_region", ""))[:200],
+                        "visual_relevance": _bounded_optional_score(
+                            annotation.get("goal_relevance")
+                        ),
                     }
                 )
             )
@@ -872,6 +902,7 @@ class Exaone45VisionClient:
             screen=screen.model_copy(update={"candidates": enriched}),
             semantic_summary=str(payload.get("semantic_summary", ""))[:1000],
             provider=self.name,
+            recommended_candidate_id=recommended_candidate_id or None,
         )
 
     def reflect_action(
@@ -975,6 +1006,15 @@ def _prefer(existing: str, proposed: object) -> str:
     if existing:
         return existing
     return str(proposed or "")[:500]
+
+
+def _bounded_optional_score(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except (TypeError, ValueError):
+        return None
 
 
 def _parse_batch_scores(

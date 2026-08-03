@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from app.navigation_contracts import (
+    AccessibilityNodeSummary,
     CandidateValue,
     HierarchicalPlan,
     NavigationAction,
@@ -18,7 +19,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import redact_text
 
 
-RUNTIME_SCHEMA_VERSION = 3
+RUNTIME_SCHEMA_VERSION = 4
 
 
 def utc_now() -> str:
@@ -27,7 +28,17 @@ def utc_now() -> str:
 
 def _candidate_payload(candidate: NavigationCandidate) -> dict[str, object]:
     payload = candidate.model_dump(mode="json")
-    for field in ("label", "icon_semantics", "nearby_text", "parent_semantics"):
+    for field in (
+        "label", "icon_semantics", "nearby_text", "parent_semantics", "child_semantics",
+        "visual_role", "visual_region",
+    ):
+        payload[field] = redact_text(str(payload.get(field, "")))
+    return payload
+
+
+def _node_payload(node: AccessibilityNodeSummary) -> dict[str, object]:
+    payload = node.model_dump(mode="json")
+    for field in ("text", "content_description"):
         payload[field] = redact_text(str(payload.get(field, "")))
     return payload
 
@@ -37,6 +48,7 @@ def _screen_payload(screen: ScreenObservation) -> dict[str, object]:
         "window_title": redact_text(screen.window_title),
         "activity_name": redact_text(screen.activity_name),
         "navigation_depth": screen.navigation_depth,
+        "nodes": [_node_payload(node) for node in screen.nodes],
         "candidates": [_candidate_payload(candidate) for candidate in screen.candidates],
     }
 
@@ -70,6 +82,19 @@ class NavigationRuntimeStore:
     def _initialize(self) -> None:
         schema = self.schema_path.read_text(encoding="utf-8")
         with self._lock, closing(self._connect()) as connection:
+            previous_version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+            if previous_version in {1, 2, 3} and connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='navigation_sessions'"
+            ).fetchone():
+                columns = {
+                    str(row[1])
+                    for row in connection.execute("PRAGMA table_info(navigation_sessions)")
+                }
+                if "app_version" not in columns:
+                    connection.execute(
+                        "ALTER TABLE navigation_sessions "
+                        "ADD COLUMN app_version TEXT NOT NULL DEFAULT ''"
+                    )
             connection.executescript(schema)
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             metadata = dict(connection.execute("SELECT key, value FROM navigation_runtime_metadata"))
@@ -220,6 +245,7 @@ class NavigationRuntimeStore:
         session_id: str,
         request_id: str,
         app_package: str,
+        app_version: str,
         locale: str,
         goal_text: str,
         goal_id: str | None,
@@ -229,12 +255,13 @@ class NavigationRuntimeStore:
             connection.execute(
                 """
                 INSERT INTO navigation_sessions(
-                    session_id, request_id, app_package, locale, goal_text_redacted,
+                    session_id, request_id, app_package, app_version, locale, goal_text_redacted,
                     goal_id, status, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
                     request_id = excluded.request_id,
                     app_package = excluded.app_package,
+                    app_version = excluded.app_version,
                     locale = excluded.locale,
                     goal_text_redacted = excluded.goal_text_redacted,
                     goal_id = excluded.goal_id,
@@ -244,6 +271,7 @@ class NavigationRuntimeStore:
                     session_id,
                     request_id,
                     app_package,
+                    app_version,
                     locale,
                     redact_text(goal_text),
                     goal_id,
@@ -259,7 +287,8 @@ class NavigationRuntimeStore:
         with self._lock, closing(self._connect()) as connection:
             row = connection.execute(
                 """
-                SELECT session_id, locale, goal_text_redacted, goal_id, status
+                SELECT session_id, app_package, app_version, locale,
+                       goal_text_redacted, goal_id, status
                 FROM navigation_sessions WHERE session_id = ?
                 """,
                 (session_id,),

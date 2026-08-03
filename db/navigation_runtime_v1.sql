@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS navigation_sessions (
     session_id TEXT PRIMARY KEY,
     request_id TEXT NOT NULL,
     app_package TEXT NOT NULL DEFAULT '',
+    app_version TEXT NOT NULL DEFAULT '',
     locale TEXT NOT NULL,
     goal_text_redacted TEXT NOT NULL,
     goal_id TEXT,
@@ -216,9 +217,9 @@ CREATE INDEX IF NOT EXISTS idx_runtime_candidates_selected
     WHERE selected = 1 OR forbidden = 1;
 
 INSERT OR REPLACE INTO navigation_runtime_metadata(key, value) VALUES
-    ('schema_version', '3'),
+    ('schema_version', '4'),
     ('database_kind', 'navigation_runtime_events'),
     ('promotion_policy', 'offline_validation_required'),
     ('interaction_contract', 'exitguide.interaction-episode.v1');
 
-PRAGMA user_version = 3;
+PRAGMA user_version = 4;
