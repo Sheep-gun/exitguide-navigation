@@ -1,17 +1,17 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: implementation
-updated_at: 2026-08-03T10:29:14+09:00
+phase: device_validation
+updated_at: 2026-08-03T10:30:41+09:00
 priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
 decision_db_collection: paused
-next_action: 현재 이관 구현을 하나의 integration_commit으로 고정하고 그 커밋에서 APK를 다시 빌드한다.
-verification_started_at: pending
+next_action: N100에 별도 격리 Runtime DB와 로그 경로를 확정하고 integration_commit의 API를 검증용 프로세스로 배포한다.
+verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: pending
 verified_device: pending
 verified_apps: pending
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: pending
+integration_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
 deployed_commit: pending
 
 ## 작업 원칙
@@ -26,8 +26,7 @@ deployed_commit: pending
 
 - 기존 앱 감사 원본: `../exitguide-navigation/apps/mobile/plugins/withExitGuideOverlay.js`
 - 기능별 대응표: `docs/EXITGUIDE_EXECUTOR_REUSE_MAPPING.md`
-- 현재 구현: 미커밋
-- 이관 후 단위 테스트 및 APK clean 빌드: 통과(미커밋 구현이므로 검증 APK로는 아직 사용 불가)
+- 이관 연결부 구현: 완료, 실기기 검증 대기
 - 최초 실기기 통합 검증: `pending`
 
 ## 최초 완료 조건
@@ -57,9 +56,9 @@ deployed_commit: pending
 
 ## 현재 통합 구현 테스트 결과
 
-- Navigation API 단위 테스트: passed — `apps/api/tests/*.py` 5개
+- Navigation API 단위 테스트: passed — integration_commit에서 `apps/api/tests/*.py` 5개
 - Android Executor 단위 테스트: passed — `apps/android-executor/app/build/reports/tests/testDebugUnitTest/index.html`
-- Android Executor APK 빌드: passed — clean `assembleDebug`
+- Android Executor APK 빌드: passed — integration_commit에서 clean `assembleDebug`
 - ML Kit OCR 및 AndroidX 빌드: passed — clean Android build
 - 실기기 통합 검증: pending
 - 위험 행동 자동 실행 0건: pending
@@ -70,7 +69,7 @@ deployed_commit: pending
 - android_device_log: pending
 - navigation_api_vlm_log: pending
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` (`pending`)
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` (미커밋 구현 빌드, 최초 검증에는 사용하지 않음)
+- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `942F408B59F48AF23A4618DF6F971C576859980A779018EA035AE563490C2182`
 
 ## 완료 및 재개 규칙
 
