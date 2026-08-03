@@ -86,6 +86,11 @@ Solar는 그중 하나만 반환하고, Navigation API는 그 ID가 DB에 실제
 사실상 동일하고 경쟁 후보와도 명확히 구분될 때만 허용한다. 이 조건을 하나라도 만족하지 못하면
 Solar가 DB 근거와 현재 전체 후보를 함께 평가한다. 어느 경로든 행동 후 검증은 생략하지 않는다.
 
+선별된 공개 행동 자료는 별도 SQLite FTS5 보조 검색으로 연결한다. 기존 Decision Memory가
+엄격한 빠른 판단 조건을 충족하지 못할 때만 최대 3개의 서비스 전이, 1개의 실패 사례, 1개의
+과업 설명을 Solar 입력에 추가한다. 공개 자료는 현재 화면의 후보 ID를 만들거나 직접 실행할 수
+없으며, Python 안전 검사와 실기기 Decision Memory보다 항상 낮은 참고 근거로 취급한다.
+
 허용 행동은 `click(candidate_id)`, `scroll(direction)`, `back()`, `wait_and_observe()`, `stop_for_user()`뿐이다. `click`은 관찰된 후보 ID가 아니면 안전 행동으로 대체되고, 결제·탈퇴 확정·해지 확정·개인정보 제출은 항상 `stop_for_user()`로 전환된다. 연결 오류는 UI 탐색 실패와 별도 상태로 저장한다.
 
 ## AndroidWorld 상위 연구를 적용한 위치
