@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T12:34:27+09:00
+updated_at: 2026-08-03T12:51:46+09:00
 priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
 decision_db_collection: paused
-next_action: SM-S936N의 안전한 화면에서 Accessibility 후보 수집과 candidate_id 기반 클릭을 격리 Runtime DB로 검증한다.
+next_action: A100 EXAONE 4.5 콜드 로딩 완료 후 commit 9dd708a APK로 VLM candidate_id allowlist와 최종 실기기 통합 검증을 수행한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: pending
 verified_device: pending
 verified_apps: pending
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
-deployed_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
+integration_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
+deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
 
 ## 작업 원칙
 
@@ -70,8 +70,9 @@ deployed_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
 - isolated_runtime_db: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-runtime-v4.sqlite`
 - android_device_log: pending
 - navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log` (`device validation pending`)
+- a100_vlm_log: `/home/ubuntu/data/exitguide/logs/exaone/server-20260803-124029.log` (`cold loading`)
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` (`pending`)
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `942F408B59F48AF23A4618DF6F971C576859980A779018EA035AE563490C2182`
+- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `9904EC6F102ADA2DC12FD30C7110BC49B043ED4C6ACE694B64C8EE876A16F44A`
 
 ## 완료 및 재개 규칙
 
