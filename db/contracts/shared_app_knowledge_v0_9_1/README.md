@@ -16,3 +16,9 @@ Navigation의 과거 Decision Case를 변환할 때는 다음 규칙을 지킵�
 5. 원본 SQLite는 읽기 전용으로 열고 변환 결과는 별도 JSONL로 생성합니다.
 
 `interaction-episode.v1.json`은 실행 경험, `knowledge-promotion.v1.json`은 검증을 통과한 경험의 승격 절차를 각각 규정합니다. 두 계층을 분리해 Human Gold도 자동 실행 경로가 아니라 높은 신뢰도의 경험 근거로만 사용합니다.
+
+`app-knowledge-generation.v1.schema.json`은 base Decision snapshot, 정규화된
+Interaction Episode, 승인된 promotion, 앱별 canonical knowledge packet을
+하나의 불변 세대로 묶습니다. Decision SQLite는 이 세대의 검색용 투영이며,
+활성화에는 별도 validation 앱 회귀검증이 필요합니다. locked holdout은
+승격 튜닝이나 활성화 판단에 사용하지 않습니다.

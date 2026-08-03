@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
 status: completed
-phase: device_validation
-updated_at: 2026-08-04T02:09:25+09:00
-priority: Decision DB collection and runtime parameter tuning
+phase: implementation
+updated_at: 2026-08-04T02:55:46+09:00
+priority: Align promotion pipeline with shared Interaction Episode and immutable App Knowledge generations
 decision_db_collection: paused
-next_action: Wait for the user's intermediate review before resuming real-device collection.
+next_action: Deploy the verified promotion pipeline and sealed generation-0 backfill to N100; keep the operating Decision DB unchanged until a frozen validation-only case DB exists.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16

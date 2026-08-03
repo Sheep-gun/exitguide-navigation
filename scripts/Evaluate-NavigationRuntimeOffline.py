@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sqlite3
 import sys
@@ -38,6 +39,11 @@ def parse_args() -> argparse.Namespace:
         description="Leakage-aware diagnostic replay for the Navigation decision runtime."
     )
     parser.add_argument("--db", required=True, type=Path)
+    parser.add_argument(
+        "--cases-db",
+        type=Path,
+        help="Frozen evaluation-case DB. Defaults to --db for legacy diagnostic replay.",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--limit", type=int, default=0)
     return parser.parse_args()
@@ -164,7 +170,8 @@ def exact_match(case: dict[str, Any], action: dict[str, Any]) -> bool:
 
 def main() -> None:
     args = parse_args()
-    cases = load_cases(args.db, args.limit)
+    cases_database = args.cases_db or args.db
+    cases = load_cases(cases_database, args.limit)
     with tempfile.TemporaryDirectory() as temporary:
         runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(args.db),
@@ -253,7 +260,7 @@ def main() -> None:
                 }
             )
 
-    report = summarize(results, args.db)
+    report = summarize(results, args.db, cases_database)
     report["retrieval_isolation"] = {
         "positive_route_cases": "source_app_excluded",
         "verified_negative_safety_cases": "same_app_allowed",
@@ -265,7 +272,11 @@ def main() -> None:
     print(rendered)
 
 
-def summarize(results: list[dict[str, Any]], database: Path) -> dict[str, Any]:
+def summarize(
+    results: list[dict[str, Any]],
+    database: Path,
+    cases_database: Path,
+) -> dict[str, Any]:
     positive = [result for result in results if result["positive"]]
     first = [result for result in positive if result["first_action"]]
     failures = [result for result in results if result["failed_click"]]
@@ -294,10 +305,22 @@ def summarize(results: list[dict[str, Any]], database: Path) -> dict[str, Any]:
             action_confusion[
                 f'{result["expected_action"]}->{result["predicted_action"]}'
             ] += 1
+    fixed_validation = cases_database.resolve() != database.resolve()
     return {
-        "evaluation_kind": "diagnostic_leave_source_app_out_replay",
-        "claim_scope": "runtime_direction_gate_only_not_final_ab",
+        "evaluation_kind": (
+            "fixed_validation_leave_source_app_out_replay"
+            if fixed_validation
+            else "diagnostic_leave_source_app_out_replay"
+        ),
+        "claim_scope": (
+            "promotion_regression_gate_only_not_locked_holdout"
+            if fixed_validation
+            else "runtime_direction_gate_only_not_final_ab"
+        ),
         "database": str(database.resolve()),
+        "database_sha256": file_sha256(database),
+        "evaluation_cases_database": str(cases_database.resolve()),
+        "evaluation_cases_sha256": file_sha256(cases_database),
         "retrieval_excludes_source_app": True,
         "case_count": len(results),
         "positive_case_count": len(positive),
@@ -343,6 +366,14 @@ def summarize(results: list[dict[str, Any]], database: Path) -> dict[str, Any]:
 
 def ratio(numerator: int, denominator: int) -> float | None:
     return round(numerator / denominator, 4) if denominator else None
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 if __name__ == "__main__":

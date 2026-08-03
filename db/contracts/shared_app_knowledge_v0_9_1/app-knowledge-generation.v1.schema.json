@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/app-knowledge-generation.v1.schema.json",
+  "title": "ExitGuide Immutable App Knowledge Generation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generation_id",
+    "parent_generation_id",
+    "status",
+    "created_at",
+    "contract_version",
+    "source_revision",
+    "base_decision_snapshot",
+    "interaction_episodes",
+    "promotions",
+    "app_knowledge_packets",
+    "policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generation_id": {"type": "string", "pattern": "^generation_[a-f0-9]{24}$"},
+    "parent_generation_id": {
+      "type": ["string", "null"],
+      "pattern": "^generation_[a-f0-9]{24}$"
+    },
+    "status": {"const": "sealed"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "contract_version": {"const": "shared-app-knowledge-v0.9.1"},
+    "source_revision": {"type": "string", "minLength": 1},
+    "base_decision_snapshot": {"$ref": "#/$defs/artifact"},
+    "interaction_episodes": {
+      "allOf": [
+        {"$ref": "#/$defs/artifact"},
+        {"type": "object", "required": ["record_count"]}
+      ]
+    },
+    "promotions": {
+      "allOf": [
+        {"$ref": "#/$defs/artifact"},
+        {"type": "object", "required": ["record_count"]}
+      ]
+    },
+    "app_knowledge_packets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "allOf": [
+          {"$ref": "#/$defs/artifact"},
+          {
+            "type": "object",
+            "required": ["app_package"],
+            "properties": {"app_package": {"type": "string", "minLength": 1}}
+          }
+        ]
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_db_is_projection",
+        "runtime_direct_apply_allowed",
+        "procedures_are_executable",
+        "activation_requires_validation_regression",
+        "locked_holdout_used_for_tuning"
+      ],
+      "properties": {
+        "decision_db_is_projection": {"const": true},
+        "runtime_direct_apply_allowed": {"const": false},
+        "procedures_are_executable": {"const": false},
+        "activation_requires_validation_regression": {"const": true},
+        "locked_holdout_used_for_tuning": {"const": false}
+      }
+    }
+  },
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_size"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "byte_size": {"type": "integer", "minimum": 0},
+        "record_count": {"type": "integer", "minimum": 0},
+        "app_package": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

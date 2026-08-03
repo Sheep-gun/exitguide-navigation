@@ -181,6 +181,60 @@ def validate_knowledge_promotion(payload: Mapping[str, Any]) -> None:
     _raise_errors(errors)
 
 
+def validate_app_knowledge(payload: Mapping[str, Any]) -> None:
+    """Validate cross-references that JSON Schema cannot express cleanly."""
+
+    errors: list[str] = []
+    goals = _unique_ids(payload, "goals", "goal_id", errors)
+    capabilities = _unique_ids(payload, "capabilities", "capability_id", errors)
+    concepts = _unique_ids(payload, "screen_concepts", "concept_id", errors)
+    screens = _unique_ids(payload, "app_screens", "app_screen_id", errors)
+    affordances = _unique_ids(payload, "affordances", "affordance_id", errors)
+    transitions = _unique_ids(payload, "transitions", "transition_id", errors)
+    _unique_ids(payload, "recovery_rules", "recovery_id", errors)
+
+    for item in (_mapping(value) for value in _list(payload.get("capabilities"))):
+        if item.get("goal_id") not in goals:
+            errors.append(f"capability {item.get('capability_id')} references unknown goal")
+    for item in (_mapping(value) for value in _list(payload.get("app_screens"))):
+        concept_id = item.get("concept_id")
+        if concept_id is not None and concept_id not in concepts:
+            errors.append(f"app screen {item.get('app_screen_id')} references unknown concept")
+    for item in (_mapping(value) for value in _list(payload.get("affordances"))):
+        if item.get("app_screen_id") not in screens:
+            errors.append(f"affordance {item.get('affordance_id')} references unknown screen")
+    for item in (_mapping(value) for value in _list(payload.get("transitions"))):
+        transition_id = item.get("transition_id")
+        capability_id = item.get("capability_id")
+        if capability_id is not None and capability_id not in capabilities:
+            errors.append(f"transition {transition_id} references unknown capability")
+        if item.get("from_screen_id") not in screens:
+            errors.append(f"transition {transition_id} references unknown from screen")
+        to_screen_id = item.get("to_screen_id")
+        if to_screen_id is not None and to_screen_id not in screens:
+            errors.append(f"transition {transition_id} references unknown to screen")
+        affordance_id = _mapping(item.get("action")).get("affordance_id")
+        if affordance_id is not None and affordance_id not in affordances:
+            errors.append(f"transition {transition_id} references unknown affordance")
+    for item in (_mapping(value) for value in _list(payload.get("recovery_rules"))):
+        recovery_id = item.get("recovery_id")
+        goal_id = item.get("goal_id")
+        if goal_id is not None and goal_id not in goals:
+            errors.append(f"recovery rule {recovery_id} references unknown goal")
+        concept_id = item.get("screen_concept_id")
+        if concept_id is not None and concept_id not in concepts:
+            errors.append(f"recovery rule {recovery_id} references unknown concept")
+        affordance_id = item.get("forbidden_affordance_id")
+        if affordance_id is not None and affordance_id not in affordances:
+            errors.append(f"recovery rule {recovery_id} references unknown affordance")
+    for item in (_mapping(value) for value in _list(payload.get("procedures"))):
+        for step in (_mapping(value) for value in _list(item.get("steps"))):
+            transition_id = step.get("transition_id")
+            if transition_id is not None and transition_id not in transitions:
+                errors.append(f"procedure {item.get('procedure_id')} references unknown transition")
+    _raise_errors(errors)
+
+
 def validate_navigation_action(
     action: Mapping[str, Any],
     candidates: Sequence[Mapping[str, Any]],
@@ -229,6 +283,23 @@ def validate_navigation_action(
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
+
+
+def _unique_ids(
+    payload: Mapping[str, Any],
+    collection: str,
+    field: str,
+    errors: list[str],
+) -> set[str]:
+    values = [
+        str(item.get(field) or "")
+        for item in (_mapping(value) for value in _list(payload.get(collection)))
+    ]
+    if any(not value for value in values):
+        errors.append(f"{collection} contains an empty {field}")
+    if len(values) != len(set(values)):
+        errors.append(f"{collection} contains duplicate {field}")
+    return {value for value in values if value}
 
 
 def _list(value: Any) -> list[Any]:
