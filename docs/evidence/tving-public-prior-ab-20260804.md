@@ -46,6 +46,9 @@ legacy explorer, Gold replay, AndroidControl DB, or app-specific route.
 
 - A: public prior OFF, port 8110, isolated Runtime DB under `.../tving/a/`.
 - B: public prior ON, port 8111, isolated Runtime DB under `.../tving/b/`.
+- Both validation services use the dedicated
+  `/srv/exitguide/runtime/navigation-api-validation-code` symlink. They never
+  replace the production 8100 code symlink or its immutable split manifest.
 - Both use the same read-only Decision DB, Solar/VLM configuration, app split,
   safety policy, and code commit.
 - The production 8100 Runtime and Decision DB are not evaluation write targets.

@@ -7,11 +7,11 @@ Wants=network-online.target tailscaled.service exitguide-a100-vlm-tunnel.service
 Type=simple
 User=exitguide
 Group=exitguide-admin
-WorkingDirectory=/srv/exitguide/runtime/navigation-api-current-code/apps/api
+WorkingDirectory=/srv/exitguide/runtime/navigation-api-validation-code/apps/api
 EnvironmentFile=/home/kyle/exitguide/secrets/navigation-api.env
 EnvironmentFile=-/srv/exitguide/secrets/navigation-planner.env
 Environment=NAVIGATION_RUNTIME_DB_PATH=/srv/exitguide/runtime/navigation-validation/tving/a/navigation-runtime-v1.sqlite
-Environment=NAVIGATION_DATASET_SPLIT_MANIFEST_PATH=/srv/exitguide/runtime/navigation-api-current-code/db/navigation_dataset_split_v1.json
+Environment=NAVIGATION_DATASET_SPLIT_MANIFEST_PATH=/srv/exitguide/runtime/navigation-api-validation-code/db/navigation_dataset_split_v1.json
 Environment=NAVIGATION_ALLOW_LOCKED_HOLDOUT=false
 Environment=NAVIGATION_PUBLIC_PRIOR_ENABLED=false
 ExecStart=/home/kyle/exitguide/runtime/navigation-api-current-venv/bin/uvicorn app.navigation_main:app --host 100.77.172.25 --port 8110
@@ -24,4 +24,3 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
 ReadWritePaths=/srv/exitguide/runtime/navigation-validation/tving/a
-
