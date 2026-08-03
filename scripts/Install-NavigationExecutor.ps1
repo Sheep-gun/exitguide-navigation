@@ -5,7 +5,9 @@ param(
 
     [string]$ApkPath = "apps/android-executor/app/build/outputs/apk/debug/app-debug.apk",
 
-    [int]$BindTimeoutSeconds = 20
+    [int]$BindTimeoutSeconds = 60,
+
+    [switch]$SkipInstall
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,10 +34,14 @@ function Get-EnabledAccessibilityServices {
 
 function Test-ExecutorBound {
     $dump = (Invoke-Adb shell dumpsys accessibility) -join "`n"
-    return $dump -match (
-        "(?s)Bound services:\{.*?Service\[label=ExitGuide 후보 기반 탐색, " +
-        "id=com\.exitguide\.navigation\.executor/(?:\.|com\.exitguide\.navigation\.executor\.)" +
-        "ExitGuideAccessibilityService"
+    # Samsung wraps long dumpsys lines at the terminal width, sometimes even
+    # splitting the word "Service". Remove whitespace before matching.
+    $compact = $dump -replace "\s", ""
+    # `id=...` only appears in the bound-service record; installed/enabled
+    # service lists use a different representation. Keep this ASCII-only so
+    # Windows PowerShell 5 code-page handling cannot corrupt the probe.
+    return $compact.Contains(
+        "id=com.exitguide.navigation.executor/.ExitGuideAccessibilityService"
     )
 }
 
@@ -47,7 +53,9 @@ if ($devices.Count -ne 1) {
 # `install -r` preserves app data and the user's existing grant whenever the OS
 # allows it. The explicit restore below handles vendors that disable the service
 # while replacing an APK signed with the same development key.
-Invoke-Adb install -r $resolvedApk | Out-Host
+if (-not $SkipInstall) {
+    Invoke-Adb install -r $resolvedApk | Out-Host
+}
 
 $enabled = @(Get-EnabledAccessibilityServices)
 if ($enabled -notcontains $service) {
