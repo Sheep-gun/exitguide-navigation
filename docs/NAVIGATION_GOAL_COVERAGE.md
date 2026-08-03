@@ -1,50 +1,70 @@
 # Navigation 실기기 목표 커버리지
 
-이 표는 DB 행 수가 아니라 **앱별·목표별 실제 탐색 상태**를 추적한다. `목적지 도달`은
-화면을 실제 관찰한 경우에만 기록하며, 탈퇴·해지·결제 같은 위험한 최종 행동을 자동
-실행했다는 뜻이 아니다.
+이 표는 B 고정 아키텍처에서 사용자 지정 10개 앱과 TVING의 실제 탐색 상태를 추적한다.
+완료 목표는 11개 앱 × 5개 목표, 총 55셀에서 `미탐색`과 `진행 중`을 모두 없애는
+것이다. 모델의 추측이나 후보 선택만으로 완료 상태를 기록하지 않는다.
+
+고정 split은 `db/navigation_coverage_split_v1.json`이다.
+
+- collection 7개: YouTube, Netflix, 제주항공, X, 쿠팡, 배달의민족, NH농협손해보험
+- locked holdout 3개: Instagram, 포스타입, ChatGPT
+- validation 1개: TVING
+
+기존 운영 Runtime split과 데이터는 변경하지 않는다. 이번 manifest는 사용자 지정 55셀
+범위만 정의하며, holdout과 TVING 결과는 Decision DB/App Knowledge로 승격하지 않는다.
 
 | 앱 (데이터 분할) | 회원가입 | 회원탈퇴 | 멤버십 가입 | 멤버십 변경 | 멤버십 해지 |
 |---|---|---|---|---|---|
-| Netflix (collection) | 미탐색 | 미탐색 | 미확인(렌더링 오류) | 미탐색 | 탐색 중 |
-| YouTube (collection) | 미탐색 | 미탐색 | 상태 확인(이미 가입됨) | 미탐색 | 탐색 중 |
+| Instagram (locked holdout) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
+| YouTube (collection) | 미탐색 | 미탐색 | 현재 계정에서 검증 불가(이미 가입됨) | 미탐색 | 탐색 중 |
+| Netflix (collection) | 미탐색 | 미탐색 | 진행 중(렌더링 오류 복구 필요) | 미탐색 | 탐색 중 |
 | 제주항공 (collection) | 미탐색 | 미탐색 | 목적지 도달 | 미탐색 | 미탐색 |
+| X (collection) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
+| 쿠팡 (collection) | 미탐색 | 미탐색 | 현재 계정에서 검증 불가(이미 가입됨) | 미탐색 | 미탐색 |
+| 배달의민족 (collection) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
+| 포스타입 (locked holdout) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
+| NH농협손해보험 (collection) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
+| ChatGPT (locked holdout) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
 | TVING (validation) | 미탐색 | 미탐색 | 목적지 도달(검증) | 미탐색 | 미탐색 |
+
+## 현재 수치
+
+- 전체 셀: 55
+- 최종 상태 셀: 4
+- 미완료 셀: 51
+- 목적지 도달: 2
+- 계정 상태로 현재 검증 불가: 2
+- 위험 행동 자동 실행: 0
 
 ## 상태 정의
 
-- `미탐색`: 아직 해당 목적의 실기기 탐색을 시작하지 않음
-- `탐색 중`: 안전한 중간 전이는 관찰했지만 최종 목적지를 확정하지 못함
-- `상태 확인`: 현재 계정 상태를 실제 화면에서 확인함. 가입 경로 성공과는 구분함
-- `목적지 도달`: Destination Signature에 맞는 화면을 행동 후 실제 관찰함
-- `최종 확정 직전 종료`: 위험한 최종 버튼 앞에서 `stop_for_user()`로 종료함
-- `미지원`: 충분한 탐색 근거로 앱에 기능이 없음을 확인함
-- `로그인·권한 차단`: 탐색 자체가 아니라 사용자 인증·권한 때문에 중단됨
-- `미확인(환경 문제)`: 렌더링·Executor 등 환경 문제로 판정하지 못함
-- `탐색 실패`: 연결은 정상이었지만 잘못된 클릭·반복 등으로 목적지를 찾지 못함
+- `미탐색` (`not_explored`): 아직 해당 목표의 실기기 탐색을 시작하지 않음
+- `진행 중` (`in_progress`): 근거는 있으나 최종 판정을 내리지 못함
+- `목적지 도달` (`destination_reached`): Destination Signature에 맞는 화면을 행동 후 실제 관찰함
+- `안전 경계 도달` (`safe_boundary_reached`): 위험한 최종 행동 직전 `stop_for_user()`로 종료함
+- `미지원` (`not_supported`): 실제 화면과 UI 근거로 해당 기능이 없음을 확인함
+- `검증 불가` (`not_testable`): 계정 상태·지역·서비스 정책 때문에 현재 환경에서 검증할 수 없음을 근거와 함께 확정함
 
-연결 오류는 위 상태를 `탐색 실패`로 덮어쓰지 않는다. 연결을 복구한 뒤 같은 화면을
-다시 관찰한다.
+연결 오류, ADB 오류, N100/A100/Solar 오류, 일시적인 렌더링 오류는 최종 상태가 아니다.
+연결 복구 뒤 같은 화면을 다시 관찰하며 `not_supported`나 `not_testable`로 바꾸지 않는다.
 
 ## 기록 규칙
 
-1. 모델 추측이나 후보 선택만으로 `목적지 도달`을 기록하지 않는다.
-2. 행동 실행과 행동 후 화면 관찰이 모두 확인돼야 성공 상태로 올린다.
+1. 행동 실행과 행동 후 화면 관찰이 모두 확인돼야 완료 상태로 올린다.
+2. 모든 최종 상태는 `real_device_verified`, evidence 경로, 관찰 시각과 설명을 가져야 한다.
 3. 위험한 최종 행동은 실행하지 않으며 자동 실행 건수는 항상 0이어야 한다.
-4. `collection`, `validation`, `locked_holdout` 결과를 같은 성능 수치로 섞지 않는다.
-5. locked holdout은 최종 평가 전까지 탐색·튜닝·DB 승격에 사용하지 않는다.
-6. 각 상태는 기계 판독 원본인 `db/navigation_goal_coverage_v1.json`의 증거 경로,
-   앱 버전, 마지막 관찰일과 함께 갱신한다.
+4. collection, validation, locked holdout 결과를 같은 성능 수치로 섞지 않는다.
+5. collection 7개를 동결하기 전에는 locked holdout을 열지 않는다.
+6. holdout 평가가 시작된 뒤에도 그 결과로 파라미터나 DB를 수정하지 않는다.
+7. TVING과 holdout 경험은 승격하지 않는다.
+8. 기계 판독 원본은 `db/navigation_goal_coverage_v1.json`이다.
 
 ## 현재 해석
 
-- 제주항공 `membership.join`만 end-to-end 목적지 도달이 확인됐다.
-- YouTube `membership.join`은 이미 가입된 상태를 확인한 경계 사례다.
-- Netflix·YouTube `membership.cancel`은 중간 전이 근거가 있지만 완료로 세지 않는다.
-- Netflix `membership.join` 렌더링 오류는 탐색 실패나 `not_supported`가 아니다.
-- TVING `membership.join`은 `validation` 결과다. 과거 OFF/ON 비교에서 공개 Prior의
-  개선은 입증되지 않았지만, 이후 공개 Prior가 켜진 B를 고정 아키텍처로 선택했다.
-  범용 Destination Signature와 Runtime 검증 규칙을 수정한 뒤 목적지 도달을
-  확인했으며 이 행은 collection 성공률이나 App Knowledge 승격에 섞지 않는다.
-- 과거 A/B 결과는 검색 오류 진단 자료로만 보존한다. 이후 평가는 B의 절대 지표와
-  고정 replay 및 locked holdout 회귀로 수행한다.
+- 제주항공 `membership.join`은 collection의 end-to-end 목적지 도달 사례다.
+- TVING `membership.join`은 validation 목적지 도달 사례이며 승격하지 않는다.
+- YouTube와 쿠팡 `membership.join`은 활성 멤버십 계정이라 신규 가입을 검증할 수 없는 상태다.
+- Netflix·YouTube `membership.cancel`은 중간 전이만 있어 계속 검증해야 한다.
+- Netflix `membership.join`의 렌더링 오류는 미지원이나 탐색 실패가 아니다.
+- 과거 TVING A/B는 검색 오류 진단 자료일 뿐 런타임 승자 선택에 사용하지 않는다.
+- 공개 Navigation DB가 활성화된 B를 고정하고 절대 지표·고정 replay·holdout 회귀로 평가한다.

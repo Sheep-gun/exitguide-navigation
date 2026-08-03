@@ -9,6 +9,10 @@ final class ExecutorPreferences {
             "com.exitguide.navigation.executor.CONFIGURATION_CHANGED";
     static final String ACTION_STATUS_CHANGED =
             "com.exitguide.navigation.executor.STATUS_CHANGED";
+    static final String ACTION_DIAGNOSTIC_REQUEST =
+            "com.exitguide.navigation.executor.DIAGNOSTIC_SNAPSHOT";
+    static final String ACTION_DIAGNOSTIC_INTERNAL =
+            "com.exitguide.navigation.executor.DIAGNOSTIC_SNAPSHOT_INTERNAL";
 
     private static final String FILE_NAME = "navigation_executor";
     private static final String KEY_API_BASE_URL = "api_base_url";

@@ -10,6 +10,9 @@
     "source_scope",
     "success_definition",
     "holdout_policy",
+    "coverage_split_manifest",
+    "collection_frozen_at",
+    "holdout_evaluation_started_at",
     "goal_order",
     "apps"
   ],
@@ -21,8 +24,11 @@
       "const": "destination_observed_without_automatic_dangerous_final_action"
     },
     "holdout_policy": {
-      "const": "locked_holdout_is_not_explored_or_used_for_tuning"
+      "const": "locked_holdout_is_evaluated_only_after_collection_freeze_and_never_used_for_tuning_or_promotion"
     },
+    "coverage_split_manifest": {"const": "db/navigation_coverage_split_v1.json"},
+    "collection_frozen_at": {"type": ["string", "null"], "format": "date-time"},
+    "holdout_evaluation_started_at": {"type": ["string", "null"], "format": "date-time"},
     "goal_order": {
       "const": [
         "account.signup",
@@ -34,7 +40,8 @@
     },
     "apps": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 11,
+      "maxItems": 11,
       "items": {"$ref": "#/$defs/appCoverage"}
     }
   },
@@ -90,13 +97,10 @@
           "enum": [
             "not_explored",
             "in_progress",
-            "state_observed",
             "destination_reached",
-            "stopped_before_final_confirmation",
+            "safe_boundary_reached",
             "not_supported",
-            "blocked_login_or_permission",
-            "blocked_environment",
-            "navigation_failed"
+            "not_testable"
           ]
         },
         "display_status_ko": {"type": "string", "minLength": 1},
@@ -117,7 +121,10 @@
             "app_rendering_error",
             "login_required",
             "permission_required",
-            "executor_error"
+            "executor_error",
+            "account_state",
+            "region_policy",
+            "service_policy"
           ]
         },
         "dangerous_action_auto_executed": {"const": false},

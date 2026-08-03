@@ -2,22 +2,22 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T08:45:00+09:00
+updated_at: 2026-08-04T09:25:00+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: paused
-next_action: B 고정 설정을 커밋·배포하여 N100 운영 8100의 public_prior.enabled=true와 배포 커밋 일치를 확인한다.
+next_action: 변경을 커밋·배포한 뒤 7/3/1 coverage split을 사용하는 보존형 Runtime을 준비하고 첫 collection 미완료 셀 검증을 시작한다.
 verification_started_at: 2026-08-04T08:45:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `b94de671f121a06d54f2fd5437cf292d6aa48147`
-deployed_commit: `b94de671f121a06d54f2fd5437cf292d6aa48147`
+integration_commit: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
+deployed_commit: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
 
 ## 고정 정책
 
 - architecture: `B fixed`
-- public_navigation_prior: `enabled`가 목표이며 현재 운영 확인값은 `false`
+- public_navigation_prior: `enabled`, 운영 확인값 `true`
 - ab_winner_comparison: `disabled`
 - evaluation_basis: B 절대 지표, 고정 replay, locked holdout 회귀
 - public_role: Planner/Solar 참고 근거만 허용
@@ -40,10 +40,10 @@ deployed_commit: `b94de671f121a06d54f2fd5437cf292d6aa48147`
 - 미완료 상태: `not_explored`, `in_progress`, 임시 연결·환경 오류
 - locked holdout: Instagram, Postype, ChatGPT
 - validation: TVING
-- split_manifest: 기존 고정 manifest를 우선하며 7 collection / 3 locked holdout / 1 TVING validation 목표와의 차이는 Runtime 오염 없이 별도 정합화한다.
+- split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 4/11 앱이 문서화됨; 55셀 전체 확장 필요
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 4셀, 미완료 51셀
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -52,9 +52,12 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-b94de67`
-- deployed_git_head: `b94de671f121a06d54f2fd5437cf292d6aa48147`
-- public_prior.enabled: false — 새 B 고정 목표와 불일치, 다음 배포에서 true로 수정
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-c137e68`
+- deployed_git_head: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
+- public_prior.enabled: true
+- public service episodes/transitions: 2,047 / 27,343
+- public failure transitions: 2,737
+- public task records: 570
 - Decision DB: read-only patched immutable clone
 - Runtime DB: sessions 113, decisions 393, observations 355
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
@@ -118,6 +121,17 @@ APK 재설치 또는 교체 후 `scripts/Install-NavigationExecutor.ps1`을 실�
 7. Navigation API 연결과 행동 전후 관찰 준비
 
 OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했을 때만 사용자 조작을 요청한다.
+
+2026-08-04 실기기 재설치 검증:
+
+- `adb install -r`: passed
+- accessibility enabled/bound: passed
+- preserved enabled service count: 2
+- Accessibility nodes/candidates: 13/5
+- B Navigation API ready/public prior: true/true
+- Runtime sessions/decisions before and after diagnostic: 113/393, 변화 없음
+- APK SHA-256: `0E7D31F62E3B6B58EF08AC756FF998C8D17F2C32DD71750D0B672257FE23FC9D`
+- evidence: `docs/evidence/navigation-executor-auto-rebind-20260804.md`
 
 ## 안전 불변조건
 

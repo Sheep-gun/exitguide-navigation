@@ -1,0 +1,112 @@
+{
+  "manifest_version": "navigation-coverage-split-v1-20260804-b-fixed",
+  "created_at": "2026-08-04T09:00:00+09:00",
+  "split_policy": "app_disjoint_7_collection_3_locked_holdout_1_validation",
+  "parent_runtime_manifest": {
+    "path": "db/navigation_dataset_split_v1.json",
+    "production_sha256": "9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142",
+    "preserved": true,
+    "note": "The older runtime scope contains non-target apps and is not rewritten. This immutable manifest defines only the user-requested 55-cell coverage scope."
+  },
+  "entries": [
+    {
+      "app_package": "com.google.android.youtube",
+      "app_name": "YouTube",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and real-device evidence",
+      "existing_decision_cases": 13,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.netflix.mediaclient",
+      "app_name": "Netflix",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 19,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.parksmt.jejuair.android16",
+      "app_name": "제주항공",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 7,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.twitter.android",
+      "app_name": "X",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and real-device evidence",
+      "existing_decision_cases": 3,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.coupang.mobile",
+      "app_name": "쿠팡",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 10,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.sampleapp",
+      "app_name": "배달의민족",
+      "split": "collection",
+      "reason": "pre-existing Decision Memory and Human Gold evidence",
+      "existing_decision_cases": 17,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "ni.mh.android.launcher",
+      "app_name": "NH농협손해보험",
+      "split": "collection",
+      "reason": "seventh non-holdout app in the user-requested ten-app coverage scope",
+      "existing_decision_cases": 0,
+      "available_on_device": false,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.instagram.android",
+      "app_name": "Instagram",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen social-app holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.postype.play",
+      "app_name": "포스타입",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen creator-membership holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "com.openai.chatgpt",
+      "app_name": "ChatGPT",
+      "split": "locked_holdout",
+      "reason": "zero-record unseen subscription-app holdout",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    },
+    {
+      "app_package": "net.cj.cjhv.gs.tving",
+      "app_name": "TVING",
+      "split": "validation",
+      "reason": "zero-record validation app; never promoted into Decision Memory",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
+      "priority_app": true
+    }
+  ]
+}

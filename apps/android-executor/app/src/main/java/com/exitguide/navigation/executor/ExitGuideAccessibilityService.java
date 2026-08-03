@@ -78,6 +78,16 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
     };
 
+    private final BroadcastReceiver diagnosticReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            runInstallationDiagnostic(
+                    text(intent.getStringExtra("request_id")),
+                    text(intent.getStringExtra("api_base_url"))
+            );
+        }
+    };
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
@@ -85,8 +95,17 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         IntentFilter filter = new IntentFilter(ExecutorPreferences.ACTION_CONFIGURATION_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(configurationReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(
+                    diagnosticReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL),
+                    Context.RECEIVER_NOT_EXPORTED
+            );
         } else {
             registerReceiver(configurationReceiver, filter);
+            registerReceiver(
+                    diagnosticReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL)
+            );
         }
         publish("접근성 서비스가 준비되었습니다.");
         if (ExecutorPreferences.active(this)) {
@@ -148,9 +167,68 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         } catch (IllegalArgumentException ignored) {
             // Service startup did not finish.
         }
+        try {
+            unregisterReceiver(diagnosticReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Service startup did not finish.
+        }
         visualAugmenter.close();
         apiClient.close();
         super.onDestroy();
+    }
+
+    private void runInstallationDiagnostic(String requestId, String requestedApiBaseUrl) {
+        String safeRequestId = requestId.isEmpty() ? UUID.randomUUID().toString() : requestId;
+        AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
+        int nodeCount = 0;
+        int candidateCount = 0;
+        String packageName = "";
+        if (snapshot != null) {
+            packageName = snapshot.appPackage;
+            if (snapshot.payload.optJSONArray("nodes") != null) {
+                nodeCount = snapshot.payload.optJSONArray("nodes").length();
+            }
+            candidateCount = snapshot.bindings.size();
+        }
+        Log.i(
+                LOG_TAG,
+                "diagnostic_snapshot request_id=" + safeRequestId
+                        + " package=" + packageName
+                        + " nodes=" + nodeCount
+                        + " candidates=" + candidateCount
+        );
+
+        String apiBaseUrl = requestedApiBaseUrl.isEmpty()
+                ? ExecutorPreferences.apiBaseUrl(this)
+                : requestedApiBaseUrl;
+        apiClient.get(
+                apiBaseUrl,
+                "/v1/navigation/status",
+                new NavigationApiClient.Callback() {
+                    @Override
+                    public void onSuccess(JSONObject response) {
+                        Log.i(
+                                LOG_TAG,
+                                "diagnostic_api request_id=" + safeRequestId
+                                        + " ready=" + response.optBoolean("ready", false)
+                                        + " public_prior_enabled=" + (
+                                                response.optJSONObject("public_prior") != null
+                                                        && response.optJSONObject("public_prior")
+                                                        .optBoolean("enabled", false)
+                                        )
+                        );
+                    }
+
+                    @Override
+                    public void onFailure(String failureClass, String detail) {
+                        Log.w(
+                                LOG_TAG,
+                                "diagnostic_api request_id=" + safeRequestId
+                                        + " ready=false failure_class=" + failureClass
+                        );
+                    }
+                }
+        );
     }
 
     private void verifyApiAndSchedule() {
