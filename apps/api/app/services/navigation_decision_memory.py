@@ -31,11 +31,11 @@ CONTEXTUAL_ACCOUNT_SUFFIX_PATTERN = re.compile(
     r"(?=[0-9A-Za-z._-]*[A-Za-z])"
     r"(?=[0-9A-Za-z._-]*[0-9._-])"
     r"[0-9A-Za-z._-]{3,64}"
-    r")(?P<gap>\s*)(?P<context>프로필|계정|아이디|profile|account)\b?",
+    r")(?P<gap>\s*)(?P<context>프로필|계정|아이디|profile|account)",
     re.IGNORECASE,
 )
 CONTEXTUAL_ACCOUNT_PREFIX_PATTERN = re.compile(
-    r"(?P<context>프로필|계정|아이디|profile|account|username|user\s*id)\b?"
+    r"(?P<context>프로필|계정|아이디|profile|account|username|user\s*id)"
     r"(?P<gap>\s*[:：]?\s*)(?P<identifier>"
     r"(?=[0-9A-Za-z._-]{3,64}(?:\s|$))"
     r"(?=[0-9A-Za-z._-]*[A-Za-z])"

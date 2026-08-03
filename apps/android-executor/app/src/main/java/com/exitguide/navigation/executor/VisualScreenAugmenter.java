@@ -51,11 +51,11 @@ final class VisualScreenAugmenter implements AutoCloseable {
                     + "[0-9A-Za-z._-]{3,64}";
     private static final Pattern CONTEXTUAL_ACCOUNT_SUFFIX = Pattern.compile(
             "(" + MIXED_ACCOUNT_IDENTIFIER + ")(\\s*)"
-                    + "(프로필|계정|아이디|profile|account)\\b?",
+                    + "(프로필|계정|아이디|profile|account)",
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern CONTEXTUAL_ACCOUNT_PREFIX = Pattern.compile(
-            "(프로필|계정|아이디|profile|account|username|user\\s*id)\\b?"
+            "(프로필|계정|아이디|profile|account|username|user\\s*id)"
                     + "(\\s*[:：]?\\s*)(" + MIXED_ACCOUNT_IDENTIFIER + ")",
             Pattern.CASE_INSENSITIVE
     );
