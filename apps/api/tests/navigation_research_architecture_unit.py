@@ -778,6 +778,51 @@ def main() -> None:
     assert active_plan_scores["click:current-plan"][0] > active_plan_scores[
         "click:expired-content"
     ][0]
+    membership_change_gateway_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="navigate-up"),
+            0.2,
+            NavigationCandidate(candidate_id="navigate-up", label="위로 이동"),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="billing-management"),
+            0.3,
+            NavigationCandidate(
+                candidate_id="billing-management",
+                label="외부 결제 서비스에서 관리",
+                nearby_text="결제 수단",
+                parent_semantics="결제 수단 외부 결제 서비스에서 관리",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="search"),
+            0.2,
+            NavigationCandidate(candidate_id="search", label="검색"),
+        ),
+    ]
+    membership_change_gateway_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:navigate-up": (0.60, "model mistook reverse navigation for progress"),
+            "click:billing-management": (0.30, "model underestimated billing handoff"),
+            "click:search": (0.20, "unrelated utility"),
+        },
+        goal_id="membership.change",
+        enumerated=membership_change_gateway_actions,
+        screen_tokens=(
+            "premium",
+            "개인",
+            "멤버십",
+            "다음",
+            "결제일",
+            "결제",
+            "수단",
+        ),
+    )
+    assert membership_change_gateway_scores["click:billing-management"][0] >= 0.96
+    assert membership_change_gateway_scores["click:navigate-up"][0] <= 0.10
+    assert membership_change_gateway_scores["click:billing-management"][0] > (
+        membership_change_gateway_scores["click:navigate-up"][0]
+    )
     renewal_detail_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),

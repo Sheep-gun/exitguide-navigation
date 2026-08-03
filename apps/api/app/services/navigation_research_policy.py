@@ -147,6 +147,79 @@ def _has_active_membership_plan_semantics(
     return has_membership and has_lifecycle
 
 
+def _is_membership_change_management_gateway(
+    candidate: NavigationCandidate,
+) -> bool:
+    """Recognize a safe handoff into subscription or billing management.
+
+    Some providers do not expose an in-app ``change plan`` control.  Their
+    current-plan screen instead offers a bounded ``manage`` control next to
+    billing or payment-method context.  The control's own text must say that
+    it manages something; nearby billing text alone must never make an
+    unrelated toolbar or navigation control inherit this role.
+    """
+
+    primary = _candidate_primary_semantic_text(candidate)
+    context = " ".join(_candidate_semantic_text(candidate).split())
+    has_manage_action = any(
+        marker in primary
+        for marker in (
+            "관리",
+            "manage",
+            "management",
+        )
+    )
+    has_billing_or_subscription_context = any(
+        marker in context
+        for marker in (
+            "결제 수단",
+            "결제 관리",
+            "구독 관리",
+            "멤버십 관리",
+            "멤버쉽 관리",
+            "payment method",
+            "billing",
+            "manage subscription",
+            "subscription management",
+        )
+    )
+    return has_manage_action and has_billing_or_subscription_context
+
+
+def _has_active_membership_screen_context(screen_tokens: Sequence[str]) -> bool:
+    """Require grounded current-plan lifecycle evidence on the whole screen."""
+
+    text = " ".join(str(token).casefold() for token in screen_tokens)
+    has_membership = any(
+        marker in text
+        for marker in (
+            "멤버십",
+            "멤버쉽",
+            "구독",
+            "이용권",
+            "premium",
+            "membership",
+            "subscription",
+        )
+    )
+    has_lifecycle = any(
+        marker in text
+        for marker in (
+            "결제일",
+            "갱신일",
+            "다음 결제",
+            "현재 요금제",
+            "현재 플랜",
+            "next payment",
+            "next billing",
+            "renewal",
+            "current plan",
+            "active plan",
+        )
+    )
+    return has_membership and has_lifecycle
+
+
 def _is_safe_membership_join_entry_text(value: str) -> bool:
     """Recognize an obvious plan-selection entry, never a final purchase.
 
@@ -1505,6 +1578,7 @@ class AndroidWorldResearchPolicy:
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
+            screen_tokens=query.screen.tokens,
             renewal_boundary_visible=any(
                 is_membership_renewal_action_label(
                     str(candidate.get("label", ""))
@@ -1678,6 +1752,7 @@ class AndroidWorldResearchPolicy:
         scores: Mapping[str, tuple[float, str]],
         goal_id: str | None,
         enumerated: Sequence[EnumeratedAction],
+        screen_tokens: Sequence[str] = (),
         renewal_boundary_visible: bool = False,
     ) -> dict[str, tuple[float, str]]:
         """Use a control's own role instead of adjacent membership text."""
@@ -1731,6 +1806,36 @@ class AndroidWorldResearchPolicy:
                     "nearby membership text is not the control role; "
                     + reason,
                 )
+        if goal_id == "membership.change" and _has_active_membership_screen_context(
+            screen_tokens
+        ):
+            management_gateways = [
+                item
+                for item in click_items
+                if not item.candidate.selected
+                and _is_membership_change_management_gateway(item.candidate)
+            ]
+            if len(management_gateways) == 1:
+                gateway_key = _action_key(management_gateways[0].action)
+                gateway_score, gateway_reason = adjusted.get(gateway_key, (0.0, ""))
+                adjusted[gateway_key] = (
+                    max(gateway_score, 0.96),
+                    "python_membership_hub_affordance_guard: active membership "
+                    "lifecycle and a unique billing/subscription management gateway; "
+                    + gateway_reason,
+                )
+                for item in click_items:
+                    if not _is_reverse_navigation_candidate(item.candidate):
+                        continue
+                    key = _action_key(item.action)
+                    score, reason = adjusted.get(key, (0.0, ""))
+                    adjusted[key] = (
+                        min(score, 0.10),
+                        "python_membership_hub_affordance_guard: reverse navigation "
+                        "must not outrank the grounded membership-management gateway; "
+                        + reason,
+                    )
+                return adjusted
         if goal_id == "membership.cancel" and renewal_boundary_visible:
             # Reverse navigation is exposed as a bounded first-class action.
             # Prefer it even when the screen also exposes a clickable Up icon:
