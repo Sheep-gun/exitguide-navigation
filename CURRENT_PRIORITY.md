@@ -2,10 +2,10 @@
 
 status: verifying
 phase: implementation
-updated_at: 2026-08-03T18:43:16+09:00
-priority: Solar Pro 4 전환과 동적 화면 동일 실패 후보 반복 방지
+updated_at: 2026-08-03T19:10:19+09:00
+priority: 실기기에서 발견한 단독 `계정` 후보의 account.hub 역할 점수 누락 보정
 decision_db_collection: paused
-next_action: 회귀 테스트를 통과한 API·Executor 통합 커밋을 N100과 실기기에 배포한다.
+next_action: idempotent Decision DB alias patch를 백업된 N100 DB에 적용하고 Netflix 계정 후보 선택을 재검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16

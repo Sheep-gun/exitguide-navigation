@@ -31,6 +31,15 @@ def _load_migration_module():
     return module
 
 
+def _load_patch_module():
+    path = ROOT / "scripts" / "Apply-NavigationDecisionDbPatches.py"
+    spec = importlib.util.spec_from_file_location("navigation_decision_patches", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _seed_case(
     connection: sqlite3.Connection,
     memory: NavigationDecisionMemory,
@@ -132,6 +141,7 @@ def main() -> None:
         assert memory.normalize_goal("멤버쉽을 해지해 줘").goal_id == "membership.cancel"
         assert memory.normalize_goal("요금제를 변경하고 싶어").goal_id == "membership.change"
         assert memory.infer_affordance_role_scores("내 페이지")["account.hub"] == 1.0
+        assert memory.infer_affordance_role_scores("계정")["account.hub"] == 0.96
         assert memory.infer_affordance_role_scores(
             "전체메뉴 열기",
             negative_context="로그인 전체메뉴 열기",
@@ -440,6 +450,17 @@ def main() -> None:
             pass
         else:
             raise AssertionError("invalid transport/navigation conflation was accepted")
+
+        connection.execute(
+            "DELETE FROM affordance_role_aliases WHERE role_id='account.hub' AND locale='ko' AND normalized_alias='계정'"
+        )
+        connection.commit()
+        patch_module = _load_patch_module()
+        first_patch = patch_module.apply_patches(database)
+        second_patch = patch_module.apply_patches(database)
+        assert first_patch["inserted_aliases"] == 1
+        assert second_patch["unchanged_aliases"] == 1
+        assert memory.infer_affordance_role_scores("계정")["account.hub"] == 0.96
         assert connection.execute("PRAGMA quick_check").fetchone()[0] == "ok"
         connection.close()
     print("navigation_decision_memory_unit: ok")

@@ -244,6 +244,48 @@ def main() -> None:
         assert returned_observation.failure_class == ""
         assert returned_observation.candidate_forbidden is False
 
+        account_hub_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "account-hub-runtime.sqlite"),
+            policy=_policy(),
+        )
+        account_hub_decision = account_hub_runtime.decide(
+            DecideRequest(
+                request_id="request-account-hub-alias",
+                app_package="evaluation.account-hub.app",
+                locale="ko-KR",
+                goal_text="멤버십을 해지하고 싶어",
+                screen=ScreenObservation(
+                    app_package="evaluation.account-hub.app",
+                    window_title="프로필 관리",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="account",
+                            label="계정",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="app-settings",
+                            label="앱 설정",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="help",
+                            label="고객 센터",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert account_hub_decision.action.name == "click"
+        assert account_hub_decision.action.candidate_id == "account"
+        assert account_hub_decision.planner_provider in {
+            "semantic_intermediate_role_fast_path",
+            "decision_memory_fallback",
+        }
+
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
             store=NavigationRuntimeStore(temporary_path / "execution-failure-runtime.sqlite"),
