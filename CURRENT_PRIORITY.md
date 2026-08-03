@@ -1,18 +1,18 @@
 # ExitGuide Navigation Current Priority
 
-status: verifying
+status: completed
 phase: device_validation
-updated_at: 2026-08-03T20:08:00+09:00
-priority: EXAONE 4.5 tool arguments가 잘리지 않도록 VLM 입출력 규격 압축
-decision_db_collection: paused
-next_action: 압축된 VLM tool 규격을 N100에 배포하고 실제 애매한 X 화면에서 기존 candidate_id allowlist를 재검증한다.
+updated_at: 2026-08-03T20:35:50+09:00
+priority: 통합 완료 기록을 기준으로 Decision DB 수집 재개
+decision_db_collection: active
+next_action: Netflix `membership.cancel` 수집을 재개해 계정 화면 맨 아래의 해지 버튼을 발견하고 클릭 전 `stop_for_user`로 종료한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
-verification_completed_at: 2026-08-03T17:17:27+09:00
+verification_completed_at: 2026-08-03T20:35:50+09:00
 verified_device: Samsung SM-S936N, Android 16
-verified_apps: YouTube 21.31.524+1561190182; Netflix 9.76.0 build 10 64304+64304
+verified_apps: YouTube 21.31.524+1561190182; Netflix 9.76.0 build 10 64304+64304; X 12.12.0-release.0+312120000
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `adde9c4`
-deployed_commit: `adde9c4`
+integration_commit: `2b6e95f`
+deployed_commit: `2b6e95f`
 
 ## 작업 원칙
 
@@ -41,17 +41,17 @@ deployed_commit: `adde9c4`
    - status: passed
    - evidence: `docs/evidence/android-executor-device-20260803.log` — 클릭 3회 `screen_changed=true`, 실행 실패는 `false`
 4. 애매한 화면의 스크린샷이 VLM으로 전달됨
-   - status: pending
-   - evidence: `adde9c4`의 서버 요청 기반 2차 캡처 순서는 아직 실기기에서 재검증하지 않음
+   - status: passed
+   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — X step 0의 서버 요청 후 step 1에서 `perception_provider=exaone_4_5`, `visual_reobserve_required=false`
 5. VLM이 현재 화면에 존재하는 candidate_id만 반환함
-   - status: pending
-   - evidence: 조건 4의 `adde9c4` 실기기 재검증과 함께 확인 예정
+   - status: passed
+   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — 추천 ID `a11y_df9a5731b862a4339738`가 동일 step의 후보 목록에 존재함
 6. 실행 실패와 탐색 판단 실패가 별도로 기록됨
    - status: passed
    - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
 7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
    - status: passed
-   - evidence: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`; 설치 APK와 integration commit 빌드 SHA-256 일치
+   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`; API와 설치 APK 모두 `2b6e95f`, APK SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
    - dangerous_actions_auto_executed: 0
 
 ## 현재 통합 구현 테스트 결과
@@ -60,7 +60,7 @@ deployed_commit: `adde9c4`
 - Android Executor 단위 테스트: passed — `apps/android-executor/app/build/reports/tests/testDebugUnitTest/index.html`
 - Android Executor APK 빌드: passed — integration_commit에서 clean `assembleDebug`
 - ML Kit OCR 및 AndroidX 빌드: passed — clean Android build
-- 실기기 통합 검증: passed — `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
+- 실기기 통합 검증: passed — `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`, `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`
 - 위험 행동 자동 실행 0건: passed
 
 ## 격리 검증 근거
@@ -68,13 +68,15 @@ deployed_commit: `adde9c4`
 - isolated_api: `http://100.77.172.25:8101` — `ready=true`, integration_commit 일치
 - isolated_code: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/code`
 - isolated_runtime_db: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-runtime-v4.sqlite`
+- isolated_safety_replay_db: `/home/kyle/exitguide/runtime/executor-validation-2b6e95f/navigation-runtime-safety.sqlite`
 - android_device_log: `docs/evidence/android-executor-device-20260803.log`
 - navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log`
 - a100_vlm_log: `/workspace/exitguide-local/logs/exaone/server-20260803-165142.log` (`ready`, N100 영구 터널 경유 HTTP 200, 짧은 추론 1.221초)
 - a100_tunnel_service: N100 `exitguide-a100-vlm-tunnel.service` (`active`, 새 A100 port 30000 및 로컬 SSD 모델 연결)
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
 - netflix_tuning_report: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `E51F9D2D4D2E2F0EB63BE9AFB8DAAF124CA82B9E5D3DA84A8A3CE4D9BADDE2AE`
+- x_vlm_safety_report: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`
+- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
 
 ## 완료 및 재개 규칙
 
