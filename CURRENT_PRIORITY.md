@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
-status: completed
+status: verifying
 phase: device_validation
-updated_at: 2026-08-04T03:57:46+09:00
-priority: Build a frozen validation-only case DB for public-prior OFF/ON evaluation
+updated_at: 2026-08-04T04:18:30+09:00
+priority: TVING membership.join public-prior A/B evaluation
 decision_db_collection: paused
-next_action: Connect the phone and record isolated candidate-complete cases from a validation app (KB Insurance or NH Nonghyup Insurance); do not use collection apps or the locked holdout, and do not promote these validation observations into Decision DB.
+next_action: Deploy the TVING validation split and isolated public-prior OFF/ON API services, then verify both report ready before starting the Executor.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
@@ -56,6 +56,23 @@ deployed_commit: `c1a8466`
 - destination_reached: 1 (`Jeju Air / membership.join`)
 - dangerous_action_auto_executed: 0
 - validation_and_locked_holdout_results: not mixed into this collection matrix
+
+## TVING public-prior A/B
+
+- status: verifying
+- goal_id: `membership.join`
+- app_package: `net.cj.cjhv.gs.tving`
+- app_version: `26.31.02` (`versionCode=20263102`)
+- dataset_split: validation
+- existing_decision_runtime_gold_app_knowledge_records: 0
+- public_prior_tving_specific_records: 0
+- accessibility_setting_enabled: passed
+- accessibility_service_bound: passed
+- apk_reinstalled_for_this_evaluation: no
+- isolated_a_runtime: `/srv/exitguide/runtime/navigation-validation/tving/a/navigation-runtime-v1.sqlite`
+- isolated_b_runtime: `/srv/exitguide/runtime/navigation-validation/tving/b/navigation-runtime-v1.sqlite`
+- fixed_validation_cases: pending
+- evidence: `docs/evidence/tving-public-prior-ab-20260804.md`
 
 ## 작업 원칙
 

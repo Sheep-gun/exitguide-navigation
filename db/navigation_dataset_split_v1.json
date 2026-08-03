@@ -1,6 +1,6 @@
 {
-  "manifest_version": "navigation-app-split-v1-20260803",
-  "created_at": "2026-08-03T04:45:00+09:00",
+  "manifest_version": "navigation-app-split-v1-20260804-tving-validation",
+  "created_at": "2026-08-04T04:12:49+09:00",
   "split_policy": "app_disjoint_collection_validation_locked_holdout",
   "decision_db_audit": {
     "path_kind": "n100_navigation_decision_memory",
@@ -97,6 +97,15 @@
       "reason": "priority validation app reserved until installed",
       "existing_decision_cases": 0,
       "available_on_device": false,
+      "priority_app": true
+    },
+    {
+      "app_package": "net.cj.cjhv.gs.tving",
+      "app_name": "TVING",
+      "split": "validation",
+      "reason": "newly installed zero-record subscription-app validation target for public-prior OFF/ON evaluation",
+      "existing_decision_cases": 0,
+      "available_on_device": true,
       "priority_app": true
     },
     {

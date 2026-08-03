@@ -998,6 +998,11 @@ def main() -> None:
         )
         split_status = split_runtime.status()["dataset_split"]
         assert split_status["counts"]["locked_holdout"] == 3
+        assert split_status["counts"]["validation"] == 3
+        tving = split_manifest.entry_for("net.cj.cjhv.gs.tving")
+        assert tving is not None
+        assert tving.split == "validation"
+        assert tving.existing_decision_cases == 0
         assert split_runtime.store.status()["schema_version"] == 4
         assert len(split_runtime.store.dataset_split_manifest()) == len(split_manifest.entries)
         try:

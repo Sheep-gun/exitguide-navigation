@@ -1,0 +1,31 @@
+[Unit]
+Description=ExitGuide TVING validation B (public prior ON)
+After=network-online.target tailscaled.service exitguide-a100-vlm-tunnel.service
+Wants=network-online.target tailscaled.service exitguide-a100-vlm-tunnel.service
+
+[Service]
+Type=simple
+User=exitguide
+Group=exitguide-admin
+WorkingDirectory=/srv/exitguide/runtime/navigation-api-current-code/apps/api
+EnvironmentFile=/home/kyle/exitguide/secrets/navigation-api.env
+EnvironmentFile=-/srv/exitguide/secrets/navigation-planner.env
+Environment=NAVIGATION_RUNTIME_DB_PATH=/srv/exitguide/runtime/navigation-validation/tving/b/navigation-runtime-v1.sqlite
+Environment=NAVIGATION_DATASET_SPLIT_MANIFEST_PATH=/srv/exitguide/runtime/navigation-api-current-code/db/navigation_dataset_split_v1.json
+Environment=NAVIGATION_ALLOW_LOCKED_HOLDOUT=false
+Environment=NAVIGATION_PUBLIC_PRIOR_ENABLED=true
+Environment=NAVIGATION_PUBLIC_PRIOR_DB_PATH=/srv/exitguide/data/curated/navigation-service-v2/current/public-navigation-service-search.v4.sqlite
+Environment=NAVIGATION_PUBLIC_FAILURE_DB_PATH=/srv/exitguide/data/curated/navigation-service-v2/current/public-navigation-failure-analysis.v1.sqlite
+Environment=NAVIGATION_PUBLIC_TASK_DB_PATH=/srv/exitguide/data/curated/navigation-service-v2/current/navigation-service-task-knowledge.v1.sqlite
+Environment=NAVIGATION_PUBLIC_PRIOR_MAX_RESULTS=3
+ExecStart=/home/kyle/exitguide/runtime/navigation-api-current-venv/bin/uvicorn app.navigation_main:app --host 100.77.172.25 --port 8111
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/exitguide/runtime/navigation-validation/tving/b
+
