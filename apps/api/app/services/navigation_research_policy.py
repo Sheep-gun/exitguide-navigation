@@ -16,6 +16,7 @@ from app.navigation_contracts import (
 from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     is_dangerous_final_candidate,
+    is_membership_renewal_action_label,
     is_state_changing_action_label,
 )
 from app.services.navigation_model_clients import (
@@ -211,6 +212,8 @@ def _is_unrelated_membership_utility(candidate: NavigationCandidate) -> bool:
             "playlist",
             "watch history",
             "shorts",
+            "새로운 콘텐츠",
+            "new content",
         )
     )
 
@@ -1493,6 +1496,12 @@ class AndroidWorldResearchPolicy:
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
+            renewal_boundary_visible=any(
+                is_membership_renewal_action_label(
+                    str(candidate.get("label", ""))
+                )
+                for candidate in query.screen.candidate_payloads
+            ),
         )
         scores = self._apply_membership_profile_management_guard(
             scores=scores,
@@ -1660,6 +1669,7 @@ class AndroidWorldResearchPolicy:
         scores: Mapping[str, tuple[float, str]],
         goal_id: str | None,
         enumerated: Sequence[EnumeratedAction],
+        renewal_boundary_visible: bool = False,
     ) -> dict[str, tuple[float, str]]:
         """Use a control's own role instead of adjacent membership text."""
 
@@ -1698,6 +1708,23 @@ class AndroidWorldResearchPolicy:
                     "nearby membership text is not the control role; "
                     + reason,
                 )
+        if goal_id == "membership.cancel" and renewal_boundary_visible:
+            reverse_items = [
+                item
+                for item in click_items
+                if _is_reverse_navigation_candidate(item.candidate)
+            ]
+            if len(reverse_items) == 1:
+                key = _action_key(reverse_items[0].action)
+                score, reason = adjusted.get(key, (0.0, ""))
+                adjusted[key] = (
+                    max(score, 0.98),
+                    "python_membership_hub_affordance_guard: paid renewal boundary "
+                    "is not a cancellation destination; use the single grounded "
+                    "reverse-navigation control; "
+                    + reason,
+                )
+                return adjusted
         if len(active_plan_rows) == 1:
             active_key = _action_key(active_plan_rows[0].action)
             active_score, active_reason = adjusted.get(active_key, (0.0, ""))

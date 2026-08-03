@@ -750,6 +750,32 @@ def main() -> None:
     assert active_plan_scores["click:current-plan"][0] > active_plan_scores[
         "click:expired-content"
     ][0]
+    renewal_detail_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="navigate-up"),
+            0.2,
+            NavigationCandidate(candidate_id="navigate-up", label="위로 이동"),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="content-subscriptions"),
+            0.6,
+            NavigationCandidate(
+                candidate_id="content-subscriptions",
+                label="구독: 새로운 콘텐츠 이용 가능",
+            ),
+        ),
+    ]
+    renewal_detail_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:navigate-up": (0.20, "model underestimated recovery"),
+            "click:content-subscriptions": (0.60, "model confused content feed"),
+        },
+        goal_id="membership.cancel",
+        enumerated=renewal_detail_actions,
+        renewal_boundary_visible=True,
+    )
+    assert renewal_detail_scores["click:navigate-up"][0] >= 0.98
+    assert renewal_detail_scores["click:content-subscriptions"][0] <= 0.20
     deep_membership_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),

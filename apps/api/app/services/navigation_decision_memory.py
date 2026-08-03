@@ -128,21 +128,8 @@ DANGEROUS_FINAL_PHRASES = (
 # substrings in the whole candidate context.  For example, a harmless menu
 # can have "저장하기" in nearby text, while a button whose own label is
 # "저장하기" must stop for the user.
-STATE_CHANGING_ACTION_LABELS = frozenset(
+MEMBERSHIP_RENEWAL_ACTION_LABELS = frozenset(
     {
-        # Exact cancellation CTA labels are terminal safety boundaries even
-        # when the app omits an explicit "confirm" suffix.  Keep these exact
-        # so nearby text such as "해지 안내" does not block unrelated controls.
-        "멤버십 해지",
-        "구독 해지",
-        "구독 취소",
-        "이용권 해지",
-        "cancel membership",
-        "cancel subscription",
-        "unsubscribe",
-        # Renewal/resubscription CTAs can immediately restore a paid state.
-        # Keep these exact so read-only text such as "갱신일: 9월 3일" remains
-        # usable as current-plan evidence.
         "갱신",
         "갱신하기",
         "지금 갱신",
@@ -159,6 +146,24 @@ STATE_CHANGING_ACTION_LABELS = frozenset(
         "resubscribe",
         "resume membership",
         "resume subscription",
+    }
+)
+
+STATE_CHANGING_ACTION_LABELS = frozenset(
+    {
+        # Exact cancellation CTA labels are terminal safety boundaries even
+        # when the app omits an explicit "confirm" suffix.  Keep these exact
+        # so nearby text such as "해지 안내" does not block unrelated controls.
+        "멤버십 해지",
+        "구독 해지",
+        "구독 취소",
+        "이용권 해지",
+        "cancel membership",
+        "cancel subscription",
+        "unsubscribe",
+        # Renewal/resubscription CTAs can immediately restore a paid state.
+        # Keep these exact so read-only text such as "갱신일: 9월 3일" remains
+        # usable as current-plan evidence.
         "저장",
         "저장하기",
         "변경 저장",
@@ -173,7 +178,7 @@ STATE_CHANGING_ACTION_LABELS = frozenset(
         "apply",
         "apply changes",
         "submit",
-    }
+    }.union(MEMBERSHIP_RENEWAL_ACTION_LABELS)
 )
 
 GOAL_ROLE_PRIORS: dict[str, dict[str, float]] = {
@@ -1369,6 +1374,12 @@ def is_state_changing_action_label(label: str) -> bool:
     """Return true only when the candidate's own label commits a mutation."""
 
     return normalize_text(label) in STATE_CHANGING_ACTION_LABELS
+
+
+def is_membership_renewal_action_label(label: str) -> bool:
+    """Return true for an exact paid renewal or resubscription CTA."""
+
+    return normalize_text(label) in MEMBERSHIP_RENEWAL_ACTION_LABELS
 
 
 def tokenize(value: str) -> tuple[str, ...]:

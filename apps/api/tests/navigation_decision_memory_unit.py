@@ -18,6 +18,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     NavigationDecisionMemory,
     canonical_json,
     is_dangerous_final_candidate,
+    is_membership_renewal_action_label,
     is_state_changing_action_label,
     redact_text,
     contextual_account_identifiers,
@@ -41,6 +42,8 @@ def test_state_changing_action_labels_are_exact() -> None:
     assert is_state_changing_action_label("해지 안내") is False
     assert is_state_changing_action_label("갱신일: 9월 3일") is False
     assert is_state_changing_action_label("멤버십 갱신 안내") is False
+    assert is_membership_renewal_action_label("갱신") is True
+    assert is_membership_renewal_action_label("갱신일: 9월 3일") is False
 
 
 def test_profile_deletion_is_a_dangerous_final_candidate() -> None:
