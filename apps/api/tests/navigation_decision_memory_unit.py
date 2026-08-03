@@ -306,6 +306,48 @@ def main() -> None:
         )
         assert active_membership_screen.destination_match < active_threshold
 
+        split_cancel_menu = memory.retrieve(
+            goal_text="멤버십을 해지하고 싶어",
+            window_title="전체메뉴",
+            activity_name="android.view.View",
+            candidates=[
+                {
+                    "candidate_id": "order-cancel",
+                    "label": "취소 · 반품 · 교환 내역",
+                    "parent_semantics": "내 쇼핑 정보 주문내역",
+                    "role": "button",
+                },
+                {
+                    "candidate_id": "wow-membership",
+                    "label": "와우 멤버십",
+                    "parent_semantics": "결제 및 혜택 와우카드",
+                    "role": "button",
+                },
+            ],
+            top_k=0,
+        )
+        cancel_threshold = min(
+            float(item["threshold"])
+            for item in split_cancel_menu.destination_signatures
+        )
+        assert split_cancel_menu.destination_match < cancel_threshold
+
+        coherent_cancel_boundary = memory.retrieve(
+            goal_text="멤버십을 해지하고 싶어",
+            window_title="와우 멤버십 관리",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "cancel-membership",
+                    "label": "와우 멤버십 해지",
+                    "nearby_text": "다음 결제일 전까지 이용 가능",
+                    "role": "button",
+                }
+            ],
+            top_k=0,
+        )
+        assert coherent_cancel_boundary.destination_match >= cancel_threshold
+
         membership_menu = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",
             window_title="전체 메뉴",

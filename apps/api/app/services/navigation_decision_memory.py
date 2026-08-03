@@ -804,7 +804,12 @@ class NavigationDecisionMemory:
             all_evidence,
         )
         action_scores = self._score_non_click_actions(all_evidence)
-        destination_match = _destination_match(screen.tokens, signatures)
+        destination_match = _destination_match(
+            screen.tokens,
+            signatures,
+            title=screen.title,
+            candidate_payloads=screen.candidate_payloads,
+        )
         return DecisionMemoryQuery(
             goal=goal,
             screen=screen,
@@ -1197,19 +1202,36 @@ def _signature_payload(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
-def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, object]]) -> float:
+def _destination_match(
+    tokens: Sequence[str],
+    signatures: Sequence[dict[str, object]],
+    *,
+    title: str = "",
+    candidate_payloads: Sequence[Mapping[str, object]] = (),
+) -> float:
     # Function-role IDs (for example ``membership.plan``) are useful for
     # cross-app retrieval, but they are not screen evidence. Including them
     # here can satisfy both "membership" and "plan" without either word being
     # visible to the user.
     visible_tokens = {token for token in tokens if "." not in token}
 
-    def feature_present(value: object) -> bool:
+    def feature_present(value: object, region: set[str] | None = None) -> bool:
         # Screen tokens are stored as a sorted set, so phrase substring checks
         # lose the original word order.  A semantic feature is present when all
         # of its normalized tokens are visible on the screen.
         feature_tokens = set(tokenize(str(value)))
-        return bool(feature_tokens) and feature_tokens.issubset(visible_tokens)
+        return bool(feature_tokens) and feature_tokens.issubset(
+            visible_tokens if region is None else region
+        )
+
+    title_tokens = set(tokenize(title))
+    semantic_regions = [title_tokens]
+    for candidate in candidate_payloads:
+        candidate_context = " ".join(
+            str(candidate.get(field, ""))
+            for field in ("label", "icon_semantics", "nearby_text", "parent_semantics")
+        )
+        semantic_regions.append(title_tokens | set(tokenize(candidate_context)))
 
     best = 0.0
     for signature in signatures:
@@ -1224,6 +1246,16 @@ def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, obj
             if groups
             else 0.0
         )
+        required_cooccurs = (
+            len(groups) <= 1
+            or any(
+                all(
+                    any(feature_present(term, region) for term in group)
+                    for group in groups
+                )
+                for region in semantic_regions
+            )
+        )
         optional_values = list(optional) if isinstance(optional, list) else []
         optional_score = (
             sum(feature_present(term) for term in optional_values) / len(optional_values)
@@ -1235,6 +1267,8 @@ def _destination_match(tokens: Sequence[str], signatures: Sequence[dict[str, obj
         forbidden_values = list(forbidden) if isinstance(forbidden, list) else []
         forbidden_hit = any(feature_present(term) for term in forbidden_values)
         score = required_score * 0.70 + optional_score * 0.18 + float(terminal_score) * 0.12
+        if not required_cooccurs and forbidden_hit:
+            score *= 0.45
         if forbidden_hit:
             score *= 0.2
         best = max(best, score)
