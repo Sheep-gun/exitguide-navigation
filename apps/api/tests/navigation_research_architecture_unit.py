@@ -223,8 +223,17 @@ class ScriptedVisionClient:
             assert _kwargs["temperature"] == 0.0
             assert _kwargs["top_p"] == 1.0
             assert _kwargs["presence_penalty"] == 0.0
+            assert _kwargs["tool_choice"] == {
+                "type": "function",
+                "function": {"name": "annotate_navigation_screen"},
+            }
+            candidate_enum = _kwargs["tools"][0]["function"]["parameters"][
+                "properties"
+            ]["recommended_candidate_id"]["enum"]
+            assert candidate_enum == ["profile", "search", None]
             self.perception_calls += 1
-            return _response(
+            return _tool_response(
+                "annotate_navigation_screen",
                 {
                     "semantic_summary": "홈 하단에 계정 진입점이 있는 화면",
                     "candidate_annotations": [
@@ -238,7 +247,7 @@ class ScriptedVisionClient:
                         {"candidate_id": "invented-id", "icon_semantics": "환각 후보"},
                     ],
                     "recommended_candidate_id": "profile",
-                }
+                },
             )
         if "on-demand action reflector" in system:
             self.reflection_calls += 1

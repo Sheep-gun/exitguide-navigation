@@ -786,6 +786,8 @@ class Exaone45VisionClient:
         screen: ScreenObservation,
         screenshot_data_url: str,
     ) -> PerceptionOutput:
+        allowed_ids = {candidate.candidate_id for candidate in screen.candidates}
+        candidate_id_enum = sorted(allowed_ids)
         candidate_packet = [
             {
                 "candidate_id": candidate.candidate_id,
@@ -822,6 +824,60 @@ class Exaone45VisionClient:
                 "recommended_candidate_id": "one supplied ID or null",
             },
         }
+        tool_name = "annotate_navigation_screen"
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool_name,
+                    "description": (
+                        "Annotate the current Android screen using only candidate IDs supplied "
+                        "by the client. Never create coordinates or new candidates."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "semantic_summary": {"type": "string"},
+                            "candidate_annotations": {
+                                "type": "array",
+                                "maxItems": 8,
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "candidate_id": {
+                                            "type": "string",
+                                            "enum": candidate_id_enum,
+                                        },
+                                        "icon_semantics": {"type": "string"},
+                                        "nearby_text": {"type": "string"},
+                                        "parent_semantics": {"type": "string"},
+                                        "visual_role": {"type": "string"},
+                                        "visual_region": {"type": "string"},
+                                        "goal_relevance": {
+                                            "type": "number",
+                                            "minimum": 0.0,
+                                            "maximum": 1.0,
+                                        },
+                                    },
+                                    "required": ["candidate_id"],
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "recommended_candidate_id": {
+                                "type": ["string", "null"],
+                                "enum": [*candidate_id_enum, None],
+                            },
+                        },
+                        "required": [
+                            "semantic_summary",
+                            "candidate_annotations",
+                            "recommended_candidate_id",
+                        ],
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ]
         response = self.client.complete(
             messages=[
                 {
@@ -831,7 +887,7 @@ class Exaone45VisionClient:
                         "whole screen semantically and annotate only candidate IDs supplied by the "
                         "client. Emit at most 8 compact annotations and omit already-clear text "
                         "candidates. Never invent a candidate, coordinate, route, or action. "
-                        "Return strict JSON."
+                        "Return the result only through the required tool."
                     ),
                 },
                 {
@@ -842,12 +898,14 @@ class Exaone45VisionClient:
                     ],
                 },
             ],
-            max_tokens=900,
+            max_tokens=650,
             temperature=0.0,
             top_p=1.0,
             presence_penalty=0.0,
+            tools=tools,
+            tool_choice={"type": "function", "function": {"name": tool_name}},
         )
-        payload = _response_json(response)
+        payload = _response_json(response, expected_tool=tool_name)
         annotations = payload.get("candidate_annotations", [])
         if not isinstance(annotations, list):
             annotations = []
@@ -856,7 +914,6 @@ class Exaone45VisionClient:
             for annotation in annotations[:8]
             if isinstance(annotation, Mapping)
         }
-        allowed_ids = {candidate.candidate_id for candidate in screen.candidates}
         returned_ids = set(annotation_by_id)
         annotation_by_id = {
             candidate_id: annotation

@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T19:51:00+09:00
-priority: 서버 요청 기반 VLM 2차 재관찰 경로의 안전한 실기기 재검증
+updated_at: 2026-08-03T20:01:35+09:00
+priority: EXAONE 4.5 자유형 JSON을 candidate allowlist 강제 tool call로 교체
 decision_db_collection: paused
-next_action: collection 앱의 안전하고 실제로 애매한 화면에서 visual_reobserve_required 이후 EXAONE 4.5가 기존 candidate_id만 반환하는지 검증한다.
+next_action: 강제 VLM tool call 구현을 N100에 배포하고 실제 애매한 X 화면에서 기존 candidate_id allowlist를 재검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16
