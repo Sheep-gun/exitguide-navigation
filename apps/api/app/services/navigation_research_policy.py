@@ -327,6 +327,8 @@ class AndroidWorldResearchPolicy:
         fallback_semantically_resolved = False
         if fallback_used:
             resolved_key = self._resolve_structural_direct_candidate(
+                query=query,
+                plan=model_plan,
                 prior_values=prior_values,
                 enumerated=enumerated,
             )
@@ -417,6 +419,8 @@ class AndroidWorldResearchPolicy:
     def _resolve_structural_direct_candidate(
         self,
         *,
+        query: DecisionMemoryQuery | None = None,
+        plan: HierarchicalPlan | None = None,
         prior_values: Sequence[CandidateValue],
         enumerated: Sequence[EnumeratedAction],
     ) -> str | None:
@@ -428,6 +432,61 @@ class AndroidWorldResearchPolicy:
         """
 
         value_by_id = {value.candidate_id: value for value in prior_values}
+
+        # A malformed model response must not strand the agent when the
+        # current screen itself grounds exactly one obvious intermediate hub.
+        # This rescue is intentionally narrower than the regular fast path:
+        # it runs only after model failure, accepts only safe intermediate
+        # roles requested by the current hierarchy, and refuses ambiguity.
+        if query is not None and plan is not None:
+            target_roles = set(plan.target_roles) & SAFE_INTERMEDIATE_FAST_PATH_ROLES
+            payload_by_id = {
+                str(payload.get("candidate_id", "")): payload
+                for payload in query.screen.candidate_payloads
+            }
+            grounded: list[str] = []
+            for item in enumerated:
+                if item.action.name != "click" or item.candidate is None:
+                    continue
+                candidate = item.candidate
+                value = value_by_id.get(candidate.candidate_id)
+                payload = payload_by_id.get(candidate.candidate_id, {})
+                role_scores = payload.get("function_role_scores", {})
+                semantic_text = " ".join(
+                    (
+                        candidate.label,
+                        candidate.icon_semantics,
+                        candidate.nearby_text,
+                        candidate.parent_semantics,
+                    )
+                )
+                if (
+                    value is None
+                    or value.forbidden
+                    or value.risk_level != "low"
+                    or candidate.risk_level != "low"
+                    or not candidate.clickable
+                    or not candidate.enabled
+                    or candidate.selected
+                    or bool(payload.get("dangerous_final", False))
+                    or not bool(payload.get("clickable", True))
+                    or not bool(payload.get("enabled", True))
+                    or bool(payload.get("selected", False))
+                    or is_dangerous_final_candidate(semantic_text)
+                    or not isinstance(role_scores, Mapping)
+                    or not any(
+                        float(role_scores.get(role, 0.0))
+                        >= SEMANTIC_FAST_PATH_ROLE_FLOOR
+                        for role in target_roles
+                    )
+                ):
+                    continue
+                grounded.append(f"click:{candidate.candidate_id}")
+            if len(grounded) == 1:
+                return grounded[0]
+            if len(grounded) > 1:
+                return None
+
         ranked: list[tuple[tuple[int, int, float], str]] = []
         for item in enumerated:
             if item.action.name != "click" or item.candidate is None:

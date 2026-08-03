@@ -1069,6 +1069,81 @@ def main() -> None:
         ],
     )
     assert structurally_resolved == "click:members-entry"
+    malformed_model_rescue = selective_policy._resolve_structural_direct_candidate(
+        query=conflict_query,
+        plan=HierarchicalPlan(
+            goal_id="membership.cancel",
+            stage="hub_discovery",
+            target_roles=["membership.hub", "account.hub"],
+            immediate_subgoal="open the account or membership hub",
+            expected_outcome="membership controls become visible",
+            completion_rule="choose one safe intermediate hub",
+            source="decision_memory_fallback",
+        ),
+        prior_values=[conflicted_value],
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="my-page"),
+                conflicted_value.final_score,
+                NavigationCandidate(
+                    candidate_id="my-page",
+                    label="My page",
+                    role="button",
+                    risk_level="low",
+                ),
+            ),
+            EnumeratedAction(NavigationAction(name="wait_and_observe"), 0.12, None),
+        ],
+    )
+    assert malformed_model_rescue == "click:my-page"
+    ambiguous_rescue_query = replace(
+        conflict_query,
+        screen=replace(
+            conflict_query.screen,
+            candidate_payloads=(
+                *conflict_query.screen.candidate_payloads,
+                {
+                    "candidate_id": "account",
+                    "label": "Account",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "function_role_scores": {"account.hub": 1.0},
+                },
+            ),
+        ),
+    )
+    assert selective_policy._resolve_structural_direct_candidate(
+        query=ambiguous_rescue_query,
+        plan=HierarchicalPlan(
+            goal_id="membership.cancel",
+            stage="hub_discovery",
+            target_roles=["account.hub"],
+            immediate_subgoal="open account hub",
+            expected_outcome="membership controls become visible",
+            completion_rule="choose one safe intermediate hub",
+            source="decision_memory_fallback",
+        ),
+        prior_values=[
+            conflicted_value,
+            conflicted_value.model_copy(update={"candidate_id": "account"}),
+        ],
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="my-page"), 0.0,
+                NavigationCandidate(
+                    candidate_id="my-page", label="My page", role="button",
+                    risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="account"), 0.0,
+                NavigationCandidate(
+                    candidate_id="account", label="Account", role="button",
+                    risk_level="low",
+                ),
+            ),
+        ],
+    ) is None
     near_tie_values = [
         high_confidence_values[0],
         high_confidence_values[1].model_copy(
