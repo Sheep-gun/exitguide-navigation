@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T19:45:00+09:00
-priority: Accessibility 우선 판단 후 필요할 때만 VLM을 호출하는 2단계 실기기 검증
+updated_at: 2026-08-03T19:51:00+09:00
+priority: 서버 요청 기반 VLM 2차 재관찰 경로의 안전한 실기기 재검증
 decision_db_collection: paused
-next_action: 동일 커밋의 Navigation API와 Executor APK를 배포한 뒤 Netflix 계정 WebView의 VLM 없는 제한 스크롤과 해지 후보 앞 정지를 검증한다.
+next_action: collection 앱의 안전하고 실제로 애매한 화면에서 visual_reobserve_required 이후 EXAONE 4.5가 기존 candidate_id만 반환하는지 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16
-verified_apps: YouTube 21.31.524+1561190182
+verified_apps: YouTube 21.31.524+1561190182; Netflix 9.76.0 build 10 64304+64304
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
-deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
+integration_commit: `adde9c4`
+deployed_commit: `adde9c4`
 
 ## 작업 원칙
 
@@ -41,17 +41,17 @@ deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
    - status: passed
    - evidence: `docs/evidence/android-executor-device-20260803.log` — 클릭 3회 `screen_changed=true`, 실행 실패는 `false`
 4. 애매한 화면의 스크린샷이 VLM으로 전달됨
-   - status: passed
-   - evidence: `docs/evidence/android-executor-device-20260803.log` — `visual_context ready`, `visualScreenshot=true`, `perception=exaone_4_5`
+   - status: pending
+   - evidence: `adde9c4`의 서버 요청 기반 2차 캡처 순서는 아직 실기기에서 재검증하지 않음
 5. VLM이 현재 화면에 존재하는 candidate_id만 반환함
-   - status: passed
-   - evidence: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` — 기존 후보 27개 중 8개 ID 주석, 수용된 외부 ID 0개
+   - status: pending
+   - evidence: 조건 4의 `adde9c4` 실기기 재검증과 함께 확인 예정
 6. 실행 실패와 탐색 판단 실패가 별도로 기록됨
    - status: passed
    - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
 7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
    - status: passed
-   - evidence: 설치 APK SHA-256과 integration commit 빌드 해시 일치, `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
+   - evidence: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`; 설치 APK와 integration commit 빌드 SHA-256 일치
    - dangerous_actions_auto_executed: 0
 
 ## 현재 통합 구현 테스트 결과
@@ -73,7 +73,8 @@ deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
 - a100_vlm_log: `/workspace/exitguide-local/logs/exaone/server-20260803-165142.log` (`ready`, N100 영구 터널 경유 HTTP 200, 짧은 추론 1.221초)
 - a100_tunnel_service: N100 `exitguide-a100-vlm-tunnel.service` (`active`, 새 A100 port 30000 및 로컬 SSD 모델 연결)
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `9904EC6F102ADA2DC12FD30C7110BC49B043ED4C6ACE694B64C8EE876A16F44A`
+- netflix_tuning_report: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`
+- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `E51F9D2D4D2E2F0EB63BE9AFB8DAAF124CA82B9E5D3DA84A8A3CE4D9BADDE2AE`
 
 ## 완료 및 재개 규칙
 
