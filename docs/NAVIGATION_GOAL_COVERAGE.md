@@ -42,9 +42,9 @@
 - YouTube `membership.join`은 이미 가입된 상태를 확인한 경계 사례다.
 - Netflix·YouTube `membership.cancel`은 중간 전이 근거가 있지만 완료로 세지 않는다.
 - Netflix `membership.join` 렌더링 오류는 탐색 실패나 `not_supported`가 아니다.
-- TVING `membership.join`은 공개 Prior OFF/ON 효과 검증용 `validation` 결과다. 공개
-  Prior 자체는 개선되지 않았고, OFF 상태에서 범용 Destination Signature와 Runtime
-  검증 규칙을 좁게 수정한 뒤 목적지 도달을 확인했다. 이 행은 collection 성공률이나
-  App Knowledge 승격에 섞지 않는다.
-- 이 표만으로 범용 성능 개선을 주장할 수 없으며, 검증 앱의 고정 A/B 사례는 별도로
-  구축해야 한다.
+- TVING `membership.join`은 `validation` 결과다. 과거 OFF/ON 비교에서 공개 Prior의
+  개선은 입증되지 않았지만, 이후 공개 Prior가 켜진 B를 고정 아키텍처로 선택했다.
+  범용 Destination Signature와 Runtime 검증 규칙을 수정한 뒤 목적지 도달을
+  확인했으며 이 행은 collection 성공률이나 App Knowledge 승격에 섞지 않는다.
+- 과거 A/B 결과는 검색 오류 진단 자료로만 보존한다. 이후 평가는 B의 절대 지표와
+  고정 replay 및 locked holdout 회귀로 수행한다.

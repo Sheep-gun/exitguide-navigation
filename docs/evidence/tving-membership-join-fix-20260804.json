@@ -9,8 +9,9 @@
   "goal_id": "membership.join",
   "public_prior": {
     "ab_improvement_proven": false,
-    "selected_runtime_setting": "disabled",
-    "conclusion": "no_proven_improvement_do_not_expand_or_activate"
+    "selected_runtime_setting": "enabled_b_fixed_architecture",
+    "winner_selection_from_ab": false,
+    "conclusion": "b_selected_as_architecture; historical_ab_did_not_prove_improvement; fix_retrieval_errors_inside_b"
   },
   "databases": {
     "frozen_cases_sha256": "0b324ded48d81d5a024fdf330688f5aaa5108c1a0ddddf26ab3907e3c8dfad82",

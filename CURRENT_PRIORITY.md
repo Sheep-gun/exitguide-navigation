@@ -2,175 +2,145 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T05:40:04+09:00
-priority: TVING membership.join public-prior A/B evaluation
+updated_at: 2026-08-04T08:45:00+09:00
+priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: paused
-next_action: Commit the verified TVING fix, deploy the same commit with public prior OFF, and verify production 8100 readiness without changing the preserved source DB.
-verification_started_at: 2026-08-03T10:30:41+09:00
-verification_completed_at: 2026-08-03T22:10:05+09:00
+next_action: B 고정 설정을 커밋·배포하여 N100 운영 8100의 public_prior.enabled=true와 배포 커밋 일치를 확인한다.
+verification_started_at: 2026-08-04T08:45:00+09:00
+verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
-verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000
+verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `c1a8466`
-deployed_commit: `c1a8466`
+integration_commit: `b94de671f121a06d54f2fd5437cf292d6aa48147`
+deployed_commit: `b94de671f121a06d54f2fd5437cf292d6aa48147`
+
+## 고정 정책
+
+- architecture: `B fixed`
+- public_navigation_prior: `enabled`가 목표이며 현재 운영 확인값은 `false`
+- ab_winner_comparison: `disabled`
+- evaluation_basis: B 절대 지표, 고정 replay, locked holdout 회귀
+- public_role: Planner/Solar 참고 근거만 허용
+- runtime_execution_allowed_for_public_data: false
+- canonical_promotion_allowed_for_public_data: false
+- arbitrary_coordinate_click: forbidden
+- AndroidControl_runtime_use: forbidden
+- Gold_path_replay: forbidden
+- dangerous_action_auto_execution: forbidden
+
+과거 TVING OFF/ON 수치는 삭제하지 않고 검색 오류 진단 자료로만 보존한다. A를 기준선이나
+승자로 사용하지 않으며, 무관 검색과 오판은 공개 Prior를 끄지 않고 B 내부에서 수정한다.
+
+## 전체 커버리지 목표
+
+- 대상: 사용자 지정 10개 앱 + TVING
+- 목표: `account.signup`, `account.delete`, `membership.join`, `membership.change`, `membership.cancel`
+- 완료 단위: 11개 앱 × 5개 목표 = 55셀
+- 완료 상태: `destination_reached`, `safe_boundary_reached`, 근거 있는 `not_supported`, 근거 있는 `not_testable`
+- 미완료 상태: `not_explored`, `in_progress`, 임시 연결·환경 오류
+- locked holdout: Instagram, Postype, ChatGPT
+- validation: TVING
+- split_manifest: 기존 고정 manifest를 우선하며 7 collection / 3 locked holdout / 1 TVING validation 목표와의 차이는 Runtime 오염 없이 별도 정합화한다.
+- coverage_source: `db/navigation_goal_coverage_v1.json`
+- coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
+- current_coverage_scope: 4/11 앱이 문서화됨; 55셀 전체 확장 필요
+
+holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
+
+## N100 운영 상태 — 2026-08-04 확인
+
+- service: `exitguide-navigation-api.service`, active
+- endpoint: `http://100.77.172.25:8100`
+- ready: true
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-b94de67`
+- deployed_git_head: `b94de671f121a06d54f2fd5437cf292d6aa48147`
+- public_prior.enabled: false — 새 B 고정 목표와 불일치, 다음 배포에서 true로 수정
+- Decision DB: read-only patched immutable clone
+- Runtime DB: sessions 113, decisions 393, observations 355
+- production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
+- production split counts: collection 8, validation 2, locked_holdout 3
+- planner: Solar Pro 4 selective, Solar Pro 3 fallback, EXAONE 4.5 selective
 
 ## Promotion pipeline v2
 
 - implementation_commit: `0bdc4efbe8506673328537534cc9020a1192e9a1`
-- deployed_code: `/home/kyle/exitguide/runtime/navigation-promotion-pipeline-0bdc4ef`
 - generation_id: `generation_92648fdee0389cc62a911ac4`
-- generation_dir: `/home/kyle/exitguide/runtime/promotion-pipeline-v2-staging-20260804/generations/generation_92648fdee0389cc62a911ac4`
-- n100_unit_test: passed — `/home/kyle/exitguide/runtime/promotion-pipeline-v2-staging-20260804/n100-unit-test.log`
-- n100_projection: passed — 88→88 cases, `runtime_db_accessed=false`, `quick_check=ok`, foreign-key errors 0
-- operating_decision_db_changed: no
-- activation_status: not attempted — validation apps currently have 0 verified cases
-- unresolved_provenance: 11 older `uxa_*` real-device rows remain preserved but need their original common episode artifacts
+- runtime_to_episode: implemented
+- knowledge_promotion_contract: implemented
+- independent_app_knowledge_generation: implemented
+- Decision projection: implemented
+- production Decision DB changed by staging validation: no
+- unresolved_provenance: 기존 `uxa_*` 실기기 행 11개는 원본 common episode 근거가 필요해 보존 상태
 
-## Public navigation prior integration
+collection 경험은 다음 경로만 사용한다.
 
-- n100_source_commit: `b48af5aa1ef7812596ab67ac731c9398a0fe4238`
-- local_integration_branch: `agent/public-prior-integration`
-- github_and_n100_deployed_commit: `60184a1b554e51dfcf6e70782e63b3d1619d6a9c`
-- n100_service_status: active, ready=true
-- operating_decision_db_sha256: `14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a`
-- public_role: planner advisory context only
-- runtime_execution_allowed: false
-- canonical_promotion_allowed: false
-- task_contract: `navigation-task-knowledge.v1.schema.json`
-- task_contract_validation: passed, 570/570 rows and 570 unique task IDs
-- irrelevant_task_gate: passed; a service category alone cannot inject a task whose goal text is unrelated
-- deployed_membership_cancel_audit: 3 service hints, 0 failure hints, 0 task hints
-- n100_warning_log: no entries since deployment
-- api_unit_tests: passed, 9/9 files
-- fixed_validation_cases: 0
-- improvement_claim: not permitted until the frozen validation OFF/ON A/B gate passes
-- evidence: `docs/evidence/navigation-public-prior-integration-audit-20260804.md`
+`Runtime DB → interaction-episode.v1 → knowledge-promotion.v1 → 반복 검증/승인 → App Knowledge generation → Decision DB projection`
 
-## Goal coverage tracking
+Runtime DB에서 Decision DB로 직접 삽입하지 않는다.
 
-- human_readable_matrix: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- machine_readable_source: `db/navigation_goal_coverage_v1.json`
-- contract: `db/navigation_goal_coverage_v1.schema.json`
-- validator: `scripts/Validate-NavigationGoalCoverage.py`
-- current_scope: 3 collection apps, 5 goals per app, 15 cells
-- destination_reached: 1 (`Jeju Air / membership.join`)
-- dangerous_action_auto_executed: 0
-- validation_and_locked_holdout_results: not mixed into this collection matrix
+## TVING validation 근거
 
-## TVING public-prior A/B
-
-- status: verifying
 - goal_id: `membership.join`
 - app_package: `net.cj.cjhv.gs.tving`
-- app_version: `26.31.02` (`versionCode=20263102`)
-- dataset_split: validation
-- existing_decision_runtime_gold_app_knowledge_records: 0
-- public_prior_tving_specific_records: 0
-- accessibility_setting_enabled: passed
-- accessibility_service_bound: passed
-- apk_reinstalled_for_this_evaluation: no
-- isolated_a_runtime: `/srv/exitguide/runtime/navigation-validation/tving/a/navigation-runtime-v1.sqlite`
-- isolated_b_runtime: `/srv/exitguide/runtime/navigation-validation/tving/b/navigation-runtime-v1.sqlite`
-- isolated_a_service: passed (`ready=true`, public prior disabled, validation apps 3)
-- isolated_b_service: passed (`ready=true`, public prior enabled, validation apps 3)
-- device_tunnel: passed (`device tcp:8100` -> local `18110` -> N100 `8110`)
-- fixed_validation_cases: passed — 4 cases, A/B payload SHA identical
-- fixed_validation_db_sha256: `0b324ded48d81d5a024fdf330688f5aaa5108c1a0ddddf26ab3907e3c8dfad82`
-- a_frozen_accuracy: 0.25
-- b_frozen_accuracy: 0.25
-- public_prior_effect: not proven; B added irrelevant evidence and did not improve any fixed action
-- real_device_a: destination not reached; repeated down-scroll 2; wrong click 0
-- real_device_b: destination not reached; settings wrong click 1
-- selected_public_prior_setting: disabled
-- patched_validation_decision_db_sha256: `3891d4cc4d44b10d5363e0134937eab215663f115cb0809d9e232bead82fd9c1`
-- patched_frozen_accuracy: 0.50; first-action accuracy 1.00; dangerous auto click 0
-- corrected_real_device_session: `navs_b83930dda4a74ab6a472a1e4735b468f`
-- corrected_real_device_result: `reached` at match 0.8425; candidate-ID clicks 2; dangerous auto click 0
-- safety_regression_history: intermediate build clicked newly classified boundary CTA once; no subscription/payment occurred; final build 0
-- api_unit_tests: passed, 10/10
+- corrected_session: `navs_b83930dda4a74ab6a472a1e4735b468f`
+- result: destination reached, match 0.8425
+- candidate-ID clicks: 2
+- final dangerous auto click: 0
+- historical frozen OFF accuracy: 0.25
+- historical frozen ON accuracy: 0.25
+- historical_public_prior_improvement_proven: false
+- runtime_winner_selection_from_ab: false
+- patched Decision DB SHA-256: `3891d4cc4d44b10d5363e0134937eab215663f115cb0809d9e232bead82fd9c1`
+- original Decision DB preserved SHA-256: `14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a`
+- API unit tests: 10/10 passed
+- promotion_allowed: false
 - evidence: `docs/evidence/tving-public-prior-ab-20260804.md`
 
-## 작업 원칙
+남은 TVING 복구 실패 사례는 `tving_my_bottom_recover_up`, `tving_settings_recover_back`이다.
+이 사례는 B 내부 Retriever/복구 로직 수정 대상으로 보존한다.
 
-- 기존 앱 원본은 읽기 전용으로 감사한다.
-- 기존 Runtime DB, Decision DB, Gold, AndroidControl 및 수집 결과는 변경하거나 삭제하지 않는다.
-- AndroidControl DB, Gold 경로 재생, 앱별 하드코딩 및 좌표 클릭은 신규 런타임에 이관하지 않는다.
-- `status: completed`가 되기 전에는 Decision DB 수집을 재개하지 않는다.
-- 최초 통합 검증은 별도 격리 Runtime DB에만 기록하고 실제 학습 경험으로 반입하지 않는다.
+## Android Executor와 APK 재설치 규칙
 
-## 기능 이관 상태
+기존 Android 통합의 최초 7개 조건은 모두 passed이며 관련 코드·APK가 바뀌지 않으면
+반복 검증하지 않는다.
 
-- 기존 앱 감사 원본: `../exitguide-navigation/apps/mobile/plugins/withExitGuideOverlay.js`
-- 기능별 대응표: `docs/EXITGUIDE_EXECUTOR_REUSE_MAPPING.md`
-- 이관 연결부 구현: 완료, 실기기 검증 대기
-- 최초 실기기 통합 검증: 완료
+APK 재설치 또는 교체 후 `scripts/Install-NavigationExecutor.ps1`을 실행하여 접근성
+서비스를 자동 복원하고 실제 바인딩까지 확인한 뒤 탐색을 재개한다.
 
-## 최초 완료 조건
+스크립트는 다음을 사용자 수동 조작 없이 확인해야 한다.
 
-1. Accessibility 후보가 정상적으로 수집됨
-   - status: passed
-   - evidence: `docs/evidence/android-executor-device-20260803.log` — nodes=82, candidates=22 및 nodes=113, candidates=27
-2. candidate_id 기반 클릭이 실제로 실행됨
-   - status: passed
-   - evidence: `docs/evidence/android-executor-device-20260803.log` — 입력 후보 집합에 존재하는 ID로 3회 클릭 성공
-3. 행동 전후 화면 변화가 검증됨
-   - status: passed
-   - evidence: `docs/evidence/android-executor-device-20260803.log` — 클릭 3회 `screen_changed=true`, 실행 실패는 `false`
-4. 애매한 화면의 스크린샷이 VLM으로 전달됨
-   - status: passed
-   - evidence: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md` — 최신 APK 격리 세션에서 `visual_context ready`, `perception=exaone_4_5`, `visualScreenshot=true`
-5. VLM이 현재 화면에 존재하는 candidate_id만 반환함
-   - status: passed
-   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — 추천 ID `a11y_df9a5731b862a4339738`가 동일 step의 후보 목록에 존재함; 최신 마스킹 변경은 ID를 보존하며 Android/API 단위 테스트 통과
-6. 실행 실패와 탐색 판단 실패가 별도로 기록됨
-   - status: passed
-   - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
-7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
-   - status: passed
-   - evidence: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md`; API와 APK 모두 `36a4abe`, APK SHA-256 `70C14240B60029D2C1FD76A84E66BCA15DFD435C22E4839DDECE82E04026CDB1`
-   - dangerous_actions_auto_executed: 0
+1. 단일 authorized ADB 기기
+2. 기존 접근성 서비스 목록 보존
+3. ExitGuide AccessibilityService enabled
+4. `dumpsys accessibility` 실제 bound
+5. Accessibility 노드 수집
+6. candidate_id 생성
+7. Navigation API 연결과 행동 전후 관찰 준비
 
-## 현재 통합 구현 테스트 결과
+OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했을 때만 사용자 조작을 요청한다.
 
-- Navigation API 단위 테스트: passed — `36a4abe`에서 관련 전체 5개 및 개인정보 저장 경계 회귀 테스트
-- Android Executor 단위 테스트: passed — `apps/android-executor/app/build/reports/tests/testDebugUnitTest/index.html`
-- Android Executor APK 빌드: passed — integration_commit에서 clean `assembleDebug`
-- ML Kit OCR 및 AndroidX 빌드: passed — clean Android build
-- 실기기 통합 검증: passed — `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`, `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`
-- 위험 행동 자동 실행 0건: passed
+## 안전 불변조건
 
-## 격리 검증 근거
+- 허용 행동: `click(candidate_id)`, `scroll(direction)`, `back()`, `wait_and_observe()`, `stop_for_user()`
+- 최종 탈퇴·해지·결제·구독·개인정보 제출·로그인 정보 입력·약관 동의·외부 전송은 자동 실행하지 않는다.
+- 위험 경계에서는 `stop_for_user()`를 반환한다.
+- 연결 오류는 탐색 실패, 후보 없음, `not_supported`, `not_testable`로 기록하지 않는다.
+- 모델이 반환한 candidate_id는 현재 화면 후보 집합에 실제 존재해야 한다.
 
-- isolated_api: `http://100.77.172.25:8101` — `ready=true`, integration_commit 일치
-- isolated_code: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/code`
-- isolated_runtime_db: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-runtime-v4.sqlite`
-- isolated_safety_replay_db: `/home/kyle/exitguide/runtime/executor-validation-2b6e95f/navigation-runtime-safety.sqlite`
-- android_device_log: `docs/evidence/android-executor-device-20260803.log`
-- navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log`
-- a100_vlm_log: `/workspace/exitguide-local/logs/exaone/server-20260803-165142.log` (`ready`, N100 영구 터널 경유 HTTP 200, 짧은 추론 1.221초)
-- a100_tunnel_service: N100 `exitguide-a100-vlm-tunnel.service` (`active`, 새 A100 port 30000 및 로컬 SSD 모델 연결)
-- device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
-- netflix_tuning_report: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`
-- x_vlm_safety_report: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`
-- privacy_revalidation_report: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md`
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `70C14240B60029D2C1FD76A84E66BCA15DFD435C22E4839DDECE82E04026CDB1`
+## 완료 판정
 
-## 완료 및 재개 규칙
+다음이 모두 증명될 때만 `status: completed`로 변경한다.
 
-- 7개 조건이 모두 `passed`이고 `integration_commit`, APK 빌드 커밋, `deployed_commit`가 일치할 때만 `status: completed`로 변경한다.
-- 하나라도 `pending` 또는 `failed`이면 `status: verifying`을 유지한다.
-- 외부 연결 또는 기기 문제로 검증 자체가 불가능할 때만 `status: blocked`로 변경하고 원인을 기록한다.
-- `completed`: 완료 조건을 반복 시험하지 않고 Decision DB 수집을 계속한다.
-- `verifying`: DB 수집을 금지하고 `next_action`부터 계속한다.
-- `blocked`: 기록된 차단 원인을 먼저 해결한다.
+1. 55셀에 `not_explored` 또는 `in_progress`가 없음
+2. 모든 `not_supported`와 `not_testable`에 실기기·UI 근거가 있음
+3. collection 7개, locked holdout 3개, TVING validation이 분리됨
+4. holdout과 TVING 데이터가 승격되지 않음
+5. collection 경험이 표준 승격 파이프라인을 거침
+6. 최신 B 코드와 N100 배포 커밋이 일치함
+7. 공개 Navigation DB가 활성화됨
+8. APK 재설치 시 접근성 자동 복원과 실제 바인딩이 검증됨
+9. 커버리지 JSON과 문서가 최신 상태임
+10. 위험 행동 자동 실행 0건
+11. 최종 B 절대 지표와 실패 분석 보고서가 작성됨
 
-다음 경우에만 영향을 받는 완료 조건을 다시 시험한다.
-
-- AccessibilityService 또는 후보 추출 코드 변경
-- Executor 또는 화면 변화 관찰 코드 변경
-- OCR/VLM 연동 코드 변경
-- APK 구현 교체
-- 완료 기록과 실제 APK/API 배포 커밋 불일치
-- 실기기 기능 회귀 발견
-
-컨텍스트 압축, 새 세션, 문서 수정, DB 데이터 추가는 재시험 사유가 아니다.
+완료 전에는 목표를 축소하거나 일부 앱 성공을 전체 완료로 간주하지 않는다.

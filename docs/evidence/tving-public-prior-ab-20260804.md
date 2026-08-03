@@ -2,10 +2,16 @@
 
 ## 결론
 
-공개 Navigation Prior의 효과는 확인되지 않았다. 동일한 고정 화면 4건에서 A(공개
-Prior OFF)와 B(ON)의 정확도는 모두 `1/4 = 0.25`였고, B의 실기기 탐색에서는 오히려
-`settings`를 잘못 눌러 역행했다. 따라서 공개 Prior는 확대·자동 승격·직접 실행에
-사용하지 않으며 운영 설정은 OFF가 원칙이다.
+이 문서의 A/B 수치는 과거 진단 결과로만 보존한다. 동일한 고정 화면 4건에서 A(공개
+Prior OFF)와 B(ON)의 정확도는 모두 `1/4 = 0.25`였고, B의 실기기 탐색에서는
+`settings`를 잘못 눌러 역행했다. 이 작은 사례로 A를 승자로 선택하면 현재 평가 화면에
+맞춘 승자 편향이 생길 수 있으므로 런타임 선택 근거로 사용하지 않는다.
+
+이후 운영 결정은 **대량 공개 Navigation DB가 활성화된 B를 고정 아키텍처로 사용**하는
+것이다. 공개 Prior는 계속 Solar/Planner의 참고 근거일 뿐 자동 승격·직접 실행·후보
+생성 권한이 없다. 무관 검색과 오판은 공개 Prior를 끄지 않고 B 내부의 Retriever,
+관련성 필터, 후보 평가와 복구 규칙을 수정해 해결한다. 앞으로 평가는 A 대비 승패가
+아니라 B의 절대 정확도·안전성·고정 replay·locked holdout 회귀로 수행한다.
 
 이 실패 뒤 공개 데이터를 더 쌓지 않고, TVING에 한정되지 않은 두 가지 좁은 수정을
 했다. 첫째, `이용권을 구매하세요`처럼 유일하고 명시적인 비최종 가입 진입 후보를
@@ -73,8 +79,10 @@ OsmAnd 즐겨찾기 계열이었다. 다음 행동은 하나도 개선되지 않
 - Solar Pro 4가 두 조건 모두에서 잘못된 JSON을 반환한 호출은 동일하게 Solar Pro 3로
   failover됐다. 모델 경로 차이로 B를 유리하게 해석하지 않았다.
 
-따라서 `docs/evidence/tving-public-prior-compare-20260804.json`의 결론은
-`no_proven_improvement_do_not_expand_or_activate`이며 `passed=false`다.
+따라서 `docs/evidence/tving-public-prior-compare-20260804.json`의 역사적 측정 결론은
+`no_proven_improvement_do_not_expand_or_activate`이며 `passed=false`다. 다만 이
+측정은 더 이상 런타임 승자 선택에 사용하지 않으며 JSON에도
+`used_for_runtime_winner_selection=false`와 B 고정 정책을 별도로 기록했다.
 
 ## 실패 원인과 좁은 수정
 
@@ -143,5 +151,7 @@ OsmAnd 즐겨찾기 계열이었다. 다음 행동은 하나도 개선되지 않
 - A/B 원본: `docs/evidence/tving-public-prior-a-20260804.json`,
   `docs/evidence/tving-public-prior-b-20260804.json`
 
-공개 Prior 자체의 효과는 여전히 **없음**이다. 수정 후 성공은 공개 Prior가 아니라
-Goal Ontology/Affordance/Signature/Runtime 검증 구조의 좁은 보정 효과다.
+이 사례만으로 공개 Prior의 개선 효과를 주장할 수 없다. 수정 후 성공은 공개 Prior가
+아니라 Goal Ontology/Affordance/Signature/Runtime 검증 구조의 좁은 보정 효과다.
+그럼에도 B는 범용 적응성을 개발하기 위한 고정 구조로 선택됐으며, 이 문서에서 드러난
+OsmAnd 무관 검색과 복구 실패는 B 내부의 수정 대상이다.

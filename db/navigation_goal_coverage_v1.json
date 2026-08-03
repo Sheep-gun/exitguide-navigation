@@ -256,7 +256,7 @@
           "last_observed_at": "2026-08-04T05:35:22+09:00",
           "blocking_issue": null,
           "dangerous_action_auto_executed": false,
-          "notes": "validation 전용. 공개 prior 개선은 없었으며 OFF 상태의 좁은 Signature/Runtime 수정으로 이용권 화면 도달 후 stop_for_user. 승격 금지"
+          "notes": "validation 전용. 과거 OFF/ON 비교에서는 공개 prior 개선이 입증되지 않았으나 이후 B를 고정 구조로 선택함. 범용 Signature/Runtime 수정으로 이용권 화면 도달 후 stop_for_user. 승격 금지"
         },
         {
           "goal_id": "membership.change",
