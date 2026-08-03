@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
-status: completed
-phase: device_validation
-updated_at: 2026-08-03T17:17:27+09:00
-priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
+status: verifying
+phase: implementation
+updated_at: 2026-08-03T18:01:35+09:00
+priority: 지속적인 Accessibility 이벤트에서도 관찰을 시작하는 Executor debounce 수정
 decision_db_collection: paused
-next_action: 사용자 재개 지시를 기다린 뒤 기존 수집 루프에서 Decision DB 수집을 계속한다.
+next_action: 최대 debounce 대기 시간을 구현·테스트하고 새 APK에서 Netflix 후보 수집을 재검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16

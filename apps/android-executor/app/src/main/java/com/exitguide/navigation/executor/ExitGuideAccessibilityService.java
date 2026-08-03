@@ -36,6 +36,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private static final String LOG_TAG = "ExitGuideNavigationExecutor";
     private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
     private static final long EVENT_DEBOUNCE_MS = 700;
+    private static final long MAX_EVENT_DEBOUNCE_MS = 2_000;
     private static final long OBSERVATION_DELAY_MS = 1_200;
     private static final long OBSERVATION_QUIET_WINDOW_MS = 350;
     private static final long MAX_OBSERVATION_SETTLE_MS = 3_500;
@@ -45,6 +46,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final NavigationApiClient apiClient = new NavigationApiClient();
     private final EpisodeGenerationGuard episodeGuard = new EpisodeGenerationGuard();
+    private final DecisionDebounceWindow decisionDebounceWindow =
+            new DecisionDebounceWindow(MAX_EVENT_DEBOUNCE_MS);
     private final VisualScreenAugmenter visualAugmenter = new VisualScreenAugmenter();
 
     private AccessibilityScreenReader screenReader;
@@ -187,9 +190,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (!ExecutorPreferences.active(this) || inFlight) {
             return;
         }
-        cancelPending();
+        long boundedDelayMs = decisionDebounceWindow.boundedDelay(
+                SystemClock.elapsedRealtime(),
+                delayMs
+        );
+        if (pendingDecision != null) {
+            handler.removeCallbacks(pendingDecision);
+        }
         pendingDecision = this::requestDecision;
-        handler.postDelayed(pendingDecision, delayMs);
+        handler.postDelayed(pendingDecision, boundedDelayMs);
     }
 
     private void cancelPending() {
@@ -197,10 +206,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             handler.removeCallbacks(pendingDecision);
             pendingDecision = null;
         }
+        decisionDebounceWindow.reset();
     }
 
     private void requestDecision() {
         pendingDecision = null;
+        decisionDebounceWindow.reset();
         if (!ExecutorPreferences.active(this) || inFlight) {
             return;
         }
