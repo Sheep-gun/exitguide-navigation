@@ -97,6 +97,58 @@ def _has_explicit_commercial_membership_semantics(
     )
 
 
+def _has_active_membership_plan_semantics(
+    candidate: NavigationCandidate,
+) -> bool:
+    """Recognize a concrete current-plan row even when its label is redacted.
+
+    Purchase and membership screens commonly expose an account identifier as
+    the Accessibility label while the plan name, renewal date, and price live
+    in descendant or OCR context.  Nearby text alone is not enough: requiring
+    both a commercial-membership marker and a lifecycle/billing marker keeps a
+    bottom navigation ``구독`` button or a generic promotional banner from
+    inheriting this role.
+    """
+
+    text = " ".join(_candidate_semantic_text(candidate).split())
+    has_membership = any(
+        marker in text
+        for marker in (
+            "premium",
+            "멤버십",
+            "멤버쉽",
+            "membership",
+            "구독",
+            "subscription",
+            "이용권",
+            "요금제",
+            "plan",
+        )
+    )
+    has_lifecycle = any(
+        marker in text
+        for marker in (
+            "갱신일",
+            "다음 결제",
+            "결제 예정",
+            "청구 예정",
+            "만료일",
+            "현재 요금제",
+            "현재 플랜",
+            "이용 중",
+            "renewal",
+            "renews",
+            "next billing",
+            "next payment",
+            "expires",
+            "expiration",
+            "current plan",
+            "active plan",
+        )
+    )
+    return has_membership and has_lifecycle
+
+
 def _is_safe_membership_join_entry_text(value: str) -> bool:
     """Recognize an obvious plan-selection entry, never a final purchase.
 
@@ -1631,6 +1683,11 @@ class AndroidWorldResearchPolicy:
             for item in click_items
             if _has_explicit_commercial_membership_semantics(item.candidate)
         ]
+        active_plan_rows = [
+            item
+            for item in click_items
+            if _has_active_membership_plan_semantics(item.candidate)
+        ]
         account_hubs = [
             item for item in click_items if _has_account_hub_semantics(item.candidate)
         ]
@@ -1644,6 +1701,26 @@ class AndroidWorldResearchPolicy:
                     "nearby membership text is not the control role; "
                     + reason,
                 )
+        if len(active_plan_rows) == 1:
+            active_key = _action_key(active_plan_rows[0].action)
+            active_score, active_reason = adjusted.get(active_key, (0.0, ""))
+            adjusted[active_key] = (
+                max(active_score, 0.94),
+                "python_membership_hub_affordance_guard: unique active membership "
+                "plan row with lifecycle or billing state; "
+                + active_reason,
+            )
+            for item in account_hubs:
+                key = _action_key(item.action)
+                score, reason = adjusted.get(key, (0.0, ""))
+                adjusted[key] = (
+                    min(score, 0.25),
+                    "python_membership_hub_affordance_guard: active plan row is "
+                    "already visible, so returning to an account/profile hub "
+                    "would regress; "
+                    + reason,
+                )
+            return adjusted
         if len(explicit) == 1:
             key = _action_key(explicit[0].action)
             score, reason = adjusted.get(key, (0.0, ""))

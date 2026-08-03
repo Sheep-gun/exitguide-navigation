@@ -709,6 +709,46 @@ def main() -> None:
     assert membership_page_scores["click:premium-benefits"][0] > membership_page_scores[
         "click:account"
     ][0]
+    active_plan_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="current-plan"),
+            0.1,
+            NavigationCandidate(
+                candidate_id="current-plan",
+                label="[redacted]",
+                nearby_text=(
+                    "Premium 개인 멤버십 14900원 갱신일: 9월 3일"
+                ),
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="my-page"),
+            0.2,
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="expired-content"),
+            0.2,
+            NavigationCandidate(
+                candidate_id="expired-content",
+                label="콘텐츠 후원 만료일: 2026. 1. 24.",
+            ),
+        ),
+    ]
+    active_plan_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:current-plan": (0.42, "model underestimated current plan"),
+            "click:my-page": (0.60, "model tried to regress to account hub"),
+            "click:expired-content": (0.30, "unrelated expiry date"),
+        },
+        goal_id="membership.cancel",
+        enumerated=active_plan_actions,
+    )
+    assert active_plan_scores["click:current-plan"][0] >= 0.94
+    assert active_plan_scores["click:my-page"][0] <= 0.25
+    assert active_plan_scores["click:current-plan"][0] > active_plan_scores[
+        "click:expired-content"
+    ][0]
     deep_membership_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),
