@@ -1,15 +1,15 @@
 # ExitGuide Navigation Current Priority
 
-status: verifying
+status: completed
 phase: device_validation
-updated_at: 2026-08-03T12:51:46+09:00
+updated_at: 2026-08-03T17:17:27+09:00
 priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
 decision_db_collection: paused
-next_action: A100 EXAONE 4.5 콜드 로딩 완료 후 commit 9dd708a APK로 VLM candidate_id allowlist와 최종 실기기 통합 검증을 수행한다.
+next_action: 사용자 재개 지시를 기다린 뒤 기존 수집 루프에서 Decision DB 수집을 계속한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
-verification_completed_at: pending
-verified_device: pending
-verified_apps: pending
+verification_completed_at: 2026-08-03T17:17:27+09:00
+verified_device: Samsung SM-S936N, Android 16
+verified_apps: YouTube 21.31.524+1561190182
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
 deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
@@ -27,32 +27,32 @@ deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
 - 기존 앱 감사 원본: `../exitguide-navigation/apps/mobile/plugins/withExitGuideOverlay.js`
 - 기능별 대응표: `docs/EXITGUIDE_EXECUTOR_REUSE_MAPPING.md`
 - 이관 연결부 구현: 완료, 실기기 검증 대기
-- 최초 실기기 통합 검증: `pending`
+- 최초 실기기 통합 검증: 완료
 
 ## 최초 완료 조건
 
 1. Accessibility 후보가 정상적으로 수집됨
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: `docs/evidence/android-executor-device-20260803.log` — nodes=82, candidates=22 및 nodes=113, candidates=27
 2. candidate_id 기반 클릭이 실제로 실행됨
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: `docs/evidence/android-executor-device-20260803.log` — 입력 후보 집합에 존재하는 ID로 3회 클릭 성공
 3. 행동 전후 화면 변화가 검증됨
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: `docs/evidence/android-executor-device-20260803.log` — 클릭 3회 `screen_changed=true`, 실행 실패는 `false`
 4. 애매한 화면의 스크린샷이 VLM으로 전달됨
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: `docs/evidence/android-executor-device-20260803.log` — `visual_context ready`, `visualScreenshot=true`, `perception=exaone_4_5`
 5. VLM이 현재 화면에 존재하는 candidate_id만 반환함
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` — 기존 후보 27개 중 8개 ID 주석, 수용된 외부 ID 0개
 6. 실행 실패와 탐색 판단 실패가 별도로 기록됨
-   - status: pending
-   - evidence: pending
+   - status: passed
+   - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
 7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
-   - status: pending
-   - evidence: pending
-   - dangerous_actions_auto_executed: pending
+   - status: passed
+   - evidence: 설치 APK SHA-256과 integration commit 빌드 해시 일치, `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
+   - dangerous_actions_auto_executed: 0
 
 ## 현재 통합 구현 테스트 결과
 
@@ -60,18 +60,19 @@ deployed_commit: `9dd708ac18c43e6380296f530beb8cf30af7d9fa`
 - Android Executor 단위 테스트: passed — `apps/android-executor/app/build/reports/tests/testDebugUnitTest/index.html`
 - Android Executor APK 빌드: passed — integration_commit에서 clean `assembleDebug`
 - ML Kit OCR 및 AndroidX 빌드: passed — clean Android build
-- 실기기 통합 검증: pending
-- 위험 행동 자동 실행 0건: pending
+- 실기기 통합 검증: passed — `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
+- 위험 행동 자동 실행 0건: passed
 
 ## 격리 검증 근거
 
 - isolated_api: `http://100.77.172.25:8101` — `ready=true`, integration_commit 일치
 - isolated_code: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/code`
 - isolated_runtime_db: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-runtime-v4.sqlite`
-- android_device_log: pending
-- navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log` (`device validation pending`)
-- a100_vlm_log: `/home/ubuntu/data/exitguide/logs/exaone/server-20260803-124029.log` (`cold loading`)
-- device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` (`pending`)
+- android_device_log: `docs/evidence/android-executor-device-20260803.log`
+- navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log`
+- a100_vlm_log: `/workspace/exitguide-local/logs/exaone/server-20260803-165142.log` (`ready`, N100 영구 터널 경유 HTTP 200, 짧은 추론 1.221초)
+- a100_tunnel_service: N100 `exitguide-a100-vlm-tunnel.service` (`active`, 새 A100 port 30000 및 로컬 SSD 모델 연결)
+- device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
 - apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `9904EC6F102ADA2DC12FD30C7110BC49B043ED4C6ACE694B64C8EE876A16F44A`
 
 ## 완료 및 재개 규칙

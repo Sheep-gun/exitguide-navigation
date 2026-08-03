@@ -1,0 +1,33 @@
+Device: Samsung SM-S936N, Android 16, serial R3CY204GDVE
+Executor APK SHA-256: 9904ec6f102ada2dc12fd30c7110bc49b043ed4c6ace694b64c8ee876a16f44a
+Integration commit: 9dd708ac18c43e6380296f530beb8cf30af7d9fa
+Isolated session: navs_621004748f79471daedecfe7fe2e4de6
+
+08-03 17:10:09.950 I ExitGuideNavigationExecutor: screen_observed package=com.google.android.youtube nodes=82 candidates=22
+08-03 17:10:10.398 I ExitGuideNavigationExecutor: visual_context ready required=true ocrMerged=25 candidateIds=22
+08-03 17:10:52.662 I ExitGuideNavigationExecutor: decision perception=structured_input candidates=22 visualScreenshot=true
+08-03 17:10:52.695 I ExitGuideNavigationExecutor: action_execution name=click candidate_id=a11y_15dd575ed0bf9fcd1744 executor_action_succeeded=true
+08-03 17:10:54.324 I ExitGuideNavigationExecutor: post_action_observation executor_action_succeeded=true screen_changed=true observed_signal=none
+08-03 17:10:55.007 I ExitGuideNavigationExecutor: observe_result planner_decision_succeeded=true executor_action_succeeded=true screen_changed=true navigation_progressed=null connection_error=false
+08-03 17:10:55.576 I ExitGuideNavigationExecutor: screen_observed package=com.google.android.youtube nodes=113 candidates=27
+08-03 17:10:55.776 I ExitGuideNavigationExecutor: visual_context ready required=true ocrMerged=37 candidateIds=27
+08-03 17:11:40.866 I ExitGuideNavigationExecutor: decision perception=exaone_4_5 candidates=27 visualScreenshot=true
+08-03 17:11:40.898 I ExitGuideNavigationExecutor: action_execution name=click candidate_id=a11y_e6769a3866ff0558cd2d executor_action_succeeded=true
+08-03 17:11:42.690 I ExitGuideNavigationExecutor: post_action_observation executor_action_succeeded=true screen_changed=true observed_signal=none
+08-03 17:11:45.540 I ExitGuideNavigationExecutor: observe_result planner_decision_succeeded=true executor_action_succeeded=true screen_changed=true navigation_progressed=false connection_error=false
+08-03 17:11:46.087 I ExitGuideNavigationExecutor: screen_observed package=com.google.android.youtube nodes=34 candidates=11
+08-03 17:11:46.305 I ExitGuideNavigationExecutor: visual_context ready required=true ocrMerged=23 candidateIds=11
+08-03 17:12:20.132 I ExitGuideNavigationExecutor: action_execution name=click candidate_id=a11y_8b8d51a8d8accee3cab8 executor_action_succeeded=true
+08-03 17:12:21.529 I ExitGuideNavigationExecutor: post_action_observation executor_action_succeeded=true screen_changed=true observed_signal=external_app
+08-03 17:13:03.053 I ExitGuideNavigationExecutor: decision perception=exaone_4_5 candidates=0 visualScreenshot=true
+08-03 17:13:04.268 I ExitGuideNavigationExecutor: post_action_observation executor_action_succeeded=false screen_changed=false observed_signal=blocked
+08-03 17:13:26.090 I ExitGuideNavigationExecutor: observe_result planner_decision_succeeded=true executor_action_succeeded=false screen_changed=false navigation_progressed=null connection_error=false
+
+Runtime DB verification:
+- Step 0 click candidate exists in supplied screen: true
+- Step 1 click candidate exists in supplied screen: true
+- Step 2 click candidate exists in supplied screen: true
+- Step 1 EXAONE visual annotations: 8, all stored against supplied candidate IDs
+- Dangerous or terminal selected candidates: 0
+- Executed clicks: 3
+- Final separated result: planner decision succeeded=true, executor action succeeded=false, screen changed=false, connectivity=observed, failure=executor_action_not_executed
