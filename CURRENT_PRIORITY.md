@@ -11,8 +11,8 @@ verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `36a4abe`
-deployed_commit: `36a4abe`
+integration_commit: `c1a8466`
+deployed_commit: `c1a8466`
 
 ## 작업 원칙
 
