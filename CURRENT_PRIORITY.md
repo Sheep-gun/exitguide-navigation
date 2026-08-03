@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
-status: blocked
+status: verifying
 phase: device_validation
-updated_at: 2026-08-03T10:42:42+09:00
+updated_at: 2026-08-03T12:34:27+09:00
 priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
 decision_db_collection: paused
-next_action: 사용자가 SM-S936N에서 ExitGuide Navigation Executor 접근성 서비스를 활성화한 뒤 안전한 설정 화면의 Accessibility 후보 수집 검증을 재개한다.
+next_action: SM-S936N의 안전한 화면에서 Accessibility 후보 수집과 candidate_id 기반 클릭을 격리 Runtime DB로 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: pending
 verified_device: pending
@@ -13,12 +13,6 @@ verified_apps: pending
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
 deployed_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
-
-## 차단 원인
-
-- `ExitGuide Navigation Executor` 접근성 서비스가 비활성화되어 있으며, Android 사용자 승인 화면에서 수동 활성화가 필요하다.
-- ADB 연결, 격리 API 8101, 기기 터널과 APK 설치는 정상이다.
-- 이 연결 문제는 탐색 실패나 후보 없음으로 기록하지 않았다.
 
 ## 작업 원칙
 
