@@ -29,6 +29,7 @@ from app.services.navigation_model_clients import (  # noqa: E402
     NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
+from app.services.navigation_public_prior import NavigationPublicPrior  # noqa: E402
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
 from app.services.navigation_runtime import NavigationRuntime  # noqa: E402
 from app.services.navigation_runtime_store import NavigationRuntimeStore  # noqa: E402
@@ -46,6 +47,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument(
+        "--public-prior-db",
+        type=Path,
+        help="Enable advisory public transition evidence from this read-only SQLite index.",
+    )
+    parser.add_argument("--public-failure-db", type=Path)
+    parser.add_argument("--public-task-db", type=Path)
+    parser.add_argument("--public-prior-max-results", type=int, default=3)
     return parser.parse_args()
 
 
@@ -172,6 +181,16 @@ def main() -> None:
     args = parse_args()
     cases_database = args.cases_db or args.db
     cases = load_cases(cases_database, args.limit)
+    public_prior = (
+        NavigationPublicPrior(
+            args.public_prior_db,
+            failure_db_path=args.public_failure_db,
+            task_db_path=args.public_task_db,
+            max_results=args.public_prior_max_results,
+        )
+        if args.public_prior_db
+        else None
+    )
     with tempfile.TemporaryDirectory() as temporary:
         runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(args.db),
@@ -188,6 +207,7 @@ def main() -> None:
                 ),
                 allow_model_fallback=True,
             ),
+            public_prior=public_prior,
         )
         results: list[dict[str, Any]] = []
         for index, case in enumerate(cases):
@@ -260,7 +280,16 @@ def main() -> None:
                 }
             )
 
-    report = summarize(results, args.db, cases_database)
+    report = summarize(
+        results,
+        args.db,
+        cases_database,
+        public_prior_paths={
+            "service": args.public_prior_db,
+            "failure": args.public_failure_db,
+            "task": args.public_task_db,
+        },
+    )
     report["retrieval_isolation"] = {
         "positive_route_cases": "source_app_excluded",
         "verified_negative_safety_cases": "same_app_allowed",
@@ -276,6 +305,8 @@ def summarize(
     results: list[dict[str, Any]],
     database: Path,
     cases_database: Path,
+    *,
+    public_prior_paths: dict[str, Path | None],
 ) -> dict[str, Any]:
     positive = [result for result in results if result["positive"]]
     first = [result for result in positive if result["first_action"]]
@@ -321,6 +352,23 @@ def summarize(
         "database_sha256": file_sha256(database),
         "evaluation_cases_database": str(cases_database.resolve()),
         "evaluation_cases_sha256": file_sha256(cases_database),
+        "public_prior": {
+            "enabled": public_prior_paths["service"] is not None,
+            "mode": "planner_advisory_only",
+            "indexes": {
+                key: (
+                    None
+                    if path is None
+                    else {
+                        "path": str(path.resolve()),
+                        "sha256": file_sha256(path),
+                    }
+                )
+                for key, path in public_prior_paths.items()
+            },
+            "runtime_execution_allowed": False,
+            "canonical_promotion_allowed": False,
+        },
         "retrieval_excludes_source_app": True,
         "case_count": len(results),
         "positive_case_count": len(positive),

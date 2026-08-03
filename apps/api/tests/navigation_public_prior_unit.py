@@ -111,7 +111,11 @@ def _create_transition_db(path: Path, *, failure: bool = False) -> None:
     connection.close()
 
 
-def _create_task_db(path: Path) -> None:
+def _create_task_db(
+    path: Path,
+    *,
+    goal: str = "Find subscription billing settings and review cancellation options",
+) -> None:
     connection = sqlite3.connect(path)
     connection.executescript(
         """
@@ -128,7 +132,7 @@ def _create_task_db(path: Path) -> None:
             task_id, goal, service_categories, source_name,
             content='task', content_rowid='rowid'
         );
-        INSERT INTO metadata VALUES ('schema_version','navigation-task-prior.v1');
+        INSERT INTO metadata VALUES ('schema_version','navigation-task-knowledge-index.v1');
         INSERT INTO task VALUES (
             'task-1','fixture','fixture-source',
             'Find subscription billing settings and review cancellation options',
@@ -137,6 +141,8 @@ def _create_task_db(path: Path) -> None:
         INSERT INTO task_fts(task_fts) VALUES ('rebuild');
         """
     )
+    connection.execute("UPDATE task SET goal=? WHERE task_id='task-1'", (goal,))
+    connection.execute("INSERT INTO task_fts(task_fts) VALUES ('rebuild')")
     connection.commit()
     connection.close()
 
@@ -224,7 +230,44 @@ def test_public_prior_refuses_simulated_runtime_source() -> None:
             raise AssertionError("simulated public prior must be rejected")
 
 
+def test_task_category_alone_cannot_inject_irrelevant_context() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        service = root / "service.sqlite"
+        task = root / "task.sqlite"
+        _create_transition_db(service)
+        _create_task_db(
+            task,
+            goal="Browse personal apartment listings under a monthly price limit",
+        )
+        prior = NavigationPublicPrior(service, task_db_path=task)
+        goal = NormalizedGoal(
+            goal_id="membership.cancel",
+            family="membership",
+            operation="cancel",
+            confidence=1.0,
+            matched_phrase="cancel membership",
+            terminal_action_policy="require_user_confirmation",
+        )
+        screen = SemanticScreenState(
+            semantic_fingerprint="screen-category-gate",
+            title="Account settings",
+            auth_state="authenticated",
+            surface_type="settings",
+            navigation_depth=2,
+            tokens=("account", "settings"),
+            candidate_payloads=(),
+        )
+        evidence = prior.search(
+            goal_text="cancel my membership",
+            normalized_goal=goal,
+            screen=screen,
+        )
+        assert all(item.evidence_kind != "task" for item in evidence)
+
+
 if __name__ == "__main__":
     test_public_prior_is_bounded_advisory_context()
     test_public_prior_refuses_simulated_runtime_source()
+    test_task_category_alone_cannot_inject_irrelevant_context()
     print("navigation public prior unit checks passed")

@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
 status: completed
-phase: implementation
-updated_at: 2026-08-04T02:59:37+09:00
-priority: Align promotion pipeline with shared Interaction Episode and immutable App Knowledge generations
+phase: device_validation
+updated_at: 2026-08-04T03:29:26+09:00
+priority: Build a frozen validation-only case DB for public-prior OFF/ON evaluation
 decision_db_collection: paused
-next_action: Build a frozen validation-only case DB; do not activate generation-0 or resume Decision DB collection until the promotion regression gate can run without collection or locked-holdout leakage.
+next_action: Connect the phone and record isolated candidate-complete cases from a validation app (KB Insurance or NH Nonghyup Insurance); do not use collection apps or the locked holdout, and do not promote these validation observations into Decision DB.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
@@ -25,6 +25,21 @@ deployed_commit: `c1a8466`
 - operating_decision_db_changed: no
 - activation_status: not attempted — validation apps currently have 0 verified cases
 - unresolved_provenance: 11 older `uxa_*` real-device rows remain preserved but need their original common episode artifacts
+
+## Public navigation prior integration
+
+- n100_source_commit: `b48af5aa1ef7812596ab67ac731c9398a0fe4238`
+- local_integration_branch: `agent/public-prior-integration`
+- public_role: planner advisory context only
+- runtime_execution_allowed: false
+- canonical_promotion_allowed: false
+- task_contract: `navigation-task-knowledge.v1.schema.json`
+- task_contract_validation: passed, 570/570 rows and 570 unique task IDs
+- irrelevant_task_gate: passed; a service category alone cannot inject a task whose goal text is unrelated
+- api_unit_tests: passed, 9/9 files
+- fixed_validation_cases: 0
+- improvement_claim: not permitted until the frozen validation OFF/ON A/B gate passes
+- evidence: `docs/evidence/navigation-public-prior-integration-audit-20260804.md`
 
 ## 작업 원칙
 

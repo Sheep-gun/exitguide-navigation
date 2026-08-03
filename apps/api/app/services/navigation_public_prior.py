@@ -206,6 +206,12 @@ class NavigationPublicPrior:
         missing = required - cls._table_names(path)
         if missing:
             raise ValueError(f"navigation task prior DB is missing tables: {sorted(missing)}")
+        with closing(cls._connect(path)) as connection:
+            metadata = dict(connection.execute("SELECT key, value FROM metadata"))
+        if metadata.get("schema_version") != "navigation-task-knowledge-index.v1":
+            raise ValueError(
+                "navigation task prior DB must use navigation-task-knowledge-index.v1"
+            )
 
     def status(self) -> dict[str, object]:
         with closing(self._connect(self.service_db_path)) as connection:
@@ -417,10 +423,14 @@ class NavigationPublicPrior:
             ).fetchall()
         scored: list[tuple[float, sqlite3.Row]] = []
         for rank, row in enumerate(rows):
-            task_tokens = set(_tokens(f'{row["goal"]} {row["service_categories"]}'))
-            if domain_tokens and not domain_tokens.intersection(task_tokens):
+            # Curation categories are a coarse retrieval gate, not evidence that
+            # the task itself is semantically relevant. Requiring the goal text
+            # to carry a domain token prevents a mislabeled category from
+            # injecting an unrelated public task into the planner prompt.
+            task_goal_tokens = set(_tokens(str(row["goal"])))
+            if domain_tokens and not domain_tokens.intersection(task_goal_tokens):
                 continue
-            overlap = _bounded_overlap(goal_tokens, task_tokens, 6)
+            overlap = _bounded_overlap(goal_tokens, task_goal_tokens, 6)
             relevance = min(1.0, 0.85 * overlap + 0.15 * (1.0 - rank / max(1, len(rows))))
             if relevance >= 0.18:
                 scored.append((relevance, row))

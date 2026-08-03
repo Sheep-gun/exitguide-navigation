@@ -1,5 +1,11 @@
 # Shared App Knowledge Contract v0.9.1
 
+`navigation-task-knowledge.v1.schema.json` defines advisory public task knowledge.
+These records may help goal interpretation or ambiguity analysis, but
+`core_experience_eligible` is always false: they contain no observed action outcome,
+cannot directly select a runtime action, and cannot enter a canonical App Knowledge
+generation without a separately observed and validated Interaction Episode.
+
 이 디렉터리는 팀 공통 스키마 v0.9.1의 개발 기준본입니다.
 
 - 원본 패키지: `exitguide-app-knowledge-schema-v0.9.1-codex-fixed-20260803-022107.zip`

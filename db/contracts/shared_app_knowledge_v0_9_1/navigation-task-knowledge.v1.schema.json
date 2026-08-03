@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://exitguide.local/contracts/navigation-task-knowledge.v1.schema.json",
+  "title": "ExitGuide Navigation Task Knowledge v1",
+  "description": "Advisory-only public task knowledge. It carries goal-language context but no observed action outcome and is never directly executable or canonically promotable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_id",
+    "goal",
+    "task_type",
+    "source_name",
+    "source_dataset",
+    "source_revision",
+    "license",
+    "role",
+    "core_experience_eligible",
+    "reason",
+    "curation"
+  ],
+  "properties": {
+    "schema_version": {"const": "navigation-task-knowledge.v1"},
+    "task_id": {"type": "string", "minLength": 1},
+    "goal": {"type": "string", "minLength": 1},
+    "task_type": {"enum": ["input", "noduplicate"]},
+    "source_name": {"type": "string", "minLength": 1},
+    "source_dataset": {"type": "string", "minLength": 1},
+    "source_revision": {"type": "string", "minLength": 1},
+    "license": {"type": "string", "minLength": 1},
+    "role": {"const": "goal_ontology_and_ambiguity_auxiliary"},
+    "core_experience_eligible": {"const": false},
+    "reason": {"type": "string", "minLength": 1},
+    "curation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_version", "tier", "service_categories", "reason"],
+      "properties": {
+        "policy_version": {"type": "string", "minLength": 1},
+        "tier": {"const": "task_knowledge"},
+        "service_categories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "account_lifecycle",
+              "data_rights",
+              "notifications_communications",
+              "permissions",
+              "privacy_consent",
+              "security_identity",
+              "subscription_billing",
+              "support_dispute"
+            ]
+          }
+        },
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
