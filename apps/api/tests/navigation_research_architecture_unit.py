@@ -1069,6 +1069,32 @@ def main() -> None:
         ],
     )
     assert structurally_resolved == "click:members-entry"
+    retry_inventory = AndroidWorldResearchPolicy._compact_model_retry_actions(
+        [
+            *[
+                EnumeratedAction(
+                    NavigationAction(name="click", candidate_id=f"candidate-{index}"),
+                    1.0 - index / 10,
+                    NavigationCandidate(
+                        candidate_id=f"candidate-{index}",
+                        label=f"Candidate {index}",
+                        role="button",
+                        risk_level="low",
+                    ),
+                )
+                for index in range(8)
+            ],
+            EnumeratedAction(NavigationAction(name="scroll", direction="down"), 0.18, None),
+            EnumeratedAction(NavigationAction(name="wait_and_observe"), 0.12, None),
+            EnumeratedAction(NavigationAction(name="stop_for_user"), 0.05, None),
+        ]
+    )
+    assert [item.action.candidate_id for item in retry_inventory[:6]] == [
+        f"candidate-{index}" for index in range(6)
+    ]
+    assert [item.action.name for item in retry_inventory[6:]] == [
+        "scroll", "wait_and_observe", "stop_for_user"
+    ]
     malformed_model_rescue = selective_policy._resolve_structural_direct_candidate(
         query=conflict_query,
         plan=HierarchicalPlan(

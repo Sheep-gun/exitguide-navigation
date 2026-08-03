@@ -40,6 +40,7 @@ UNRELATED_ROLE_CEILING = 0.50
 DIRECT_ROLE_MODEL_FLOOR = 0.50
 SEMANTIC_FAST_PATH_ROLE_FLOOR = 0.95
 SEMANTIC_FAST_PATH_LABEL_MAX_CHARS = 48
+MODEL_RETRY_CLICK_LIMIT = 6
 SAFE_INTERMEDIATE_FAST_PATH_ROLES = frozenset(
     {
         "account.hub",
@@ -538,19 +539,35 @@ class AndroidWorldResearchPolicy:
                 prior_values=prior_values,
             )
         except (KeyError, TypeError, ValueError) as error:
+            retry_enumerated = self._compact_model_retry_actions(enumerated)
             LOGGER.warning(
-                "planner_model_output_retry provider=%s failure_class=%s detail=%s",
+                "planner_model_output_retry provider=%s failure_class=%s "
+                "original_actions=%s retry_actions=%s detail=%s",
                 self.planner_model.name,
                 type(error).__name__,
+                len(enumerated),
+                len(retry_enumerated),
                 str(error)[:500],
             )
             return self._plan_and_verify_actions(
                 query=query,
                 plan=plan,
                 recent_history=recent_history,
-                enumerated=enumerated,
+                enumerated=retry_enumerated,
                 prior_values=prior_values,
             )
+
+    @staticmethod
+    def _compact_model_retry_actions(
+        enumerated: Sequence[EnumeratedAction],
+    ) -> tuple[EnumeratedAction, ...]:
+        """Bound a malformed-output retry while retaining all safe controls."""
+
+        clicks = [
+            item for item in enumerated if item.action.name == "click"
+        ][:MODEL_RETRY_CLICK_LIMIT]
+        controls = [item for item in enumerated if item.action.name != "click"]
+        return tuple((*clicks, *controls))
 
     def _should_invoke_planner(
         self,
