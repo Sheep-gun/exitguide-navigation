@@ -2,10 +2,10 @@
 
 status: completed
 phase: implementation
-updated_at: 2026-08-04T02:55:46+09:00
+updated_at: 2026-08-04T02:59:37+09:00
 priority: Align promotion pipeline with shared Interaction Episode and immutable App Knowledge generations
 decision_db_collection: paused
-next_action: Deploy the verified promotion pipeline and sealed generation-0 backfill to N100; keep the operating Decision DB unchanged until a frozen validation-only case DB exists.
+next_action: Build a frozen validation-only case DB; do not activate generation-0 or resume Decision DB collection until the promotion regression gate can run without collection or locked-holdout leakage.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
@@ -13,6 +13,18 @@ verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328;
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `c1a8466`
 deployed_commit: `c1a8466`
+
+## Promotion pipeline v2
+
+- implementation_commit: `0bdc4efbe8506673328537534cc9020a1192e9a1`
+- deployed_code: `/home/kyle/exitguide/runtime/navigation-promotion-pipeline-0bdc4ef`
+- generation_id: `generation_92648fdee0389cc62a911ac4`
+- generation_dir: `/home/kyle/exitguide/runtime/promotion-pipeline-v2-staging-20260804/generations/generation_92648fdee0389cc62a911ac4`
+- n100_unit_test: passed — `/home/kyle/exitguide/runtime/promotion-pipeline-v2-staging-20260804/n100-unit-test.log`
+- n100_projection: passed — 88→88 cases, `runtime_db_accessed=false`, `quick_check=ok`, foreign-key errors 0
+- operating_decision_db_changed: no
+- activation_status: not attempted — validation apps currently have 0 verified cases
+- unresolved_provenance: 11 older `uxa_*` real-device rows remain preserved but need their original common episode artifacts
 
 ## 작업 원칙
 

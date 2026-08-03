@@ -72,3 +72,11 @@ The N100 copy is deployed under:
 
 `/home/kyle/exitguide/runtime/promotion-pipeline-v2-staging-20260804/`
 
+The implementation from commit `0bdc4efbe8506673328537534cc9020a1192e9a1`
+is installed at:
+
+`/home/kyle/exitguide/runtime/navigation-promotion-pipeline-0bdc4ef/`
+
+N100 reran the unit pipeline and projected generation-0 again. The result was
+88→88 cases, `runtime_db_accessed=false`, `quick_check=ok`, zero foreign-key
+errors, and the operating Decision DB hash was unchanged during verification.
