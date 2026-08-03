@@ -15,8 +15,10 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.services.navigation_decision_memory import (  # noqa: E402
+    CURRENCY_AMOUNT_PATTERN,
     EMAIL_PATTERN,
     LONG_NUMBER_PATTERN,
+    MASKED_KOREAN_NAME_PATTERN,
     PHONE_PATTERN,
     USER_HANDLE_PATTERN,
     canonical_json,
@@ -110,7 +112,9 @@ def sensitive_hits(value: str) -> int:
         for pattern in (
             EMAIL_PATTERN,
             USER_HANDLE_PATTERN,
+            MASKED_KOREAN_NAME_PATTERN,
             PHONE_PATTERN,
+            CURRENCY_AMOUNT_PATTERN,
             LONG_NUMBER_PATTERN,
         )
     )

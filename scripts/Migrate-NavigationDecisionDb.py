@@ -114,10 +114,13 @@ SIGNATURES: dict[str, dict[str, object]] = {
             "현재 멤버십",
             "활성 멤버십",
             "구독 중",
+            "혜택 이용중",
             "premium member",
             "current membership",
             "active membership",
             "already subscribed",
+            "benefits active",
+            "benefits in use",
         ],
         "terminal": ["가입", "구독", "구매", "subscribe", "purchase"],
         "threshold": 0.62,
@@ -192,10 +195,13 @@ ADDITIONAL_SIGNATURES: tuple[tuple[str, str, dict[str, object]], ...] = (
                 "현재 멤버십",
                 "활성 멤버십",
                 "구독 중",
+                "혜택 이용중",
                 "premium member",
                 "current membership",
                 "active membership",
                 "already subscribed",
+                "benefits active",
+                "benefits in use",
             ],
             "terminal": ["회원 가입", "멤버십 가입", "sign up", "join"],
             "threshold": 0.62,
@@ -766,7 +772,10 @@ def migrate(source: Path, target: Path, schema: Path, report_path: Path, split_p
             "raw_coordinates": "not imported",
             "raw_identifiers": "one-way hashed where provenance linkage is required",
         },
-        "privacy": "screen labels are normalized and email/phone/long-number patterns are redacted",
+        "privacy": (
+            "screen labels are normalized and email, handle, masked-name, phone, "
+            "currency-amount, and long-number patterns are redacted"
+        ),
         "generated_at": utc_now(),
     }
     report_path.parent.mkdir(parents=True, exist_ok=True)

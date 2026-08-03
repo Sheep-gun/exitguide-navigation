@@ -307,12 +307,12 @@ def main() -> None:
                     candidates=[
                         NavigationCandidate(
                             candidate_id="membership-status",
-                            label="Premium 회원",
+                            label="WOW! 혜택 이용중",
                             role="text",
                         ),
                         NavigationCandidate(
                             candidate_id="benefits",
-                            label="Premium 혜택",
+                            label="총 312,717원 절약했어요",
                             role="button",
                         ),
                     ],

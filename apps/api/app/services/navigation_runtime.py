@@ -784,10 +784,13 @@ _ACTIVE_MEMBERSHIP_FEATURES = (
     "현재 멤버십",
     "활성 멤버십",
     "구독 중",
+    "혜택 이용중",
     "premium member",
     "current membership",
     "active membership",
     "already subscribed",
+    "benefits active",
+    "benefits in use",
 )
 
 

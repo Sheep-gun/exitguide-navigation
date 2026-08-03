@@ -25,12 +25,22 @@ ALLOWED_ACTIONS = (
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 USER_HANDLE_PATTERN = re.compile(r"(?<![\w@])@[0-9A-Za-z._-]{2,64}\b")
+MASKED_KOREAN_NAME_PATTERN = re.compile(
+    r"(?<![가-힣])(?:[가-힣]{1,2}\*+[가-힣]{1,2})(?![가-힣])"
+)
 PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:"
     r"(?:\+?82[- ]?)?0?1[016789][- ]?\d{3,4}[- ]?\d{4}"
     r"|0(?:2|[3-6]\d)[- ]?\d{3,4}[- ]?\d{4}"
     r"|1[568]\d{2}[- ]?\d{4}"
     r")(?!\d)"
+)
+CURRENCY_AMOUNT_PATTERN = re.compile(
+    r"(?<![\w])(?:"
+    r"(?:₩|\$|€|¥)\s?\d[\d,]*(?:\.\d{1,2})?"
+    r"|\d[\d,]*(?:\.\d{1,2})?\s?(?:원|KRW|USD|달러)"
+    r")(?![\w])",
+    re.IGNORECASE,
 )
 LONG_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{7,}(?!\d)")
 ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
@@ -1112,7 +1122,9 @@ def redact_text(value: str) -> str:
     value = unicodedata.normalize("NFKC", value or "").translate(ZERO_WIDTH)
     value = EMAIL_PATTERN.sub("[email]", value)
     value = USER_HANDLE_PATTERN.sub("[account]", value)
+    value = MASKED_KOREAN_NAME_PATTERN.sub("[account]", value)
     value = PHONE_PATTERN.sub("[phone]", value)
+    value = CURRENCY_AMOUNT_PATTERN.sub("[amount]", value)
     value = LONG_NUMBER_PATTERN.sub("[number]", value)
     return " ".join(value.split())[:500]
 
