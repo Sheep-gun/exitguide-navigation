@@ -40,6 +40,8 @@ UNRELATED_ROLE_CEILING = 0.50
 DIRECT_ROLE_MODEL_FLOOR = 0.50
 SEMANTIC_FAST_PATH_ROLE_FLOOR = 0.95
 SEMANTIC_FAST_PATH_LABEL_MAX_CHARS = 48
+DESTINATION_SCROLL_MATCH_FLOOR = 0.30
+DESTINATION_SCROLL_LIMIT = 4
 MODEL_RETRY_CLICK_LIMIT = 6
 SAFE_INTERMEDIATE_FAST_PATH_ROLES = frozenset(
     {
@@ -718,6 +720,64 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             recent_history=recent_history,
         )
+
+    def semantic_destination_scroll_fast_path(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        screen: ScreenObservation,
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> bool:
+        """Continue down a partially matched static destination page.
+
+        This is deliberately narrower than a generic scroll heuristic.  It is
+        allowed only after the destination signature has begun to match, on a
+        screen that Accessibility confirms is scrollable, and while no direct
+        or dangerous target is already visible.  A short episode-local bound
+        prevents the rule from turning a feed into an infinite-scroll loop.
+        """
+
+        if (
+            query.standards_profile != "exitguide.navigation-experience.v1"
+            or plan.stage not in {"destination_entry", "destination_verification"}
+            or query.destination_match < DESTINATION_SCROLL_MATCH_FLOOR
+            or _history_requires_planner(recent_history)
+            or not any(node.visible and node.scrollable for node in screen.nodes)
+        ):
+            return False
+
+        target_roles = set(plan.target_roles)
+        for candidate in query.screen.candidate_payloads:
+            if bool(candidate.get("dangerous_final", False)):
+                return False
+            role_scores = candidate.get("function_role_scores", {})
+            label = str(candidate.get("label", "")).strip()
+            if (
+                isinstance(role_scores, Mapping)
+                and label
+                and len(label) <= SEMANTIC_FAST_PATH_LABEL_MAX_CHARS
+                and bool(candidate.get("clickable", True))
+                and bool(candidate.get("enabled", True))
+                and not bool(candidate.get("selected", False))
+                and str(candidate.get("risk_level", "low")) == "low"
+                and any(
+                    float(role_scores.get(role, 0.0)) >= SEMANTIC_FAST_PATH_ROLE_FLOOR
+                    for role in target_roles
+                )
+            ):
+                return False
+
+        trailing_scrolls = 0
+        for item in reversed(recent_history):
+            if str(item.get("action_name", "")) != "scroll":
+                break
+            if str(item.get("scroll_direction", "")) != "down":
+                break
+            if str(item.get("connectivity_status", "")) != "observed":
+                return False
+            trailing_scrolls += 1
+        return trailing_scrolls < DESTINATION_SCROLL_LIMIT
 
     def _structural_continuation_fast_path_candidate(
         self,

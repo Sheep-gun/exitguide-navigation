@@ -337,6 +337,57 @@ def main() -> None:
         )
         assert obvious_intermediate.visual_reobserve_required is False
 
+        scroll_gate_policy = _policy()
+        scroll_gate_policy.exaone_vlm = Exaone45VisionClient(
+            OpenAICompatibleChatClient(
+                api_key="",
+                base_url="http://127.0.0.1:9/v1",
+                model="test-exaone-4.5",
+            )
+        )
+        scroll_gate_policy.semantic_intermediate_fast_path_candidate = (
+            lambda **_: None
+        )
+        scroll_gate_policy.semantic_destination_scroll_fast_path = (
+            lambda **_: True
+        )
+        scroll_gate_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "scroll-gate-runtime.sqlite"),
+            policy=scroll_gate_policy,
+        )
+        destination_continuation = scroll_gate_runtime.decide(
+            DecideRequest(
+                request_id="request-destination-scroll-before-visual-gate",
+                app_package="evaluation.scroll-gate.app",
+                locale="ko-KR",
+                goal_text="cancel subscription",
+                screen=ScreenObservation(
+                    app_package="evaluation.scroll-gate.app",
+                    window_title="account membership",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="billing-history",
+                            label="billing history",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="extra-member",
+                            label="extra member",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert destination_continuation.action.name == "scroll"
+        assert destination_continuation.action.direction == "down"
+        assert destination_continuation.planner_provider == (
+            "semantic_destination_scroll_fast_path"
+        )
+        assert destination_continuation.visual_reobserve_required is False
+
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
             store=NavigationRuntimeStore(temporary_path / "execution-failure-runtime.sqlite"),

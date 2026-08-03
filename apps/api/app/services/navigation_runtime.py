@@ -224,6 +224,12 @@ class NavigationRuntime:
                 recent_history=recent_history,
             )
         )
+        semantic_scroll_fast_path = self.policy.semantic_destination_scroll_fast_path(
+            query=query,
+            plan=plan,
+            screen=effective_screen,
+            recent_history=recent_history,
+        )
         score_margin = 0.0
         reflection_on_demand = False
         verifier_provider = "not_invoked"
@@ -286,49 +292,25 @@ class NavigationRuntime:
             )
             planner_provider = "python_state_change_boundary"
         else:
-            if (
-                semantic_fast_path_candidate_id is None
-                and _can_request_visual_reobserve(request, perception, self.policy)
-            ):
-                visual_reobserve_reason = _candidate_score_visual_reason(
-                    memory_candidate_values,
-                    effective_screen.candidates,
-                    self.policy.planner_margin_threshold,
-                )
-            if visual_reobserve_reason:
+            if semantic_scroll_fast_path:
                 proposal = PlannerProposal(
-                    NavigationAction(name="wait_and_observe"),
-                    1.0,
-                    "python_visual_reobserve_gate",
+                    NavigationAction(name="scroll", direction="down"),
+                    0.95,
+                    "semantic_destination_scroll_fast_path",
                     False,
                 )
-                planner_provider = "python_visual_reobserve_gate"
-                verifier_provider = "deferred_until_visual_context"
-            else:
-                research_decision = self.policy.decide_action(
-                    query=query,
-                    plan=plan,
-                    candidates=effective_screen.candidates,
-                    forbidden_candidate_ids=forbidden,
-                    recent_history=recent_history,
-                )
-                plan = research_decision.plan
-                proposal = research_decision.proposal
-                # Keep the hierarchy source in plan.source, but report the
-                # component that actually selected the next action here.  The
-                # runtime metrics otherwise misclassify semantic/structural
-                # fast paths as generic decision-memory planning.
                 planner_provider = proposal.provider
-                candidate_values = list(research_decision.candidate_values)
-                verifier_provider = research_decision.verifier_provider
-                score_margin = research_decision.score_margin
-                reflection_on_demand = research_decision.reflection_on_demand
-                if _can_request_visual_reobserve(request, perception, self.policy):
-                    visual_reobserve_reason = _db_solar_conflict_visual_reason(
+                verifier_provider = proposal.provider
+                score_margin = 0.95
+            else:
+                if (
+                    semantic_fast_path_candidate_id is None
+                    and _can_request_visual_reobserve(request, perception, self.policy)
+                ):
+                    visual_reobserve_reason = _candidate_score_visual_reason(
                         memory_candidate_values,
                         effective_screen.candidates,
-                        proposal,
-                        candidate_values,
+                        self.policy.planner_margin_threshold,
                     )
                 if visual_reobserve_reason:
                     proposal = PlannerProposal(
@@ -338,7 +320,40 @@ class NavigationRuntime:
                         False,
                     )
                     planner_provider = "python_visual_reobserve_gate"
-                    verifier_provider += "->visual_reobserve_deferred"
+                    verifier_provider = "deferred_until_visual_context"
+                else:
+                    research_decision = self.policy.decide_action(
+                        query=query,
+                        plan=plan,
+                        candidates=effective_screen.candidates,
+                        forbidden_candidate_ids=forbidden,
+                        recent_history=recent_history,
+                    )
+                    plan = research_decision.plan
+                    proposal = research_decision.proposal
+                    # Keep the hierarchy source in plan.source, but report the
+                    # component that actually selected the next action here.
+                    planner_provider = proposal.provider
+                    candidate_values = list(research_decision.candidate_values)
+                    verifier_provider = research_decision.verifier_provider
+                    score_margin = research_decision.score_margin
+                    reflection_on_demand = research_decision.reflection_on_demand
+                    if _can_request_visual_reobserve(request, perception, self.policy):
+                        visual_reobserve_reason = _db_solar_conflict_visual_reason(
+                            memory_candidate_values,
+                            effective_screen.candidates,
+                            proposal,
+                            candidate_values,
+                        )
+                    if visual_reobserve_reason:
+                        proposal = PlannerProposal(
+                            NavigationAction(name="wait_and_observe"),
+                            1.0,
+                            "python_visual_reobserve_gate",
+                            False,
+                        )
+                        planner_provider = "python_visual_reobserve_gate"
+                        verifier_provider += "->visual_reobserve_deferred"
         safe_action, safety_status, safety_reason = self.policy.safety_gate.validate(
             proposal.action,
             candidates=effective_screen.candidates,

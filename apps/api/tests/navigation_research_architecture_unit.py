@@ -678,6 +678,76 @@ def main() -> None:
         prior_values=[conflicted_value],
         recent_history=[],
     ) is None
+    destination_scroll_plan = HierarchicalPlan(
+        goal_id="membership.cancel",
+        stage="destination_entry",
+        target_roles=["membership.cancel.entry", "membership.hub", "billing.manage"],
+        immediate_subgoal="find cancellation controls on the account page",
+        expected_outcome="cancellation entry becomes visible",
+        completion_rule="stop before final cancellation confirmation",
+        source="decision_memory_fallback",
+    )
+    destination_scroll_query = replace(
+        conflict_query,
+        screen=SemanticScreenState(
+            semantic_fingerprint="membership-account-webview",
+            title="account",
+            auth_state="logged_in",
+            surface_type="webview",
+            navigation_depth=2,
+            tokens=("account", "membership", "next billing date"),
+            candidate_payloads=(
+                {
+                    "candidate_id": "billing-history",
+                    "label": "billing history",
+                    "risk_level": "low",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "dangerous_final": False,
+                    "function_role_scores": {},
+                },
+            ),
+        ),
+        candidate_scores={},
+        candidate_confidence={},
+        destination_match=0.38,
+    )
+    scrollable_screen = ScreenObservation(
+        app_package="evaluation.membership.app",
+        window_title="account",
+        activity_name="android.webkit.WebView",
+        nodes=[
+            AccessibilityNodeSummary(
+                node_id="scroll-root",
+                role="container",
+                scrollable=True,
+                clickable=False,
+            )
+        ],
+        candidates=[],
+    )
+    assert selective_policy.semantic_destination_scroll_fast_path(
+        query=destination_scroll_query,
+        plan=destination_scroll_plan,
+        screen=scrollable_screen,
+        recent_history=[],
+    ) is True
+    assert selective_policy.semantic_destination_scroll_fast_path(
+        query=destination_scroll_query,
+        plan=destination_scroll_plan,
+        screen=scrollable_screen,
+        recent_history=[
+            {
+                "action_name": "scroll",
+                "scroll_direction": "down",
+                "connectivity_status": "observed",
+                "outcome_type": "navigated",
+                "progress_label": "advanced",
+            }
+            for _ in range(4)
+        ],
+    ) is False
     disabled_action, disabled_status, _ = ActionSafetyGate().validate(
         NavigationAction(name="click", candidate_id="disabled"),
         candidates=[

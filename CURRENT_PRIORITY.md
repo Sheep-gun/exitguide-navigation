@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T19:23:51+09:00
-priority: 명확한 중간 목표 fast path를 VLM 재관찰보다 먼저 적용하도록 판단 순서 보정
+updated_at: 2026-08-03T19:38:29+09:00
+priority: 목적지 특징이 일부 확인된 스크롤 가능 화면의 제한적 아래 스크롤 fast path 검증
 decision_db_collection: paused
-next_action: 보정된 Navigation API를 N100에 배포한 뒤 Netflix `계정` 후보가 VLM·Solar 없이 선택되고 화면이 바뀌는지 검증한다.
+next_action: 보정된 Navigation API를 N100에 배포한 뒤 Netflix 계정 WebView에서 아래 스크롤이 실행되고 해지 후보 발견 전까지 안전하게 진행되는지 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16
