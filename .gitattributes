@@ -3,3 +3,4 @@
 *.sql text eol=lf
 *.md text eol=lf
 *.yml text eol=lf
+db/navigation_coverage_split_v1.json text eol=lf
