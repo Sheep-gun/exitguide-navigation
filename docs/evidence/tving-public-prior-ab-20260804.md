@@ -60,3 +60,9 @@ legacy explorer, Gold replay, AndroidControl DB, or app-specific route.
 Both isolated services must report `ready=true`, A must report public prior
 disabled, and B must report planner-advisory public prior enabled. Only then may
 the Executor collect candidate-complete TVING observations.
+
+An initial start correctly failed closed because the shared secret environment
+file overrode the per-unit Runtime path and pointed at the protected production
+Runtime DB. No evaluation row was written there. Non-secret A/B overrides are
+now loaded from a final, dedicated environment file so the effective process
+environment can be verified before any request.
