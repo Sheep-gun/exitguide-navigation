@@ -791,12 +791,11 @@ class Exaone45VisionClient:
         candidate_packet = [
             {
                 "candidate_id": candidate.candidate_id,
-                "label": candidate.label,
+                "label": candidate.label[:160],
                 "role": candidate.role,
-                "icon_semantics": candidate.icon_semantics,
-                "nearby_text": candidate.nearby_text,
-                "parent_semantics": candidate.parent_semantics,
-                "child_semantics": candidate.child_semantics,
+                "icon_semantics": candidate.icon_semantics[:80],
+                "nearby_text": candidate.nearby_text[:120],
+                "parent_semantics": candidate.parent_semantics[:80],
                 "position_bucket": candidate.position_bucket,
             }
             for candidate in screen.candidates
@@ -807,15 +806,13 @@ class Exaone45VisionClient:
             "required_output": {
                 "semantic_summary": "screen-level meaning",
                 "annotation_policy": (
-                    "Annotate at most 8 candidates whose icon or context is missing; "
+                    "Annotate at most 4 candidates whose icon or context is missing; "
                     "omit candidates already clear from text."
                 ),
                 "candidate_annotations": [
                     {
                         "candidate_id": "must be one of the supplied IDs",
                         "icon_semantics": "",
-                        "nearby_text": "",
-                        "parent_semantics": "",
                         "visual_role": "candidate function inferred from the image",
                         "visual_region": "screen region containing the candidate",
                         "goal_relevance": "number between 0 and 1",
@@ -837,10 +834,10 @@ class Exaone45VisionClient:
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "semantic_summary": {"type": "string"},
+                            "semantic_summary": {"type": "string", "maxLength": 400},
                             "candidate_annotations": {
                                 "type": "array",
-                                "maxItems": 8,
+                                "maxItems": 4,
                                 "items": {
                                     "type": "object",
                                     "properties": {
@@ -848,11 +845,12 @@ class Exaone45VisionClient:
                                             "type": "string",
                                             "enum": candidate_id_enum,
                                         },
-                                        "icon_semantics": {"type": "string"},
-                                        "nearby_text": {"type": "string"},
-                                        "parent_semantics": {"type": "string"},
-                                        "visual_role": {"type": "string"},
-                                        "visual_region": {"type": "string"},
+                                        "icon_semantics": {
+                                            "type": "string",
+                                            "maxLength": 80,
+                                        },
+                                        "visual_role": {"type": "string", "maxLength": 100},
+                                        "visual_region": {"type": "string", "maxLength": 80},
                                         "goal_relevance": {
                                             "type": "number",
                                             "minimum": 0.0,
@@ -885,8 +883,10 @@ class Exaone45VisionClient:
                     "content": (
                         "You are the visual perception module for Android navigation. Describe the "
                         "whole screen semantically and annotate only candidate IDs supplied by the "
-                        "client. Emit at most 8 compact annotations and omit already-clear text "
-                        "candidates. Never invent a candidate, coordinate, route, or action. "
+                        "client. Use one short sentence for semantic_summary. Emit at most 4 "
+                        "compact annotations and omit already-clear text candidates. Keep every "
+                        "annotation string under 100 characters. Never invent a candidate, "
+                        "coordinate, route, or action. "
                         "Return the result only through the required tool."
                     ),
                 },
@@ -898,7 +898,7 @@ class Exaone45VisionClient:
                     ],
                 },
             ],
-            max_tokens=650,
+            max_tokens=360,
             temperature=0.0,
             top_p=1.0,
             presence_penalty=0.0,
