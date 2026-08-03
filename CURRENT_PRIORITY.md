@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T09:35:00+09:00
+updated_at: 2026-08-04T06:56:00+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
-decision_db_collection: paused
-next_action: 기존 8/2/3 Runtime을 보존하고 7/3/1 manifest가 잠긴 coverage Runtime을 N100 운영 8100에 배포한 뒤 첫 collection 미완료 셀을 검증한다.
-verification_started_at: 2026-08-04T08:45:00+09:00
+decision_db_collection: active
+next_action: YouTube membership.cancel의 기존 중간 전이에서 탐색을 재개해 안전한 해지 경계를 검증하고 커버리지 셀을 확정한다.
+verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
-deployed_commit: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
+integration_commit: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
+deployed_commit: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
 
 ## 고정 정책
 
@@ -43,7 +43,7 @@ deployed_commit: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 4셀, 미완료 51셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 5셀, 미완료 50셀
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -52,19 +52,19 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-c137e68`
-- deployed_git_head: `c137e68a9bdd266bacfe3adc3b83fcd869133437`
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-ff6b3ae-repo`
+- deployed_git_head: `ff6b3ae4ead4a480e1a186625723a061ee1fd029`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
 - Decision DB: read-only patched immutable clone
-- Runtime DB: sessions 113, decisions 393, observations 355
+- Runtime DB: coverage 전용, sessions 3, decisions 15, observations 14
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
 - target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
 - target coverage split counts: collection 7, validation 1, locked_holdout 3
-- target coverage Runtime: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite` (새 파일, 아직 배포 전)
+- target coverage Runtime: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite` (운영 8100 쓰기 대상)
 - planner: Solar Pro 4 selective, Solar Pro 3 fallback, EXAONE 4.5 selective
 
 ## Promotion pipeline v2
@@ -77,6 +77,9 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - Decision projection: implemented
 - production Decision DB changed by staging validation: no
 - unresolved_provenance: 기존 `uxa_*` 실기기 행 11개는 원본 common episode 근거가 필요해 보존 상태
+- stopped_session_promotion: excluded by default; `navs_5cf09d3535864c049edff069feca21ea` retained only as aborted evidence
+- Netflix promotion: interaction episodes 3개/14 steps, draft candidates 5개, accepted 0, generation 0
+- candidate privacy: screen-wide account identifier redaction plus promotion-time defensive redaction
 
 collection 경험은 다음 경로만 사용한다.
 
@@ -132,9 +135,20 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - preserved enabled service count: 2
 - Accessibility nodes/candidates: 13/5
 - B Navigation API ready/public prior: true/true
-- Runtime sessions/decisions before and after diagnostic: 113/393, 변화 없음
-- APK SHA-256: `0E7D31F62E3B6B58EF08AC756FF998C8D17F2C32DD71750D0B672257FE23FC9D`
+- Runtime sessions/decisions before and after diagnostic: 2/14, 변화 없음
+- APK SHA-256: `776044989FDCC7A3BD601173E63EB2A25F5F57FE13D714358D4092DD5E86F3BA`
 - evidence: `docs/evidence/navigation-executor-auto-rebind-20260804.md`
+
+## Netflix membership.cancel 안전 경계
+
+- full traversal session: `navs_c69db94650b94d9ca9595c90dfa8bed4`
+- post-fix revalidation session: `navs_20210f0aa6d34236b86f223d9861e827`
+- final candidate: `a11y_d58ad4e05af6ee045883`, label `멤버십 해지`
+- candidate safety: `risk_level=high`, `terminal=1`, `dangerous_final=1`
+- final action: `stop_for_user`, executor action not executed
+- outcome: `destination_reached`, session `reached`
+- dangerous auto click: 0
+- evidence: `docs/evidence/netflix-membership-cancel-safe-boundary-20260804.md`
 
 ## 안전 불변조건
 
