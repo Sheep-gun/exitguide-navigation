@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T09:25:00+09:00
+updated_at: 2026-08-04T09:35:00+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: paused
-next_action: 변경을 커밋·배포한 뒤 7/3/1 coverage split을 사용하는 보존형 Runtime을 준비하고 첫 collection 미완료 셀 검증을 시작한다.
+next_action: 기존 8/2/3 Runtime을 보존하고 7/3/1 manifest가 잠긴 coverage Runtime을 N100 운영 8100에 배포한 뒤 첫 collection 미완료 셀을 검증한다.
 verification_started_at: 2026-08-04T08:45:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
@@ -62,6 +62,9 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - Runtime DB: sessions 113, decisions 393, observations 355
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
+- target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
+- target coverage split counts: collection 7, validation 1, locked_holdout 3
+- target coverage Runtime: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite` (새 파일, 아직 배포 전)
 - planner: Solar Pro 4 selective, Solar Pro 3 fallback, EXAONE 4.5 selective
 
 ## Promotion pipeline v2
