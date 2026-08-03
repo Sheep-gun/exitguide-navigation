@@ -660,11 +660,15 @@ class AndroidWorldResearchPolicy:
             or _history_requires_planner(recent_history)
         ):
             return None
-        target_roles = set(plan.target_roles) & SAFE_INTERMEDIATE_FAST_PATH_ROLES
+        target_roles = tuple(
+            role
+            for role in plan.target_roles
+            if role in SAFE_INTERMEDIATE_FAST_PATH_ROLES
+        )
         if not target_roles:
             return None
         value_by_id = {value.candidate_id: value for value in prior_values}
-        eligible: list[str] = []
+        eligible_by_role: dict[str, list[str]] = {role: [] for role in target_roles}
         for candidate in query.screen.candidate_payloads:
             candidate_id = str(candidate.get("candidate_id", ""))
             label = str(candidate.get("label", "")).strip()
@@ -687,13 +691,12 @@ class AndroidWorldResearchPolicy:
                 or (label and len(label) > SEMANTIC_FAST_PATH_LABEL_MAX_CHARS)
             ):
                 continue
-            if any(
-                float(role_scores.get(role, 0.0)) >= SEMANTIC_FAST_PATH_ROLE_FLOOR
-                for role in target_roles
-            ):
-                eligible.append(candidate_id)
-        if len(eligible) != 1:
-            return None
+            for target_role in target_roles:
+                if (
+                    float(role_scores.get(target_role, 0.0))
+                    >= SEMANTIC_FAST_PATH_ROLE_FLOOR
+                ):
+                    eligible_by_role[target_role].append(candidate_id)
         safe_values = sorted(
             (
                 value
@@ -702,9 +705,23 @@ class AndroidWorldResearchPolicy:
             ),
             key=lambda value: (-value.final_score, value.candidate_id),
         )
-        if not safe_values or safe_values[0].candidate_id != eligible[0]:
+        if not safe_values:
             return None
-        return eligible[0]
+        # K² emits target roles in subgoal priority order. Resolve ambiguity
+        # within the first role that is actually visible; do not let a
+        # lower-priority profile/menu affordance cancel an exact account or
+        # billing match. Multiple candidates for that same role remain
+        # ambiguous and still require the planner.
+        for target_role in target_roles:
+            role_candidates = eligible_by_role[target_role]
+            if not role_candidates:
+                continue
+            if len(role_candidates) != 1:
+                return None
+            if safe_values[0].candidate_id != role_candidates[0]:
+                return None
+            return role_candidates[0]
+        return None
 
     def _semantic_stage_fast_path_candidate(
         self,

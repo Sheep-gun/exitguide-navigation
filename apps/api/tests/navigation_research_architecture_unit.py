@@ -953,6 +953,63 @@ def main() -> None:
         "semantic_intermediate_role_fast_path"
     )
     assert planner_transport.plan_calls == planner_calls_before_semantic_fast_path
+    ordered_role_query = replace(
+        semantic_fast_path_query,
+        screen=replace(
+            semantic_fast_path_query.screen,
+            candidate_payloads=(
+                {
+                    "candidate_id": "account",
+                    "label": "계정",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"account.hub": 0.96},
+                },
+                {
+                    "candidate_id": "profile-management",
+                    "label": "프로필 관리",
+                    "risk_level": "low",
+                    "dangerous_final": False,
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "function_role_scores": {"profile.hub": 0.98},
+                },
+            ),
+        ),
+    )
+    ordered_role_plan = semantic_fast_path_plan.model_copy(
+        update={"target_roles": ["account.hub", "profile.hub", "navigation.menu"]}
+    )
+    ordered_role_values = [
+        CandidateValue(
+            candidate_id="account",
+            value=0.46,
+            memory_score=0.31,
+            role_score=0.48,
+            final_score=0.46,
+            forbidden=False,
+            risk_level="low",
+        ),
+        CandidateValue(
+            candidate_id="profile-management",
+            value=0.40,
+            memory_score=0.24,
+            role_score=0.42,
+            final_score=0.40,
+            forbidden=False,
+            risk_level="low",
+        ),
+    ]
+    assert selective_policy.semantic_intermediate_fast_path_candidate(
+        query=ordered_role_query,
+        plan=ordered_role_plan,
+        prior_values=ordered_role_values,
+        recent_history=expected_visual_wait_history,
+    ) == "account"
     ambiguous_semantic_query = replace(
         semantic_fast_path_query,
         screen=replace(
