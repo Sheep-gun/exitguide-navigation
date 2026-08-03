@@ -886,6 +886,47 @@ def main() -> None:
         assert [item["candidate_id"] for item in selected] == ["profile"]
         assert episode["steps"][1]["connectivity_status"] == "transport_error"
         assert "after" not in episode["steps"][1]["screen"]
+
+        privacy_runtime_db = temporary_path / "privacy-runtime.sqlite"
+        privacy_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(privacy_runtime_db),
+            policy=_policy(),
+        )
+        privacy_runtime.decide(
+            DecideRequest(
+                request_id="request-contextual-profile-privacy",
+                app_package="evaluation.profile-context.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                screen=ScreenObservation(
+                    window_title="프로필",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="profile-id",
+                            label="carson0306",
+                            role="button",
+                            nearby_text="프로필을 변경 또는 관리하세요. carson0306",
+                            parent_semantics="carson0306",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="account",
+                            label="계정",
+                            role="button",
+                            parent_semantics="carson0306",
+                        ),
+                    ],
+                ),
+            )
+        )
+        privacy_connection = sqlite3.connect(privacy_runtime_db)
+        stored_screen = str(
+            privacy_connection.execute(
+                "SELECT screen_payload_json FROM navigation_decisions LIMIT 1"
+            ).fetchone()[0]
+        )
+        privacy_connection.close()
+        assert "carson0306" not in stored_screen
+        assert "[account]" in stored_screen
     print("navigation_runtime_unit: ok")
 
 

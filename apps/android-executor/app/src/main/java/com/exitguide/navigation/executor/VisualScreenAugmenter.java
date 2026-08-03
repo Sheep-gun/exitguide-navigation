@@ -18,8 +18,10 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,21 +46,12 @@ final class VisualScreenAugmenter implements AutoCloseable {
     private static final Pattern USER_HANDLE = Pattern.compile(
             "(?<![\\w@])@[0-9A-Za-z._-]{2,64}\\b"
     );
-    private static final String MIXED_ACCOUNT_IDENTIFIER =
-            "(?=[0-9A-Za-z._-]{3,64}(?:\\s|$))"
-                    + "(?=[0-9A-Za-z._-]*[A-Za-z])"
-                    + "(?=[0-9A-Za-z._-]*[0-9._-])"
-                    + "[0-9A-Za-z._-]{3,64}";
-    private static final Pattern CONTEXTUAL_ACCOUNT_SUFFIX = Pattern.compile(
-            "(" + MIXED_ACCOUNT_IDENTIFIER + ")(\\s*)"
-                    + "(프로필|계정|아이디|profile|account)",
+    private static final Pattern ACCOUNT_CONTEXT = Pattern.compile(
+            "프로필|계정|아이디|\\b(?:profile|account|username|user\\s*id)\\b",
             Pattern.CASE_INSENSITIVE
     );
-    private static final Pattern CONTEXTUAL_ACCOUNT_PREFIX = Pattern.compile(
-            "(프로필|계정|아이디|profile|account|username|user\\s*id)"
-                    + "(\\s*[:：]?\\s*)(" + MIXED_ACCOUNT_IDENTIFIER + ")",
-            Pattern.CASE_INSENSITIVE
-    );
+    private static final Pattern ACCOUNT_IDENTIFIER_TOKEN =
+            Pattern.compile("[0-9A-Za-z._-]{3,64}");
     private static final Pattern MASKED_KOREAN_NAME = Pattern.compile(
             "(?<![가-힣])(?:[가-힣]{1,2}\\*+[가-힣]{1,2})(?![가-힣])"
     );
@@ -87,13 +80,18 @@ final class VisualScreenAugmenter implements AutoCloseable {
             AccessibilityScreenReader.ScreenSnapshot snapshot,
             Callback callback
     ) {
+        Set<String> accountIdentifiers = contextualAccountIdentifiers(snapshot);
         recognizer.process(InputImage.fromBitmap(screenshot, 0))
                 .addOnSuccessListener(result -> callback.onReady(
-                        buildMaskedOverlayDataUrl(screenshot, snapshot, result),
-                        mergeOcrIntoExistingCandidates(snapshot, result)
+                        buildMaskedOverlayDataUrl(
+                                screenshot, snapshot, result, accountIdentifiers
+                        ),
+                        mergeOcrIntoExistingCandidates(snapshot, result, accountIdentifiers)
                 ))
                 .addOnFailureListener(error -> callback.onReady(
-                        buildMaskedOverlayDataUrl(screenshot, snapshot, null),
+                        buildMaskedOverlayDataUrl(
+                                screenshot, snapshot, null, accountIdentifiers
+                        ),
                         0
                 ));
     }
@@ -108,10 +106,13 @@ final class VisualScreenAugmenter implements AutoCloseable {
         if (normalized.isEmpty()) {
             return false;
         }
+        return hasDirectSensitiveData(normalized)
+                || !contextualAccountIdentifiers(normalized).isEmpty();
+    }
+
+    private static boolean hasDirectSensitiveData(String normalized) {
         return EMAIL.matcher(normalized).find()
                 || USER_HANDLE.matcher(normalized).find()
-                || CONTEXTUAL_ACCOUNT_SUFFIX.matcher(normalized).find()
-                || CONTEXTUAL_ACCOUNT_PREFIX.matcher(normalized).find()
                 || MASKED_KOREAN_NAME.matcher(normalized).find()
                 || PHONE.matcher(normalized).find()
                 || CURRENCY.matcher(normalized).find()
@@ -128,54 +129,110 @@ final class VisualScreenAugmenter implements AutoCloseable {
 
     static String redactSensitiveText(String value) {
         String source = value == null ? "" : value;
-        String redacted = replaceContextualAccountSuffix(source);
-        redacted = replaceContextualAccountPrefix(redacted);
-        if (EMAIL.matcher(source).find()
-                || USER_HANDLE.matcher(source).find()
-                || MASKED_KOREAN_NAME.matcher(source).find()
-                || PHONE.matcher(source).find()
-                || CURRENCY.matcher(source).find()
-                || LONG_NUMBER.matcher(source).find()
-                || HONORIFIC_NAME.matcher(source.toLowerCase(Locale.ROOT)).matches()
-                || STREET_ADDRESS.matcher(source.toLowerCase(Locale.ROOT)).matches()
-                || source.toLowerCase(Locale.ROOT).contains("bearer ")
-                || source.toLowerCase(Locale.ROOT).contains("access token")
-                || source.toLowerCase(Locale.ROOT).contains("session token")
-                || source.toLowerCase(Locale.ROOT).contains("password")
-                || source.contains("비밀번호")
-                || source.contains("인증번호")) {
+        return redactSensitiveText(source, contextualAccountIdentifiers(source));
+    }
+
+    private static String redactSensitiveText(
+            String value,
+            Set<String> accountIdentifiers
+    ) {
+        String source = value == null ? "" : value;
+        if (hasDirectSensitiveData(source.toLowerCase(Locale.ROOT))) {
             return "[redacted]";
         }
-        return redacted;
-    }
-
-    private static String replaceContextualAccountSuffix(String value) {
-        Matcher matcher = CONTEXTUAL_ACCOUNT_SUFFIX.matcher(value);
+        Matcher matcher = ACCOUNT_IDENTIFIER_TOKEN.matcher(source);
         StringBuffer output = new StringBuffer();
         while (matcher.find()) {
-            matcher.appendReplacement(
-                    output,
-                    Matcher.quoteReplacement("[account]" + matcher.group(2) + matcher.group(3))
-            );
+            String token = matcher.group();
+            String replacement = accountIdentifiers.contains(token.toLowerCase(Locale.ROOT))
+                    ? "[account]" : token;
+            matcher.appendReplacement(output, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(output);
         return output.toString();
     }
 
-    private static String replaceContextualAccountPrefix(String value) {
-        Matcher matcher = CONTEXTUAL_ACCOUNT_PREFIX.matcher(value);
-        StringBuffer output = new StringBuffer();
-        while (matcher.find()) {
-            matcher.appendReplacement(
-                    output,
-                    Matcher.quoteReplacement(matcher.group(1) + matcher.group(2) + "[account]")
-            );
+    private static Set<String> contextualAccountIdentifiers(String value) {
+        Set<String> identifiers = new LinkedHashSet<>();
+        String source = value == null ? "" : value;
+        if (!ACCOUNT_CONTEXT.matcher(source).find()) {
+            return identifiers;
         }
-        matcher.appendTail(output);
-        return output.toString();
+        Matcher matcher = ACCOUNT_IDENTIFIER_TOKEN.matcher(source);
+        while (matcher.find()) {
+            String token = matcher.group();
+            boolean hasLetter = false;
+            boolean hasDigitOrSeparator = false;
+            for (int index = 0; index < token.length(); index++) {
+                char character = token.charAt(index);
+                hasLetter |= Character.isLetter(character);
+                hasDigitOrSeparator |= Character.isDigit(character)
+                        || character == '.' || character == '_' || character == '-';
+            }
+            if (hasLetter && hasDigitOrSeparator) {
+                identifiers.add(token.toLowerCase(Locale.ROOT));
+            }
+        }
+        return identifiers;
+    }
+
+    private static Set<String> contextualAccountIdentifiers(
+            AccessibilityScreenReader.ScreenSnapshot snapshot
+    ) {
+        Set<String> identifiers = new LinkedHashSet<>();
+        identifiers.addAll(contextualAccountIdentifiers(
+                snapshot.payload.optString("window_title", "")
+        ));
+        JSONArray nodes = snapshot.payload.optJSONArray("nodes");
+        if (nodes != null) {
+            for (int index = 0; index < nodes.length(); index++) {
+                JSONObject node = nodes.optJSONObject(index);
+                if (node != null) {
+                    identifiers.addAll(contextualAccountIdentifiers(
+                            node.optString("text", "")
+                    ));
+                    identifiers.addAll(contextualAccountIdentifiers(
+                            node.optString("content_description", "")
+                    ));
+                }
+            }
+        }
+        JSONArray candidates = snapshot.payload.optJSONArray("candidates");
+        if (candidates != null) {
+            String[] fields = {
+                    "label", "icon_semantics", "nearby_text", "parent_semantics",
+                    "child_semantics", "visual_role", "visual_region"
+            };
+            for (int index = 0; index < candidates.length(); index++) {
+                JSONObject candidate = candidates.optJSONObject(index);
+                if (candidate == null) {
+                    continue;
+                }
+                for (String field : fields) {
+                    identifiers.addAll(contextualAccountIdentifiers(
+                            candidate.optString(field, "")
+                    ));
+                }
+            }
+        }
+        return identifiers;
+    }
+
+    private static boolean containsAccountIdentifier(
+            String value,
+            Set<String> accountIdentifiers
+    ) {
+        Matcher matcher = ACCOUNT_IDENTIFIER_TOKEN.matcher(value == null ? "" : value);
+        while (matcher.find()) {
+            if (accountIdentifiers.contains(matcher.group().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static void redactSnapshotInPlace(AccessibilityScreenReader.ScreenSnapshot snapshot) {
+        Set<String> accountIdentifiers = contextualAccountIdentifiers(snapshot);
         JSONArray nodes = snapshot.payload.optJSONArray("nodes");
         if (nodes != null) {
             for (int index = 0; index < nodes.length(); index++) {
@@ -185,7 +242,7 @@ final class VisualScreenAugmenter implements AutoCloseable {
                 }
                 for (String field : new String[] {"text", "content_description"}) {
                     String value = node.optString(field, "");
-                    String redacted = redactSensitiveText(value);
+                    String redacted = redactSensitiveText(value, accountIdentifiers);
                     if (!redacted.equals(value)) {
                         put(node, field, redacted);
                     }
@@ -206,21 +263,23 @@ final class VisualScreenAugmenter implements AutoCloseable {
             }
             for (String field : semanticFields) {
                 String value = candidate.optString(field, "");
-                String redacted = redactSensitiveText(value);
+                String redacted = redactSensitiveText(value, accountIdentifiers);
                 if (!redacted.equals(value)) {
                     put(candidate, field, redacted);
                 }
             }
         }
         String title = snapshot.payload.optString("window_title", "");
-        if (isSensitiveText(title)) {
-            put(snapshot.payload, "window_title", redactSensitiveText(title));
+        String redactedTitle = redactSensitiveText(title, accountIdentifiers);
+        if (!redactedTitle.equals(title)) {
+            put(snapshot.payload, "window_title", redactedTitle);
         }
     }
 
     private static int mergeOcrIntoExistingCandidates(
             AccessibilityScreenReader.ScreenSnapshot snapshot,
-            Text result
+            Text result,
+            Set<String> accountIdentifiers
     ) {
         JSONArray candidates = snapshot.payload.optJSONArray("candidates");
         if (candidates == null || result == null) {
@@ -238,7 +297,11 @@ final class VisualScreenAugmenter implements AutoCloseable {
             for (Text.Line line : block.getLines()) {
                 String label = clean(line.getText());
                 Rect bounds = line.getBoundingBox();
-                if (label.isEmpty() || isSensitiveText(label) || bounds == null || bounds.isEmpty()) {
+                if (label.isEmpty()
+                        || isSensitiveText(label)
+                        || containsAccountIdentifier(label, accountIdentifiers)
+                        || bounds == null
+                        || bounds.isEmpty()) {
                     continue;
                 }
                 AccessibilityScreenReader.CandidateBinding binding = nearestBinding(
@@ -315,7 +378,8 @@ final class VisualScreenAugmenter implements AutoCloseable {
     private static String buildMaskedOverlayDataUrl(
             Bitmap source,
             AccessibilityScreenReader.ScreenSnapshot snapshot,
-            Text ocr
+            Text ocr,
+            Set<String> accountIdentifiers
     ) {
         Bitmap annotated = source.copy(Bitmap.Config.ARGB_8888, true);
         if (annotated == null) {
@@ -327,7 +391,8 @@ final class VisualScreenAugmenter implements AutoCloseable {
         mask.setStyle(Paint.Style.FILL);
 
         for (AccessibilityScreenReader.CandidateBinding binding : snapshot.bindings.values()) {
-            if (isSensitiveText(binding.semanticText)) {
+            if (isSensitiveText(binding.semanticText)
+                    || containsAccountIdentifier(binding.semanticText, accountIdentifiers)) {
                 canvas.drawRect(binding.bounds, mask);
             }
         }
@@ -335,7 +400,9 @@ final class VisualScreenAugmenter implements AutoCloseable {
             for (Text.TextBlock block : ocr.getTextBlocks()) {
                 for (Text.Line line : block.getLines()) {
                     Rect bounds = line.getBoundingBox();
-                    if (bounds != null && !bounds.isEmpty() && isSensitiveText(line.getText())) {
+                    if (bounds != null && !bounds.isEmpty()
+                            && (isSensitiveText(line.getText())
+                            || containsAccountIdentifier(line.getText(), accountIdentifiers))) {
                         canvas.drawRect(bounds, mask);
                     }
                 }

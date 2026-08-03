@@ -16,7 +16,10 @@ from app.navigation_contracts import (
     NavigationCandidate,
     ScreenObservation,
 )
-from app.services.navigation_decision_memory import redact_text
+from app.services.navigation_decision_memory import (
+    contextual_account_identifiers,
+    redact_text,
+)
 
 
 RUNTIME_SCHEMA_VERSION = 4
@@ -26,31 +29,67 @@ def utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="milliseconds")
 
 
-def _candidate_payload(candidate: NavigationCandidate) -> dict[str, object]:
+def _candidate_payload(
+    candidate: NavigationCandidate,
+    account_identifiers: Iterable[str] = (),
+) -> dict[str, object]:
     payload = candidate.model_dump(mode="json")
     for field in (
         "label", "icon_semantics", "nearby_text", "parent_semantics", "child_semantics",
         "visual_role", "visual_region",
     ):
-        payload[field] = redact_text(str(payload.get(field, "")))
+        payload[field] = redact_text(
+            str(payload.get(field, "")),
+            account_identifiers=account_identifiers,
+        )
     return payload
 
 
-def _node_payload(node: AccessibilityNodeSummary) -> dict[str, object]:
+def _node_payload(
+    node: AccessibilityNodeSummary,
+    account_identifiers: Iterable[str] = (),
+) -> dict[str, object]:
     payload = node.model_dump(mode="json")
     for field in ("text", "content_description"):
-        payload[field] = redact_text(str(payload.get(field, "")))
+        payload[field] = redact_text(
+            str(payload.get(field, "")),
+            account_identifiers=account_identifiers,
+        )
     return payload
 
 
 def _screen_payload(screen: ScreenObservation) -> dict[str, object]:
+    semantic_values = [screen.window_title, screen.activity_name]
+    semantic_values.extend(
+        value
+        for node in screen.nodes
+        for value in (node.text, node.content_description)
+    )
+    semantic_values.extend(
+        str(getattr(candidate, field, ""))
+        for candidate in screen.candidates
+        for field in (
+            "label", "icon_semantics", "nearby_text", "parent_semantics",
+            "child_semantics", "visual_role", "visual_region",
+        )
+    )
+    account_identifiers = contextual_account_identifiers(semantic_values)
     return {
         "app_package": screen.app_package,
-        "window_title": redact_text(screen.window_title),
-        "activity_name": redact_text(screen.activity_name),
+        "window_title": redact_text(
+            screen.window_title, account_identifiers=account_identifiers
+        ),
+        "activity_name": redact_text(
+            screen.activity_name, account_identifiers=account_identifiers
+        ),
         "navigation_depth": screen.navigation_depth,
-        "nodes": [_node_payload(node) for node in screen.nodes],
-        "candidates": [_candidate_payload(candidate) for candidate in screen.candidates],
+        "nodes": [
+            _node_payload(node, account_identifiers) for node in screen.nodes
+        ],
+        "candidates": [
+            _candidate_payload(candidate, account_identifiers)
+            for candidate in screen.candidates
+        ],
     }
 
 

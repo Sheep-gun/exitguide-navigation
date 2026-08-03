@@ -19,6 +19,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     canonical_json,
     is_state_changing_action_label,
     redact_text,
+    contextual_account_identifiers,
     stable_id,
 )
 
@@ -127,6 +128,11 @@ def main() -> None:
     assert redact_text("carson0306 프로필 설정") == "[account] 프로필 설정"
     assert redact_text("계정: member_2026") == "계정: [account]"
     assert redact_text("Netflix 계정") == "Netflix 계정"
+    identifiers = contextual_account_identifiers(
+        ("프로필을 변경 또는 관리하세요. carson0306", "carson0306")
+    )
+    assert identifiers == ("carson0306",)
+    assert redact_text("carson0306", account_identifiers=identifiers) == "[account]"
     assert redact_text("우*하 님 쿠페이 머니 169 원, 총 312,717원, $19.99") == (
         "[account] 님 쿠페이 머니 [amount], 총 [amount], [amount]"
     )

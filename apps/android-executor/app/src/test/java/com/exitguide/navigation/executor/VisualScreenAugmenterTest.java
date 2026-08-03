@@ -27,6 +27,12 @@ public final class VisualScreenAugmenterTest {
                 "계정: [account]",
                 VisualScreenAugmenter.redactSensitiveText("계정: member_2026")
         );
+        assertEquals(
+                "프로필을 변경 또는 관리하세요. [account]",
+                VisualScreenAugmenter.redactSensitiveText(
+                        "프로필을 변경 또는 관리하세요. carson0306"
+                )
+        );
     }
 
     @Test
@@ -41,4 +47,5 @@ public final class VisualScreenAugmenterTest {
                 "navigated", "advanced", ""
         ));
     }
+
 }
