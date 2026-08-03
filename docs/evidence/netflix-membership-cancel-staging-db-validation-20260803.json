@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "validation_scope": "database_structure_and_migration_only",
+  "database": {
+    "path": "C:\\Users\\YangGeon\\Documents\\AI Rookie\\exitguide-navigation-db-redesign\\.artifacts\\navigation-decision-tuning-20260803.sqlite",
+    "bytes": 2576384,
+    "sha256": "e1794faa861a26bd1017a49f916d5a9828600cc7f24b36c8ec6fd94584c3708c"
+  },
+  "checks": {
+    "sqlite_quick_check": true,
+    "foreign_key_violations_zero": true,
+    "schema_version_is_1": false,
+    "source_sha256_matches": true,
+    "legacy_route_tables_absent": true,
+    "app_split_has_no_leak": true,
+    "connectivity_not_conflated_with_navigation": true,
+    "dangerous_final_clicks_zero": true,
+    "safe_stop_examples_present": true,
+    "unredacted_email_hits_zero": true,
+    "unredacted_phone_hits_zero": true,
+    "raw_element_ids_absent_from_visible_text": true,
+    "raw_coordinates_absent": true
+  },
+  "passed": false,
+  "counts": {
+    "goals": 6,
+    "goal_phrases": 41,
+    "goal_relations": 4,
+    "destination_signatures": 7,
+    "affordance_roles": 14,
+    "affordance_role_aliases": 83,
+    "semantic_screens": 84,
+    "screen_observations": 81,
+    "affordances": 1628,
+    "decision_cases": 82,
+    "transition_outcomes": 82,
+    "recovery_memories": 11,
+    "evidence_records": 238,
+    "evaluation_app_splits": 13
+  },
+  "goal_case_counts": {
+    "account.delete": 18,
+    "account.signup": 8,
+    "membership.cancel": 42,
+    "membership.change": 11,
+    "membership.join": 3
+  },
+  "goal_distinct_app_counts": {
+    "account.delete": 4,
+    "account.signup": 3,
+    "membership.cancel": 6,
+    "membership.change": 2,
+    "membership.join": 1
+  },
+  "warnings": [
+    "membership.manage has no migrated verified decision case",
+    "membership.join has fewer than two source apps and is not generalization-ready",
+    "legacy source has no VLM observations; v1 migrated screens use Accessibility/OCR only"
+  ],
+  "not_evaluated": [
+    "first_action_accuracy",
+    "next_action_accuracy",
+    "destination_arrival_rate",
+    "recovery_success_rate",
+    "planner-model quality"
+  ],
+  "validated_at": "2026-08-03T16:10:28+00:00"
+}

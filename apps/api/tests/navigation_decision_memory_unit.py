@@ -17,6 +17,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
     ALLOWED_ACTIONS,
     NavigationDecisionMemory,
     canonical_json,
+    is_dangerous_final_candidate,
     is_state_changing_action_label,
     redact_text,
     contextual_account_identifiers,
@@ -30,6 +31,11 @@ def test_state_changing_action_labels_are_exact() -> None:
     assert is_state_changing_action_label("적용") is True
     assert is_state_changing_action_label("저장된 결제수단") is False
     assert is_state_changing_action_label("변경 내역") is False
+
+
+def test_profile_deletion_is_a_dangerous_final_candidate() -> None:
+    assert is_dangerous_final_candidate("프로필 삭제") is True
+    assert is_dangerous_final_candidate("Delete profile") is True
 
 
 def _load_migration_module():
@@ -59,6 +65,8 @@ def _seed_case(
     screen_title: str,
     selected_label: str,
     case_suffix: str,
+    outcome_type: str = "navigated",
+    progress_label: str = "advanced",
 ) -> tuple[str, str]:
     candidates = [
         {"element_id": "profile", "label": selected_label, "role": "button", "risk_level": "low"},
@@ -109,14 +117,16 @@ def _seed_case(
     connection.execute(
         "INSERT INTO transition_outcomes VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
-            stable_id("out_", case_id), case_id, None, "navigated", "observed", 1, 0.0,
-            None, None, None, "semantic_signature_only", "advanced", "", "", "2026-08-02",
+            stable_id("out_", case_id), case_id, None, outcome_type, "observed", 1, 0.0,
+            None, None, None, "semantic_signature_only", progress_label, "", "", "2026-08-02",
         ),
     )
     return case_id, selected_affordance
 
 
 def main() -> None:
+    test_state_changing_action_labels_are_exact()
+    test_profile_deletion_is_a_dangerous_final_candidate()
     assert ALLOWED_ACTIONS == (
         "click", "scroll", "back", "wait_and_observe", "stop_for_user"
     )
@@ -151,6 +161,11 @@ def main() -> None:
         case_b, selected_b = _seed_case(
             connection, writable, app_package="app.beta", goal_text="계정 삭제",
             screen_title="시작", selected_label="내 계정", case_suffix="b",
+        )
+        case_a_failure, _ = _seed_case(
+            connection, writable, app_package="app.alpha", goal_text="회원 탈퇴",
+            screen_title="첫 화면", selected_label="내 계정", case_suffix="c",
+            outcome_type="wrong_destination", progress_label="regressed",
         )
         connection.commit()
 
@@ -376,6 +391,33 @@ def main() -> None:
         )
         assert coherent_cancel_boundary.destination_match >= cancel_threshold
 
+        account_page_without_cancel_entry = memory.retrieve(
+            goal_text="멤버십을 해지하고 싶어",
+            window_title="계정",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "membership-info",
+                    "label": "멤버십 정보",
+                    "nearby_text": "스탠다드 멤버십 멤버십 시작일",
+                    "role": "clickable",
+                },
+                {
+                    "candidate_id": "billing-history",
+                    "label": "결제 내역 확인",
+                    "role": "clickable",
+                },
+                {
+                    "candidate_id": "redacted-control",
+                    "label": "[redacted]",
+                    "visual_role": "likely cancel or close action",
+                    "role": "clickable",
+                },
+            ],
+            top_k=0,
+        )
+        assert account_page_without_cancel_entry.destination_match < cancel_threshold
+
         membership_menu = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",
             window_title="전체 메뉴",
@@ -437,10 +479,18 @@ def main() -> None:
         )
         assert query.goal is not None and query.goal.goal_id == "account.delete"
         assert query.evidence and all(item.case_id != case_a for item in query.evidence)
+        assert any(item.case_id == case_a_failure for item in query.evidence)
         assert any(item.case_id == case_b for item in query.evidence)
+        current_account_id = next(
+            str(item["candidate_id"])
+            for item in query.screen.candidate_payloads
+            if item["label"] == "내 계정"
+        )
+        assert query.candidate_confidence[current_account_id].conflicting_cases >= 1
         action, candidate_id, direction, confidence = memory.recommend_action(query)
-        assert (action, candidate_id, direction) == ("click", "current-account", None)
-        assert confidence > 0.2
+        assert (action, candidate_id) != ("click", "current-account")
+        assert direction is None
+        assert confidence >= 0.0
 
         destination = memory.retrieve(
             goal_text="구독 해지",

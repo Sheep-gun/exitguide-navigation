@@ -14,6 +14,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class NavigationApiClient {
     interface Callback {
@@ -25,6 +27,7 @@ final class NavigationApiClient {
     private static final int MAX_TRANSPORT_ATTEMPTS = 3;
     private final ExecutorService networkExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     void get(String baseUrl, String path, Callback callback) {
         request(baseUrl, path, "GET", null, callback);
@@ -35,7 +38,9 @@ final class NavigationApiClient {
     }
 
     void close() {
-        networkExecutor.shutdownNow();
+        if (closed.compareAndSet(false, true)) {
+            networkExecutor.shutdownNow();
+        }
     }
 
     private void request(
@@ -45,7 +50,22 @@ final class NavigationApiClient {
             JSONObject payload,
             Callback callback
     ) {
-        networkExecutor.execute(() -> requestWithRetries(baseUrl, path, method, payload, callback));
+        if (closed.get()) {
+            return;
+        }
+        try {
+            networkExecutor.execute(
+                    () -> requestWithRetries(baseUrl, path, method, payload, callback)
+            );
+        } catch (RejectedExecutionException error) {
+            // AccessibilityService teardown can race a callback that wants to
+            // post one final observation/session-stop request. Once closed,
+            // dropping that lifecycle cleanup request is safer than crashing
+            // and Android will not schedule further UI work for this client.
+            if (!closed.get()) {
+                fail(callback, "executor_rejected", error.getMessage());
+            }
+        }
     }
 
     private void requestWithRetries(
@@ -115,7 +135,13 @@ final class NavigationApiClient {
                     return;
                 }
                 JSONObject response = new JSONObject(responseBody);
-                mainHandler.post(() -> callback.onSuccess(response));
+                if (!closed.get()) {
+                    mainHandler.post(() -> {
+                        if (!closed.get()) {
+                            callback.onSuccess(response);
+                        }
+                    });
+                }
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -124,7 +150,14 @@ final class NavigationApiClient {
     }
 
     private void fail(Callback callback, String failureClass, String detail) {
-        mainHandler.post(() -> callback.onFailure(failureClass, detail == null ? "" : detail));
+        if (closed.get()) {
+            return;
+        }
+        mainHandler.post(() -> {
+            if (!closed.get()) {
+                callback.onFailure(failureClass, detail == null ? "" : detail);
+            }
+        });
     }
 
     private static String readLimited(InputStream stream) throws IOException {

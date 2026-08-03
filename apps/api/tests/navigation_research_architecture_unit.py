@@ -33,6 +33,7 @@ from app.services.navigation_decision_memory import (  # noqa: E402
 )
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
+    FallbackNavigationPlannerResearchClient,
     NavigationPlannerResearchClient,
 )
 from app.services.navigation_planner import (  # noqa: E402
@@ -44,6 +45,8 @@ from app.services.navigation_research_policy import (  # noqa: E402
     AndroidWorldResearchPolicy,
     EnumeratedAction,
     ReflectionTriggerPolicy,
+    _profile_gate_existing_entry_candidate_id,
+    _wrong_destination_requires_back,
 )
 from app.services.navigation_runtime import (  # noqa: E402
     NavigationRuntime,
@@ -257,6 +260,22 @@ class ScriptedVisionClient:
         raise AssertionError(system)
 
 
+class FailingPlannerDelegate:
+    configured = True
+    name = "solar_pro4"
+
+    def plan_and_verify_actions(self, **_kwargs):
+        raise ValueError("empty primary model response")
+
+
+class StablePlannerDelegate:
+    configured = True
+    name = "solar_pro3"
+
+    def plan_and_verify_actions(self, **_kwargs):
+        return "fallback-plan", {"wait_and_observe": "fallback-score"}
+
+
 def _load_migration_module():
     path = ROOT / "scripts" / "Migrate-NavigationDecisionDb.py"
     spec = importlib.util.spec_from_file_location("navigation_research_migration", path)
@@ -287,6 +306,15 @@ def _screen() -> ScreenObservation:
 
 
 def main() -> None:
+    resilient_planner = FallbackNavigationPlannerResearchClient(
+        primary=FailingPlannerDelegate(),
+        fallback=StablePlannerDelegate(),
+    )
+    resilient_result = resilient_planner.plan_and_verify_actions(actions=[])
+    assert resilient_result[0] == "fallback-plan"
+    assert resilient_planner.active_name == "solar_pro3"
+    assert resilient_planner.fallback_configured is True
+
     planner_transport = ScriptedPlannerClient()
     vision_transport = ScriptedVisionClient()
     planner_model = NavigationPlannerResearchClient(
@@ -301,6 +329,311 @@ def main() -> None:
         planner_mode="always",
         vlm_mode="always",
     )
+
+    profile_management_candidates = [
+        NavigationCandidate(
+            candidate_id="edit-profile",
+            label="프로필 변경",
+            icon_semantics="pencil",
+            role="button",
+        ),
+        NavigationCandidate(
+            candidate_id="kids-profile",
+            label="키즈 프로필",
+            role="button",
+        ),
+        NavigationCandidate(
+            candidate_id="add-profile",
+            label="프로필 추가",
+            role="button",
+        ),
+        NavigationCandidate(
+            candidate_id="avatar",
+            label="사용자 아바타",
+            role="button",
+        ),
+    ]
+    membership_plan = HierarchicalPlan(
+        goal_id="membership.cancel",
+        stage="hub_discovery",
+        target_roles=["account.hub", "membership.hub"],
+        immediate_subgoal="open account or membership management",
+        expected_outcome="membership controls become visible",
+        completion_rule="choose one safe intermediate hub",
+        source="decision_memory_fallback",
+    )
+    profile_management_values = [
+        CandidateValue(
+            candidate_id=candidate.candidate_id,
+            value=score,
+            memory_score=0.0,
+            role_score=score,
+            final_score=score,
+            forbidden=False,
+            risk_level="low",
+        )
+        for candidate, score in zip(
+            profile_management_candidates,
+            (0.95, 0.80, 0.70, 0.60),
+            strict=True,
+        )
+    ]
+    profile_management_actions = policy._enumerate_actions(
+        candidates=profile_management_candidates,
+        prior_values=profile_management_values,
+        plan=membership_plan,
+        recent_history=[],
+    )
+    assert any(item.action.name == "back" for item in profile_management_actions)
+    profile_management_scores = {
+        "click:edit-profile": (0.95, "model"),
+        "click:kids-profile": (0.80, "model"),
+        "click:add-profile": (0.70, "model"),
+        "click:avatar": (0.60, "model"),
+        "back": (0.20, "recovery"),
+    }
+    guarded_profile_scores = policy._apply_membership_profile_management_guard(
+        scores=profile_management_scores,
+        goal_id="membership.cancel",
+        enumerated=profile_management_actions,
+    )
+    assert all(
+        guarded_profile_scores[f"click:{candidate.candidate_id}"][0] <= 0.15
+        for candidate in profile_management_candidates
+    )
+    assert guarded_profile_scores["back"][0] >= 0.80
+    profile_gate_candidates = [
+        NavigationCandidate(
+            candidate_id="existing-profile",
+            label="[account] 총 3개 항목 중 1번째. [account]",
+            icon_semantics="user avatar with smiley face",
+            visual_role="current profile selection",
+        ),
+        NavigationCandidate(
+            candidate_id="add-profile-gate",
+            label="추가 총 3개 항목 중 2번째. 프로필을 추가하세요.",
+        ),
+        NavigationCandidate(
+            candidate_id="edit-profile-gate",
+            label="변경 총 3개 항목 중 3번째. 프로필을 변경하세요.",
+        ),
+    ]
+    profile_gate_values = [
+        profile_management_values[index].model_copy(
+            update={"candidate_id": candidate.candidate_id}
+        )
+        for index, candidate in enumerate(profile_gate_candidates)
+    ]
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
+        screen_title="넷플릭스를 시청할 프로필을 선택하세요.",
+        recent_history=[],
+    ) == "existing-profile"
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
+        screen_title="",
+        recent_history=[],
+        visually_recommended_candidate_id="existing-profile",
+    ) == "existing-profile"
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
+        screen_title="",
+        recent_history=[],
+        visually_recommended_candidate_id="add-profile-gate",
+    ) is None
+    profile_gate_actions = policy._enumerate_actions(
+        candidates=profile_gate_candidates,
+        prior_values=profile_gate_values,
+        plan=membership_plan,
+        recent_history=[],
+        screen_text="넷플릭스를 시청할 프로필을 선택하세요.",
+    )
+    profile_gate_scores = policy._apply_membership_profile_management_guard(
+        scores={
+            "click:existing-profile": (0.30, "model"),
+            "click:add-profile-gate": (0.70, "model"),
+            "click:edit-profile-gate": (0.95, "model"),
+            "back": (0.20, "recovery"),
+        },
+        goal_id="membership.cancel",
+        enumerated=profile_gate_actions,
+        screen_text="넷플릭스를 시청할 프로필을 선택하세요.",
+    )
+    assert profile_gate_scores["click:existing-profile"][0] >= 0.80
+    assert profile_gate_scores["click:add-profile-gate"][0] <= 0.15
+    assert profile_gate_scores["click:edit-profile-gate"][0] <= 0.15
+
+    profile_edit_exit_candidates = [
+        NavigationCandidate(candidate_id="profile-entry", label="[account]"),
+        NavigationCandidate(candidate_id="add-from-edit", label="프로필 추가"),
+        NavigationCandidate(
+            candidate_id="done-editing",
+            label="완료 프로필 수정에서 나가기",
+        ),
+    ]
+    profile_edit_exit_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id=candidate.candidate_id),
+            0.5,
+            candidate,
+        )
+        for candidate in profile_edit_exit_candidates
+    ]
+    profile_edit_exit_scores = policy._apply_membership_profile_management_guard(
+        scores={
+            "click:profile-entry": (0.70, "model"),
+            "click:add-from-edit": (0.60, "model"),
+            "click:done-editing": (0.20, "model"),
+        },
+        goal_id="membership.cancel",
+        enumerated=profile_edit_exit_actions,
+        screen_text="프로필 수정",
+    )
+    assert profile_edit_exit_scores["click:done-editing"][0] >= 0.90
+    assert profile_edit_exit_scores["click:profile-entry"][0] <= 0.15
+    assert profile_edit_exit_scores["click:add-from-edit"][0] <= 0.15
+
+    foreign_app_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="foreign-membership"),
+            0.9,
+            NavigationCandidate(candidate_id="foreign-membership", label="멤버십 관리"),
+        ),
+        EnumeratedAction(NavigationAction(name="back"), 0.2, None),
+        EnumeratedAction(NavigationAction(name="stop_for_user"), 0.05, None),
+    ]
+    foreign_app_scores = policy._apply_external_app_stop_guard(
+        scores={
+            "click:foreign-membership": (0.95, "model"),
+            "back": (0.40, "model"),
+            "stop_for_user": (0.05, "model"),
+        },
+        enumerated=foreign_app_actions,
+        recent_history=[
+            {
+                "outcome_type": "external_app",
+                "progress_label": "regressed",
+                "connectivity_status": "observed",
+            }
+        ],
+    )
+    assert foreign_app_scores["stop_for_user"][0] >= 0.99
+    assert foreign_app_scores["click:foreign-membership"][0] <= 0.05
+    assert foreign_app_scores["back"][0] <= 0.05
+    icon_picker_candidates = [
+        NavigationCandidate(candidate_id="avatar-one", label="Avatar One"),
+        NavigationCandidate(candidate_id="avatar-two", label="Avatar Two"),
+    ]
+    icon_picker_values = [
+        value.model_copy(update={"candidate_id": candidate.candidate_id})
+        for value, candidate in zip(
+            profile_management_values[:2],
+            icon_picker_candidates,
+            strict=True,
+        )
+    ]
+    icon_picker_actions = policy._enumerate_actions(
+        candidates=icon_picker_candidates,
+        prior_values=icon_picker_values,
+        plan=membership_plan,
+        recent_history=[],
+        screen_text="아이콘 선택",
+    )
+    assert any(item.action.name == "back" for item in icon_picker_actions)
+    guarded_icon_scores = policy._apply_membership_profile_management_guard(
+        scores={
+            "click:avatar-one": (0.95, "model"),
+            "click:avatar-two": (0.80, "model"),
+            "back": (0.20, "recovery"),
+        },
+        goal_id="membership.cancel",
+        enumerated=icon_picker_actions,
+        screen_text="아이콘 선택",
+    )
+    assert guarded_icon_scores["click:avatar-one"][0] <= 0.15
+    assert guarded_icon_scores["back"][0] >= 0.80
+    non_membership_scores = policy._apply_membership_profile_management_guard(
+        scores=profile_management_scores,
+        goal_id="account.settings",
+        enumerated=profile_management_actions,
+    )
+    assert non_membership_scores == profile_management_scores
+
+    membership_home_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="notifications"),
+            0.2,
+            NavigationCandidate(
+                candidate_id="notifications",
+                label="알림",
+                nearby_text="Premium 검색",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="my-page"),
+            0.2,
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ),
+    ]
+    membership_home_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:notifications": (0.60, "nearby keyword leak"),
+            "click:my-page": (0.20, "underestimated hub"),
+        },
+        goal_id="membership.cancel",
+        enumerated=membership_home_actions,
+    )
+    assert membership_home_scores["click:notifications"][0] <= 0.20
+    assert membership_home_scores["click:my-page"][0] >= 0.80
+
+    membership_page_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="premium-benefits"),
+            0.3,
+            NavigationCandidate(candidate_id="premium-benefits", label="Premium 혜택"),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="account"),
+            0.7,
+            NavigationCandidate(candidate_id="account", label="계정"),
+        ),
+    ]
+    membership_page_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:premium-benefits": (0.30, "underestimated membership control"),
+            "click:account": (0.70, "generic account hub"),
+        },
+        goal_id="membership.cancel",
+        enumerated=membership_page_actions,
+    )
+    assert membership_page_scores["click:premium-benefits"][0] >= 0.90
+    assert membership_page_scores["click:premium-benefits"][0] > membership_page_scores[
+        "click:account"
+    ][0]
+    deep_membership_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="navigate-up"),
+            0.2,
+            NavigationCandidate(candidate_id="navigate-up", label="위로 이동"),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="my-page"),
+            0.2,
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ),
+    ]
+    deep_membership_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:navigate-up": (0.60, "model"),
+            "click:my-page": (0.20, "bottom navigation"),
+        },
+        goal_id="membership.cancel",
+        enumerated=deep_membership_actions,
+    )
+    assert deep_membership_scores["click:my-page"][0] == 0.20
 
     perceived = exaone_vlm.perceive(
         goal_text="회원 탈퇴 메뉴 찾기",
@@ -812,6 +1145,48 @@ def main() -> None:
     assert loop_guarded.proposal.action.name == "stop_for_user"
     assert loop_guarded.verifier_provider == "python_screen_visit_guard"
     assert planner_transport.plan_calls == planner_calls_before_loop_guard
+    planner_calls_before_recovery_gate = planner_transport.plan_calls
+    wrong_destination_recovery = selective_policy.decide_action(
+        query=fast_path_query,
+        plan=fast_path_plan.model_copy(update={"stage": "selective_recovery"}),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="status-bar",
+                label="system status bar",
+                role="clickable",
+                position_bucket="top",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+        recent_history=[
+            {
+                "step_ordinal": 2,
+                "screen_fingerprint": "membership-purchase",
+                "connectivity_status": "observed",
+                "outcome_type": "wrong_destination",
+                "progress_label": "regressed",
+                "failure_class": "semantic_distance_increased",
+                "recovery_action": "back",
+            }
+        ],
+    )
+    assert wrong_destination_recovery.proposal.action.name == "back"
+    assert wrong_destination_recovery.verifier_provider == (
+        "python_mobileuse_wrong_destination_back_gate"
+    )
+    assert planner_transport.plan_calls == planner_calls_before_recovery_gate
+    assert _wrong_destination_requires_back(
+        [
+            {
+                "action_name": "back",
+                "connectivity_status": "observed",
+                "outcome_type": "wrong_destination",
+                "progress_label": "regressed",
+                "recovery_action": "back",
+            }
+        ]
+    ) is False
     assert selective_policy._should_invoke_planner(
         query=fast_path_query,
         plan=fast_path_plan,

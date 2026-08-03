@@ -19,7 +19,9 @@ if str(API_ROOT) not in sys.path:
 
 from app.config import get_settings  # noqa: E402
 from app.navigation_contracts import (  # noqa: E402
+    AccessibilityNodeSummary,
     DecideRequest,
+    NavigationAction,
     NavigationCandidate,
     ObserveRequest,
     ScreenObservation,
@@ -35,7 +37,13 @@ from app.services.navigation_model_clients import (  # noqa: E402
     OpenAICompatibleChatClient,
 )
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
-from app.services.navigation_runtime import NavigationRuntime  # noqa: E402
+from app.services.navigation_runtime import (  # noqa: E402
+    NavigationRuntime,
+    _interleaved_repeat_guard,
+    _selected_reverse_navigation_guard,
+    _successful_back_recovery,
+    verify_transition,
+)
 from app.services.navigation_runtime_store import NavigationRuntimeStore  # noqa: E402
 
 
@@ -94,6 +102,143 @@ def _account_screen() -> ScreenObservation:
 
 
 def main() -> None:
+    failed_screen_history = [
+        {
+            "action_name": "click",
+            "screen_fingerprint": "membership-menu",
+            "connectivity_status": "observed",
+            "outcome_type": "wrong_destination",
+            "progress_label": "regressed",
+            "recovery_action": "back",
+        }
+    ]
+    assert _successful_back_recovery(
+        action_name="back",
+        previous_fingerprint="membership-purchase",
+        next_fingerprint="membership-menu-dynamic-version",
+        session_app_package="evaluation.membership.app",
+        next_app_package="evaluation.membership.app",
+        recent_history=failed_screen_history,
+    ) is True
+    assert _successful_back_recovery(
+        action_name="back",
+        previous_fingerprint="membership-purchase",
+        next_fingerprint="membership-home",
+        session_app_package="evaluation.membership.app",
+        next_app_package="evaluation.membership.app",
+        recent_history=[
+            *failed_screen_history,
+            {
+                "action_name": "back",
+                "screen_fingerprint": "membership-purchase",
+                "connectivity_status": "observed",
+                "outcome_type": "wrong_destination",
+                "progress_label": "regressed",
+                "recovery_action": "back",
+            },
+        ],
+    ) is True
+    assert _successful_back_recovery(
+        action_name="back",
+        previous_fingerprint="membership-purchase",
+        next_fingerprint="external-screen",
+        session_app_package="evaluation.membership.app",
+        next_app_package="other.app",
+        recent_history=failed_screen_history,
+    ) is False
+    assert _successful_back_recovery(
+        action_name="click",
+        previous_fingerprint="membership-purchase",
+        next_fingerprint="membership-menu",
+        session_app_package="evaluation.membership.app",
+        next_app_package="evaluation.membership.app",
+        recent_history=failed_screen_history,
+    ) is False
+    sparse_reverse_guard = _selected_reverse_navigation_guard(
+        NavigationAction(name="click", candidate_id="navigate-up"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="forward",
+                label="Account",
+                role="button",
+            ),
+            NavigationCandidate(
+                candidate_id="navigate-up",
+                label="",
+                role="icon_button",
+            )
+        ],
+        nodes=[
+            AccessibilityNodeSummary(
+                node_id="navigate-up",
+                content_description="위로 이동",
+                clickable=True,
+            )
+        ],
+        screen_fingerprint="external-loading",
+        recent_history=[],
+    )
+    assert sparse_reverse_guard is not None
+    assert sparse_reverse_guard.name == "wait_and_observe"
+    unlabeled_structural_reverse = _selected_reverse_navigation_guard(
+        NavigationAction(name="click", candidate_id="unknown-top-icon"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="unknown-top-icon",
+                label="",
+                role="icon_button",
+                position_bucket="top",
+            )
+        ],
+        nodes=[],
+        screen_fingerprint="external-loading-unlabeled",
+        recent_history=[],
+    )
+    assert unlabeled_structural_reverse is not None
+    assert unlabeled_structural_reverse.name == "wait_and_observe"
+
+    repeated_after_visual_wait = _interleaved_repeat_guard(
+        NavigationAction(name="click", candidate_id="account-url"),
+        recent_history=[
+            {
+                "action_name": "click",
+                "candidate_id": "account-url",
+                "connectivity_status": "observed",
+                "progress_label": "unknown",
+            },
+            {"action_name": "wait_and_observe"},
+        ],
+    )
+    assert repeated_after_visual_wait is not None
+    assert repeated_after_visual_wait.name == "wait_and_observe"
+    repeated_after_two_waits = _interleaved_repeat_guard(
+        NavigationAction(name="click", candidate_id="account-url"),
+        recent_history=[
+            {
+                "action_name": "click",
+                "candidate_id": "account-url",
+                "connectivity_status": "observed",
+                "progress_label": "unknown",
+            },
+            {"action_name": "wait_and_observe"},
+            {"action_name": "wait_and_observe"},
+        ],
+    )
+    assert repeated_after_two_waits is not None
+    assert repeated_after_two_waits.name == "stop_for_user"
+
+    external_destination_collision = verify_transition(
+        action_name="back",
+        previous_fingerprint="netflix-profile-gate",
+        next_fingerprint="foreign-membership-screen",
+        destination_match_before=0.0,
+        destination_match_after=1.0,
+        destination_threshold=0.7,
+        observed_signal="external_app",
+    )
+    assert external_destination_collision.outcome_type == "external_app"
+    assert external_destination_collision.progress_label == "regressed"
+
     with tempfile.TemporaryDirectory() as temporary:
         temporary_path = Path(temporary)
         decision_db = temporary_path / "decision.sqlite"
@@ -115,6 +260,43 @@ def main() -> None:
         assert first.goal.status == "recognized"
         assert first.action.name == "click" and first.action.candidate_id == "profile"
         assert first.evidence_case_ids == []
+
+        profile_gate_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "profile-gate-runtime.sqlite"),
+            policy=_policy(),
+        )
+        profile_gate_decision = profile_gate_runtime.decide(
+            DecideRequest(
+                request_id="request-profile-gate",
+                app_package="evaluation.profile-gate.app",
+                goal_text="멤버십 해지",
+                screen=ScreenObservation(
+                    app_package="evaluation.profile-gate.app",
+                    window_title="넷플릭스를 시청할 프로필을 선택하세요.",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="existing-profile",
+                            label="[account] 총 3개 항목 중 1번째. [account]",
+                            icon_semantics="user avatar with smiley face",
+                            visual_role="current profile selection",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="add-profile",
+                            label="추가 총 3개 항목 중 2번째. 프로필을 추가하세요.",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="edit-profile",
+                            label="변경 총 3개 항목 중 3번째. 프로필을 변경하세요.",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert profile_gate_decision.action.name == "click"
+        assert profile_gate_decision.action.candidate_id == "existing-profile"
+        assert profile_gate_decision.planner_provider == "semantic_intermediate_role_fast_path"
+        assert profile_gate_decision.visual_reobserve_required is False
 
         no_change = runtime.observe(
             ObserveRequest(
@@ -208,6 +390,13 @@ def main() -> None:
             )
         )
         assert first_external_observation.outcome_type == "external_app"
+        assert first_external_observation.recovery_action is not None
+        assert first_external_observation.recovery_action.name == "back"
+        recovery_history = recovery_runtime.store.recent_history(
+            first_recovery_decision.session_id,
+            limit=5,
+        )
+        assert recovery_history[-1]["recovery_action"] == "back"
         external_screen_decision = recovery_runtime.decide(
             DecideRequest(
                 request_id="request-external-recovery",
@@ -405,6 +594,14 @@ def main() -> None:
             app_package="evaluation.transition.app",
             window_title="External link",
             activity_name="android.view.View",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="navigate-up" if index == 0 else f"static-node-{index}",
+                    text="Loading account page" if index else "",
+                    clickable=index == 0,
+                )
+                for index in range(20)
+            ],
             candidates=[
                 NavigationCandidate(
                     candidate_id="navigate-up",

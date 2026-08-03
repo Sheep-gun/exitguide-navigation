@@ -1,0 +1,126 @@
+{
+  "profile_id": "exitguide.navigation-experience.v1",
+  "schema_version": 2,
+  "validation_scope": "standards-profile-structure-migration-and-data-quality",
+  "database": {
+    "path": "C:\\Users\\YangGeon\\AppData\\Local\\Temp\\navigation-decision-youtube-staged-20260803.sqlite",
+    "bytes": 2523136,
+    "sha256": "59598aaf6ecad1e808a2ad53588ddd034136a6fe5ae2b4932bc79b7b48525f12"
+  },
+  "checks": {
+    "sqlite_quick_check": true,
+    "required_tables_present": true,
+    "foreign_key_violations_zero": true,
+    "schema_version_is_2": true,
+    "profile_id_is_v1": true,
+    "source_sha256_matches": true,
+    "legacy_route_tables_absent": true,
+    "standard_mapping_set_complete": true,
+    "language_tags_valid": true,
+    "skos_concepts_cover_goals": true,
+    "skos_labels_cover_phrases": true,
+    "skos_one_pref_label_per_goal_language": true,
+    "goal_relations_mapped": true,
+    "active_goals_have_destination_signature": true,
+    "observation_contracts_cover_observations": true,
+    "observation_payloads_match_json_schema": true,
+    "rlds_steps_cover_decision_cases": true,
+    "rlds_episode_boundaries_valid": true,
+    "rlds_episode_links_valid": true,
+    "rlds_terminal_semantics_valid": true,
+    "rlds_rewards_match_progress": true,
+    "app_split_has_no_leak": true,
+    "chosen_candidates_belong_to_current_screen": true,
+    "connectivity_not_conflated_with_navigation": true,
+    "dangerous_final_clicks_zero": true,
+    "prov_covers_all_evidence": true,
+    "profile_timestamps_are_rfc3339": true,
+    "unredacted_email_hits_zero": true,
+    "unredacted_phone_hits_zero": true,
+    "raw_element_ids_absent_from_visible_text": true,
+    "raw_coordinates_absent": true
+  },
+  "passed": true,
+  "counts": {
+    "goals": 6,
+    "goal_phrases": 41,
+    "goal_relations": 4,
+    "destination_signatures": 7,
+    "semantic_screens": 82,
+    "screen_observations": 79,
+    "affordances": 1616,
+    "decision_cases": 80,
+    "transition_outcomes": 80,
+    "recovery_memories": 11,
+    "evidence_records": 234,
+    "evaluation_app_splits": 13,
+    "experience_episodes": 27,
+    "experience_steps": 80,
+    "provenance_agents": 4,
+    "provenance_activities": 143,
+    "evidence_provenance": 234
+  },
+  "source_coverage": {
+    "human_gold": {
+      "episodes": 14,
+      "steps": 63
+    },
+    "real_device": {
+      "episodes": 13,
+      "steps": 17
+    }
+  },
+  "goal_coverage": {
+    "account.delete": {
+      "episodes": 4,
+      "steps": 18,
+      "distinct_apps": 4
+    },
+    "account.signup": {
+      "episodes": 3,
+      "steps": 8,
+      "distinct_apps": 3
+    },
+    "membership.cancel": {
+      "episodes": 17,
+      "steps": 40,
+      "distinct_apps": 6
+    },
+    "membership.change": {
+      "episodes": 2,
+      "steps": 11,
+      "distinct_apps": 2
+    },
+    "membership.join": {
+      "episodes": 1,
+      "steps": 3,
+      "distinct_apps": 1
+    }
+  },
+  "contract_errors": {
+    "accessibility": 0,
+    "ocr": 0,
+    "vlm": 0,
+    "invalid_json": 0
+  },
+  "human_gold_inventory": {
+    "expected": 21,
+    "usable_in_scope": 14
+  },
+  "warnings": [
+    "expected Human Gold inventory is 21, but the current decision DB contains 14 in-scope Human Gold episodes; verify that the remainder is explicitly out of scope",
+    "membership.join has fewer than two source apps and is not generalization-ready",
+    "membership.manage has no verified decision episode",
+    "current migrated screens have no VLM observations; Accessibility/OCR only"
+  ],
+  "readiness_conclusion": "schema_ready_data_not_generalization_ready",
+  "not_evaluated": [
+    "first_action_accuracy",
+    "next_action_accuracy",
+    "destination_arrival_rate",
+    "recovery_success_rate",
+    "unseen-app success rate",
+    "planner-model quality"
+  ],
+  "validated_at": "2026-08-03T14:31:25+00:00"
+}

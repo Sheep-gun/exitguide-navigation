@@ -448,9 +448,11 @@ class NavigationRuntimeStore:
                 """
                 SELECT d.step_ordinal, d.screen_fingerprint, d.action_name, d.candidate_id,
                        d.scroll_direction, d.confidence, d.plan_stage,
-                       o.connectivity_status, o.outcome_type, o.progress_label, o.failure_class
+                       o.connectivity_status, o.outcome_type, o.progress_label, o.failure_class,
+                       x.recovery_action
                 FROM navigation_decisions AS d
                 LEFT JOIN navigation_observations AS o ON o.decision_id = d.decision_id
+                LEFT JOIN navigation_step_executions AS x ON x.decision_id = d.decision_id
                 WHERE d.session_id = ?
                 ORDER BY d.step_ordinal DESC
                 LIMIT ?

@@ -16,7 +16,12 @@ API_ROOT = ROOT / "apps" / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from app.navigation_contracts import DecideRequest, NavigationCandidate, ScreenObservation  # noqa: E402
+from app.navigation_contracts import (  # noqa: E402
+    AccessibilityNodeSummary,
+    DecideRequest,
+    NavigationCandidate,
+    ScreenObservation,
+)
 from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
 from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
@@ -68,9 +73,83 @@ def load_cases(path: Path, limit: int) -> list[dict[str, Any]]:
             (row["screen_id"],),
         ).fetchall()
         case["candidates"] = [dict(candidate) for candidate in candidates]
+        observation = connection.execute(
+            """
+            SELECT accessibility_json
+            FROM screen_observations
+            WHERE screen_id = ? AND app_package = ?
+            ORDER BY CASE WHEN source_type = 'real_device' THEN 0 ELSE 1 END,
+                     captured_at DESC
+            LIMIT 1
+            """,
+            (row["screen_id"], row["source_app_package"]),
+        ).fetchone()
+        case["nodes"] = load_accessibility_nodes(
+            None if observation is None else observation["accessibility_json"],
+            candidate_ids={str(candidate["candidate_key"]) for candidate in candidates},
+        )
         cases.append(case)
     connection.close()
     return cases
+
+
+def load_accessibility_nodes(
+    raw_payload: Any,
+    *,
+    candidate_ids: set[str],
+) -> list[AccessibilityNodeSummary]:
+    """Restore observed node facts needed for faithful offline policy replay.
+
+    Older imported observations can contain anonymous nodes that cannot satisfy
+    the executable candidate grounding contract. Those records remain usable as
+    candidate-only replays; observed, structurally valid node sets are restored
+    without fabricating scrollability or identifiers.
+    """
+
+    if not raw_payload:
+        return []
+    try:
+        payload = json.loads(str(raw_payload))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+    elements = payload.get("elements", []) if isinstance(payload, dict) else []
+    if not isinstance(elements, list) or not elements:
+        return []
+
+    node_ids = [
+        str(element.get("node_id", "")).strip()
+        for element in elements
+        if isinstance(element, dict)
+    ]
+    known_ids = set(node_ids)
+    if (
+        len(node_ids) != len(elements)
+        or any(not node_id for node_id in node_ids)
+        or len(known_ids) != len(node_ids)
+        or not candidate_ids.issubset(known_ids)
+    ):
+        return []
+
+    nodes: list[AccessibilityNodeSummary] = []
+    for element in elements:
+        parent_id = str(element.get("parent_node_id") or "").strip() or None
+        if parent_id is not None and parent_id not in known_ids:
+            return []
+        nodes.append(
+            AccessibilityNodeSummary(
+                node_id=str(element["node_id"]),
+                parent_id=parent_id,
+                text=str(element.get("label", "")),
+                content_description=str(element.get("content_description", "")),
+                role=str(element.get("role", "unknown")),
+                clickable=bool(element.get("clickable", False)),
+                scrollable=bool(element.get("scrollable", False)),
+                enabled=bool(element.get("enabled", True)),
+                selected=bool(element.get("selected", False)),
+                checked=element.get("checked"),
+            )
+        )
+    return nodes
 
 
 def exact_match(case: dict[str, Any], action: dict[str, Any]) -> bool:
@@ -131,6 +210,7 @@ def main() -> None:
                             if case["surface_type"] == "webview"
                             else "android.view.View"
                         ),
+                        nodes=case["nodes"],
                         candidates=candidates,
                     ),
                 )
@@ -174,6 +254,10 @@ def main() -> None:
             )
 
     report = summarize(results, args.db)
+    report["retrieval_isolation"] = {
+        "positive_route_cases": "source_app_excluded",
+        "verified_negative_safety_cases": "same_app_allowed",
+    }
     rendered = json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

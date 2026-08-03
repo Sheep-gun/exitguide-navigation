@@ -24,6 +24,8 @@ public final class NavigationSafetyPolicyTest {
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("회원가입 완료"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Confirm cancellation"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("로그아웃"));
+        assertTrue(NavigationSafetyPolicy.isDangerousFinalText("프로필 삭제"));
+        assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Delete profile"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("장바구니 담기"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Start subscription"));
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("마이페이지"));

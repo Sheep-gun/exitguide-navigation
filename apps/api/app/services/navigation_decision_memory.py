@@ -92,6 +92,7 @@ DANGEROUS_FINAL_PHRASES = (
     "계정 전환",
     "프로필 저장",
     "프로필 수정 완료",
+    "프로필 삭제",
     "모두 동의하고",
     "동의하고 가입",
     "신청서 제출",
@@ -111,6 +112,7 @@ DANGEROUS_FINAL_PHRASES = (
     "sign out",
     "switch account",
     "save profile",
+    "delete profile",
     "submit application",
     "send message",
     "add to cart",
@@ -245,6 +247,7 @@ class DecisionEvidence:
     verification_count: int
     provenance_validated: bool
     screen_similarity: float
+    same_app_negative: bool
 
     def prompt_payload(self) -> dict[str, object]:
         return {
@@ -264,7 +267,8 @@ class DecisionEvidence:
             "source_type": self.source_type,
             "verification_count": self.verification_count,
             "provenance_validated": self.provenance_validated,
-            "cross_app": True,
+            "cross_app": not self.same_app_negative,
+            "safety_memory": self.same_app_negative,
         }
 
 
@@ -813,7 +817,7 @@ class NavigationDecisionMemory:
             if self.profile_enabled:
                 rows = connection.execute(
                     f"""
-                    SELECT v.*,
+                    SELECT v.*,0 AS same_app_negative,
                            COALESCE((
                                SELECT er.source_type FROM evidence_records AS er
                                WHERE er.entity_type='decision_case' AND er.entity_id=v.case_id
@@ -843,7 +847,7 @@ class NavigationDecisionMemory:
             else:
                 rows = connection.execute(
                     f"""
-                    SELECT v.*,v.source_type AS profile_source_type,
+                    SELECT v.*,0 AS same_app_negative,v.source_type AS profile_source_type,
                            v.evidence_weight AS profile_confidence,
                            1 AS profile_verification_count,
                            0 AS provenance_validated
@@ -855,6 +859,75 @@ class NavigationDecisionMemory:
                     """,
                     params,
                 ).fetchall()
+
+            # Positive cases from the current app remain excluded so the
+            # retriever cannot replay an app-specific route. Verified negative
+            # outcomes are different: remembering that a candidate caused no
+            # change or a wrong destination is a safety constraint, not a
+            # route macro. Re-include only observed negative evidence from the
+            # current app so repeated failures can be avoided and recovered.
+            if exclude_app_package:
+                if self.profile_enabled:
+                    same_app_negative_rows = connection.execute(
+                        """
+                        SELECT v.*,1 AS same_app_negative,
+                               COALESCE((
+                                   SELECT er.source_type FROM evidence_records AS er
+                                   WHERE er.entity_type='decision_case' AND er.entity_id=v.case_id
+                                   ORDER BY er.confidence DESC,er.verification_count DESC LIMIT 1
+                               ),v.source_type) AS profile_source_type,
+                               COALESCE((
+                                   SELECT MAX(er.confidence) FROM evidence_records AS er
+                                   WHERE er.entity_type='decision_case' AND er.entity_id=v.case_id
+                               ),v.evidence_weight) AS profile_confidence,
+                               COALESCE((
+                                   SELECT MAX(er.verification_count) FROM evidence_records AS er
+                                   WHERE er.entity_type='decision_case' AND er.entity_id=v.case_id
+                               ),1) AS profile_verification_count,
+                               EXISTS(
+                                   SELECT 1 FROM evidence_records AS er
+                                   JOIN evidence_provenance AS ep ON ep.evidence_id=er.evidence_id
+                                   WHERE er.entity_type='decision_case' AND er.entity_id=v.case_id
+                               ) AS provenance_validated
+                        FROM verified_decision_cases AS v
+                        WHERE v.goal_id = ?
+                          AND v.source_app_package = ?
+                          AND v.connectivity_status = 'observed'
+                          AND (
+                              v.progress_label IN ('unchanged', 'regressed')
+                              OR v.outcome_type IN ('no_change', 'wrong_destination', 'infinite_feed')
+                          )
+                        ORDER BY profile_confidence DESC,v.evidence_weight DESC
+                        LIMIT 200
+                        """,
+                        (goal.goal_id, exclude_app_package),
+                    ).fetchall()
+                else:
+                    same_app_negative_rows = connection.execute(
+                        """
+                        SELECT v.*,1 AS same_app_negative,v.source_type AS profile_source_type,
+                               v.evidence_weight AS profile_confidence,
+                               1 AS profile_verification_count,
+                               0 AS provenance_validated
+                        FROM verified_decision_cases AS v
+                        WHERE v.goal_id = ?
+                          AND v.source_app_package = ?
+                          AND v.connectivity_status = 'observed'
+                          AND (
+                              v.progress_label IN ('unchanged', 'regressed')
+                              OR v.outcome_type IN ('no_change', 'wrong_destination', 'infinite_feed')
+                          )
+                        ORDER BY v.evidence_weight DESC
+                        LIMIT 200
+                        """,
+                        (goal.goal_id, exclude_app_package),
+                    ).fetchall()
+                existing_case_ids = {str(row["case_id"]) for row in rows}
+                rows = list(rows) + [
+                    row
+                    for row in same_app_negative_rows
+                    if str(row["case_id"]) not in existing_case_ids
+                ]
         all_evidence = self._score_evidence(screen, rows)
         evidence = all_evidence[: max(0, top_k)]
         candidate_scores, candidate_confidence = self._score_current_candidates(
@@ -935,6 +1008,7 @@ class NavigationDecisionMemory:
                     verification_count=int(row["profile_verification_count"]),
                     provenance_validated=bool(row["provenance_validated"]),
                     screen_similarity=round(screen_overlap, 4),
+                    same_app_negative=bool(row["same_app_negative"]),
                 )
             )
         scored.sort(key=lambda item: (-item.score, item.case_id))
@@ -1014,6 +1088,19 @@ class NavigationDecisionMemory:
                 label_score = text_similarity(label, item.selected_label)
                 role_score = jaccard(roles, set(item.function_roles))
                 support = item.score * (label_score * 0.58 + role_score * 0.42)
+                if (
+                    item.same_app_negative
+                    and label_score >= 0.88
+                    and item.screen_similarity >= 0.35
+                ):
+                    # An observed, semantically matching failure in this app is
+                    # a strong veto. It can suppress a repeated bad click, but
+                    # it never contributes positive route support.
+                    support = max(
+                        support,
+                        item.evidence_confidence
+                        * min(1.0, 0.72 + item.screen_similarity * 0.28),
+                    )
                 if item.outcome_type in {"no_change", "wrong_destination", "infinite_feed"}:
                     failure_support = max(failure_support, support)
                     if support >= 0.18:
@@ -1317,19 +1404,55 @@ def _destination_match(
     title: str = "",
     candidate_payloads: Sequence[Mapping[str, object]] = (),
 ) -> float:
-    # Function-role IDs (for example ``membership.plan``) are useful for
-    # cross-app retrieval, but they are not screen evidence. Including them
-    # here can satisfy both "membership" and "plan" without either word being
-    # visible to the user.
-    visible_tokens = {token for token in tokens if "." not in token}
+    # Rebuild destination evidence only from text that was actually observed.
+    # ``SemanticScreenState.tokens`` also contains inferred function-role IDs;
+    # tokenization removes their dots, so filtering tokens containing ``.``
+    # cannot prevent ``membership.cancel.entry`` from fabricating visible
+    # ``membership`` + ``cancel`` evidence.
+    grounded_text_parts = [title]
+    grounded_candidate_fields = (
+        "label",
+        "nearby_text",
+        "parent_semantics",
+        "child_semantics",
+    )
+    visual_candidate_fields = (
+        "icon_semantics",
+        "visual_role",
+        "visual_region",
+    )
+    for candidate in candidate_payloads:
+        grounded_text_parts.extend(
+            str(candidate.get(field, "")) for field in grounded_candidate_fields
+        )
+    grounded_tokens = set(tokenize(" ".join(grounded_text_parts)))
+    visual_tokens = set(
+        tokenize(
+            " ".join(
+                str(candidate.get(field, ""))
+                for candidate in candidate_payloads
+                for field in visual_candidate_fields
+            )
+        )
+    )
+    supporting_tokens = grounded_tokens | visual_tokens
 
-    def feature_present(value: object, region: set[str] | None = None) -> bool:
+    def feature_present(
+        value: object,
+        region: set[str] | None = None,
+        *,
+        include_visual_support: bool = False,
+    ) -> bool:
         # Screen tokens are stored as a sorted set, so phrase substring checks
         # lose the original word order.  A semantic feature is present when all
         # of its normalized tokens are visible on the screen.
         feature_tokens = set(tokenize(str(value)))
         return bool(feature_tokens) and feature_tokens.issubset(
-            visible_tokens if region is None else region
+            supporting_tokens
+            if region is None and include_visual_support
+            else grounded_tokens
+            if region is None
+            else region
         )
 
     title_tokens = set(tokenize(title))
@@ -1337,15 +1460,7 @@ def _destination_match(
     for candidate in candidate_payloads:
         candidate_context = " ".join(
             str(candidate.get(field, ""))
-            for field in (
-                "label",
-                "icon_semantics",
-                "nearby_text",
-                "parent_semantics",
-                "child_semantics",
-                "visual_role",
-                "visual_region",
-            )
+            for field in grounded_candidate_fields
         )
         semantic_regions.append(title_tokens | set(tokenize(candidate_context)))
 
@@ -1374,7 +1489,8 @@ def _destination_match(
         )
         optional_values = list(optional) if isinstance(optional, list) else []
         optional_score = (
-            sum(feature_present(term) for term in optional_values) / len(optional_values)
+            sum(feature_present(term, include_visual_support=True) for term in optional_values)
+            / len(optional_values)
             if optional_values
             else 0.0
         )

@@ -34,6 +34,349 @@ from app.services.navigation_planner import (
 LOGGER = logging.getLogger(__name__)
 
 
+def _active_planner_name(planner_model: object) -> str:
+    return str(getattr(planner_model, "active_name", getattr(planner_model, "name", "planner_model")))
+
+
+def _candidate_semantic_text(candidate: NavigationCandidate) -> str:
+    return " ".join(
+        (
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.nearby_text,
+            candidate.parent_semantics,
+            candidate.child_semantics,
+            candidate.visual_role,
+        )
+    ).casefold()
+
+
+def _candidate_primary_semantic_text(candidate: NavigationCandidate) -> str:
+    """Return the control's own semantics without sibling/nearby leakage."""
+
+    text = " ".join(
+        (candidate.label, candidate.icon_semantics, candidate.visual_role)
+    ).casefold()
+    # Redaction placeholders describe private values, not UI functions.  In
+    # particular, a profile name normalized to ``[account]`` must not be
+    # mistaken for an account-management hub.
+    for placeholder in (
+        "[account]",
+        "[redacted]",
+        "[email]",
+        "[phone]",
+        "[name]",
+        "[identifier]",
+    ):
+        text = text.replace(placeholder, " ")
+    return " ".join(text.split())
+
+
+def _has_explicit_commercial_membership_semantics(
+    candidate: NavigationCandidate,
+) -> bool:
+    text = _candidate_primary_semantic_text(candidate)
+    return any(
+        marker in text
+        for marker in (
+            "premium",
+            "멤버십",
+            "membership",
+            "구독 관리",
+            "구독 결제",
+            "구독 정보",
+            "구독 내역",
+            "manage subscription",
+            "subscription settings",
+            "subscription details",
+            "paid subscription",
+        )
+    )
+
+
+def _has_account_hub_semantics(candidate: NavigationCandidate) -> bool:
+    text = " ".join(_candidate_primary_semantic_text(candidate).split())
+    return any(
+        marker in text
+        for marker in (
+            "내 페이지",
+            "마이페이지",
+            "내 정보",
+            "계정",
+            "프로필",
+            "my page",
+            "my account",
+            "account",
+            "profile",
+        )
+    )
+
+
+def _is_unrelated_membership_utility(candidate: NavigationCandidate) -> bool:
+    text = " ".join(_candidate_primary_semantic_text(candidate).split())
+    return any(
+        marker in text
+        for marker in (
+            "알림",
+            "검색",
+            "만들기",
+            "업로드",
+            "재생목록",
+            "시청 기록",
+            "notification",
+            "search",
+            "create",
+            "upload",
+            "playlist",
+            "watch history",
+            "shorts",
+        )
+    )
+
+
+def _is_reverse_navigation_candidate(candidate: NavigationCandidate) -> bool:
+    # Some Accessibility trees expose the Navigate Up label only on a direct
+    # child of the clickable container.  Child semantics remain part of the
+    # control itself; nearby/parent text is deliberately excluded to avoid
+    # sibling leakage.
+    text = " ".join(
+        (
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.child_semantics,
+            candidate.visual_role,
+        )
+    ).casefold()
+    text = " ".join(text.split())
+    return any(
+        marker in text
+        for marker in (
+            "위로 이동",
+            "뒤로",
+            "이전 화면",
+            "navigate up",
+            "go back",
+            "back button",
+        )
+    )
+
+
+def _has_membership_forward_semantics(candidate: NavigationCandidate) -> bool:
+    text = _candidate_primary_semantic_text(candidate)
+    return any(
+        marker in text
+        for marker in (
+            "계정",
+            "멤버십",
+            "구독",
+            "결제",
+            "account",
+            "membership",
+            "subscription",
+            "billing",
+            "payment",
+        )
+    )
+
+
+def _is_profile_mutation_candidate(candidate: NavigationCandidate) -> bool:
+    text = _candidate_primary_semantic_text(candidate)
+    # An avatar named as the control's function is a profile-management
+    # affordance.  An avatar mentioned only as the icon on an existing profile
+    # tile is not: VLM commonly describes every profile image as ``avatar``.
+    functional_text = " ".join((candidate.label, candidate.visual_role)).casefold()
+    if any(marker in functional_text for marker in ("아바타", "avatar")):
+        return True
+    if "프로필" in text and any(
+        marker in text for marker in ("추가", "변경", "수정", "편집", "삭제", "키즈")
+    ):
+        return True
+    if "profile" in text and any(
+        marker in text for marker in ("add", "change", "edit", "delete", "kids")
+    ):
+        return True
+    return any(
+        marker in text
+        for marker in (
+            "프로필 추가",
+            "프로필 변경",
+            "프로필 수정",
+            "프로필 편집",
+            "프로필 삭제",
+            "키즈 프로필",
+            "연필",
+            "add profile",
+            "change profile",
+            "edit profile",
+            "delete profile",
+            "kids profile",
+            "pencil",
+        )
+    )
+
+
+def _external_app_regression_requires_stop(
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    if not recent_history:
+        return False
+    latest = recent_history[-1]
+    return (
+        str(latest.get("outcome_type", "")) in {"external_app", "external_browser"}
+        and str(latest.get("progress_label", "")) == "regressed"
+    )
+
+
+def _wrong_destination_requires_back(
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    """Honor the verifier's grounded MobileUse-style recovery decision.
+
+    A completed transition can already prove that the last click moved away
+    from the goal and record `back` as its recovery. Asking a model to rank
+    unrelated candidates on that wrong screen is both slower and less safe.
+    """
+
+    if not recent_history:
+        return False
+    latest = recent_history[-1]
+    return (
+        str(latest.get("connectivity_status", "")) == "observed"
+        and str(latest.get("action_name", "")) != "back"
+        and str(latest.get("outcome_type", "")) == "wrong_destination"
+        and str(latest.get("progress_label", "")) == "regressed"
+        and str(latest.get("recovery_action", "")) == "back"
+    )
+
+
+def _is_profile_exit_candidate(candidate: NavigationCandidate) -> bool:
+    text = _candidate_primary_semantic_text(candidate)
+    return any(
+        marker in text
+        for marker in (
+            "프로필 수정에서 나가기",
+            "프로필 편집에서 나가기",
+            "완료",
+            "나가기",
+            "done",
+            "finish editing",
+            "exit profile",
+        )
+    )
+
+
+def _is_profile_editing_screen(screen_text: str) -> bool:
+    normalized = screen_text.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "프로필 수정",
+            "프로필 편집",
+            "프로필 변경",
+            "프로필 설정",
+            "아이콘 선택",
+            "아바타 선택",
+            "edit profile",
+            "profile settings",
+            "choose icon",
+            "select icon",
+            "choose avatar",
+            "select avatar",
+        )
+    )
+
+
+def _profile_gate_existing_entry_candidate_id(
+    *,
+    candidates: Sequence[NavigationCandidate],
+    goal_id: str | None,
+    screen_title: str,
+    recent_history: Sequence[Mapping[str, object]],
+    forbidden_candidate_ids: Sequence[str] = (),
+    visually_recommended_candidate_id: str | None = None,
+) -> str | None:
+    """Return the sole existing profile on an explicit profile-selection gate."""
+
+    if not str(goal_id or "").startswith("membership.") or _history_requires_planner(
+        recent_history
+    ):
+        return None
+    explicit_profile_gate = any(
+        marker in screen_title.casefold()
+        for marker in (
+            "프로필을 선택",
+            "프로필 선택",
+            "choose a profile",
+            "choose profile",
+            "who's watching",
+            "who is watching",
+        )
+    )
+    forbidden = set(forbidden_candidate_ids)
+    mutations = [candidate for candidate in candidates if _is_profile_mutation_candidate(candidate)]
+    existing = [
+        candidate
+        for candidate in candidates
+        if candidate not in mutations
+        and not _is_profile_exit_candidate(candidate)
+        and candidate.clickable
+        and candidate.enabled
+        and not candidate.selected
+        and candidate.risk_level == "low"
+        and candidate.candidate_id not in forbidden
+    ]
+    if not mutations or len(existing) != 1:
+        return None
+    existing_candidate_id = existing[0].candidate_id
+    if explicit_profile_gate or visually_recommended_candidate_id == existing_candidate_id:
+        return existing_candidate_id
+    return None
+
+
+def _membership_profile_management_trap(
+    candidates: Sequence[NavigationCandidate],
+    goal_id: str | None,
+    screen_text: str = "",
+) -> bool:
+    if not str(goal_id or "").startswith("membership.") or len(candidates) < 2:
+        return False
+    if any(_has_membership_forward_semantics(candidate) for candidate in candidates):
+        return False
+    if _is_profile_editing_screen(screen_text):
+        return True
+    trap_markers = (
+        "프로필",
+        "키즈",
+        "관람등급",
+        "표시 언어",
+        "자막 언어",
+        "잠금",
+        "프로필 수정",
+        "프로필 변경",
+        "프로필 추가",
+        "프로필 삭제",
+        "키즈 프로필",
+        "아바타",
+        "연필",
+        "maturity",
+        "display language",
+        "subtitle language",
+        "profile lock",
+        "edit profile",
+        "change profile",
+        "add profile",
+        "delete profile",
+        "kids profile",
+        "avatar",
+        "pencil",
+    )
+    trapped = sum(
+        any(marker in _candidate_semantic_text(candidate) for marker in trap_markers)
+        for candidate in candidates
+    )
+    return trapped >= 2 and trapped * 2 >= len(candidates)
+
+
 STRICT_FAST_PATH_SCORE_FLOOR = 0.90
 STRICT_FAST_PATH_MARGIN_FLOOR = 0.25
 DIRECT_ROLE_GUARD_FLOOR = 0.78
@@ -195,6 +538,22 @@ class AndroidWorldResearchPolicy:
             candidates,
             forbidden_candidate_ids=forbidden_candidate_ids,
         )
+        if _wrong_destination_requires_back(recent_history):
+            provider = "python_mobileuse_wrong_destination_back_gate"
+            proposal = PlannerProposal(
+                NavigationAction(name="back"),
+                1.0,
+                provider,
+                False,
+            )
+            return ResearchDecision(
+                plan=plan,
+                proposal=proposal,
+                candidate_values=tuple(prior_values),
+                verifier_provider=provider,
+                score_margin=1.0,
+                reflection_on_demand=True,
+            )
         current_fingerprint = query.screen.semantic_fingerprint
         prior_visits = sum(
             bool(current_fingerprint)
@@ -222,6 +581,7 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             plan=plan,
             recent_history=recent_history,
+            screen_text=query.screen.title,
         )
         structural_continuation_candidate_id = (
             self._structural_continuation_fast_path_candidate(
@@ -237,16 +597,20 @@ class AndroidWorldResearchPolicy:
             for item in enumerated
         ):
             structural_continuation_candidate_id = None
-        semantic_fast_path_candidate_id = (
-            None
-            if structural_continuation_candidate_id is not None
-            else self.semantic_intermediate_fast_path_candidate(
+        semantic_fast_path_candidate_id = None
+        if structural_continuation_candidate_id is None:
+            semantic_fast_path_candidate_id = _profile_gate_existing_entry_candidate_id(
+                candidates=candidates,
+                goal_id=None if query.goal is None else query.goal.goal_id,
+                screen_title=query.screen.title,
+                recent_history=recent_history,
+                forbidden_candidate_ids=forbidden_candidate_ids,
+            ) or self.semantic_intermediate_fast_path_candidate(
                 query=query,
                 plan=plan,
                 prior_values=prior_values,
                 recent_history=recent_history,
             )
-        )
         should_invoke_planner = self._should_invoke_planner(
             query=query,
             plan=plan,
@@ -264,12 +628,28 @@ class AndroidWorldResearchPolicy:
                     enumerated=enumerated,
                     prior_values=prior_values,
                 )
-                provider = f"{self.planner_model.name}_step_evaluator"
+                provider = f"{_active_planner_name(self.planner_model)}_step_evaluator"
                 if any(
                     value.verifier_reason.startswith("python_direct_role_guard:")
                     for value in updated_values
                 ):
                     provider += "->python_direct_role_guard"
+                if any(
+                    value.verifier_reason.startswith(
+                        "python_membership_hub_affordance_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_membership_hub_affordance_guard"
+                if any(
+                    value.verifier_reason.startswith(
+                        "python_membership_profile_management_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_membership_profile_management_guard"
+                if _external_app_regression_requires_stop(recent_history):
+                    provider += "->python_external_app_stop_guard"
                 fallback_used = False
             except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
                 LOGGER.warning(
@@ -883,6 +1263,7 @@ class AndroidWorldResearchPolicy:
         prior_values: Sequence[CandidateValue],
         plan: HierarchicalPlan,
         recent_history: Sequence[Mapping[str, object]],
+        screen_text: str = "",
     ) -> list[EnumeratedAction]:
         candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
         click_values = [
@@ -908,7 +1289,7 @@ class AndroidWorldResearchPolicy:
         if plan.stage == "selective_recovery" or any(
             str(item.get("progress_label", "")) in {"regressed", "unchanged"}
             for item in recent_history
-        ):
+        ) or _membership_profile_management_trap(candidates, plan.goal_id, screen_text):
             actions.append(EnumeratedAction(NavigationAction(name="back"), 0.2, None))
         return actions
 
@@ -951,6 +1332,22 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             enumerated=enumerated,
         )
+        scores = self._apply_membership_hub_affordance_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+        )
+        scores = self._apply_membership_profile_management_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+            screen_text=query.screen.title,
+        )
+        scores = self._apply_external_app_stop_guard(
+            scores=scores,
+            enumerated=enumerated,
+            recent_history=recent_history,
+        )
         scores = self._apply_immediate_repeat_guard(
             scores=scores,
             enumerated=enumerated,
@@ -986,7 +1383,7 @@ class AndroidWorldResearchPolicy:
             completion_rule=plan.completion_rule,
             source=(
                 "solar_pro4"
-                if self.planner_model.name == "solar_pro4"
+                if _active_planner_name(self.planner_model) == "solar_pro4"
                 else "solar_pro3"
             ),
         )
@@ -1062,6 +1459,190 @@ class AndroidWorldResearchPolicy:
             "python_direct_role_guard: direct candidate role outranks unrelated click; "
             + selected_reason,
         )
+        return adjusted
+
+    def _apply_external_app_stop_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        enumerated: Sequence[EnumeratedAction],
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> dict[str, tuple[float, str]]:
+        """End an episode after it regresses into another app.
+
+        Continuing to rank the foreign app's candidates contaminates the source
+        app episode and can produce a false destination match.  A fresh harness
+        launch is required before collection resumes.
+        """
+
+        adjusted = dict(scores)
+        if not _external_app_regression_requires_stop(recent_history):
+            return adjusted
+        for item in enumerated:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            if item.action.name == "stop_for_user":
+                adjusted[key] = (
+                    max(score, 0.99),
+                    "python_external_app_stop_guard: target app episode regressed into "
+                    "another app; reset before continuing; "
+                    + reason,
+                )
+            else:
+                adjusted[key] = (
+                    min(score, 0.05),
+                    "python_external_app_stop_guard: foreign-app actions are not valid "
+                    "source-app navigation evidence; "
+                    + reason,
+                )
+        return adjusted
+
+    def _apply_membership_hub_affordance_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Use a control's own role instead of adjacent membership text."""
+
+        adjusted = dict(scores)
+        if not str(goal_id or "").startswith("membership."):
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click"
+            and item.candidate is not None
+            and item.candidate.risk_level == "low"
+            and item.candidate.clickable
+            and item.candidate.enabled
+        ]
+        explicit = [
+            item
+            for item in click_items
+            if _has_explicit_commercial_membership_semantics(item.candidate)
+        ]
+        account_hubs = [
+            item for item in click_items if _has_account_hub_semantics(item.candidate)
+        ]
+        for item in click_items:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            if _is_unrelated_membership_utility(item.candidate):
+                adjusted[key] = (
+                    min(score, 0.20),
+                    "python_membership_hub_affordance_guard: unrelated utility; "
+                    "nearby membership text is not the control role; "
+                    + reason,
+                )
+        if len(explicit) == 1:
+            key = _action_key(explicit[0].action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                max(score, 0.90),
+                "python_membership_hub_affordance_guard: unique explicit commercial "
+                "membership affordance; "
+                + reason,
+            )
+        elif (
+            not explicit
+            and len(account_hubs) == 1
+            and not any(_is_reverse_navigation_candidate(item.candidate) for item in click_items)
+        ):
+            key = _action_key(account_hubs[0].action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                max(score, 0.80),
+                "python_membership_hub_affordance_guard: unique account/profile hub; "
+                + reason,
+            )
+        return adjusted
+
+    def _apply_membership_profile_management_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+        screen_text: str = "",
+    ) -> dict[str, tuple[float, str]]:
+        """Escape profile editing/selection surfaces during membership tasks.
+
+        A profile avatar, pencil, Kids persona, or add-profile control changes
+        viewing identities; it does not open billing or membership management.
+        On a screen dominated by those controls, Back is the grounded safe
+        recovery action until an account/billing affordance becomes visible.
+        """
+
+        adjusted = dict(scores)
+        if not str(goal_id or "").startswith("membership."):
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click" and item.candidate is not None
+        ]
+        if not _membership_profile_management_trap(
+            [item.candidate for item in click_items if item.candidate is not None],
+            goal_id,
+            screen_text,
+        ):
+            return adjusted
+        exit_items = [item for item in click_items if _is_profile_exit_candidate(item.candidate)]
+        if exit_items:
+            for item in click_items:
+                key = _action_key(item.action)
+                score, reason = adjusted.get(key, (0.0, ""))
+                if item in exit_items:
+                    adjusted[key] = (
+                        max(score, 0.90),
+                        "python_membership_profile_management_guard: leave profile editing; "
+                        + reason,
+                    )
+                else:
+                    adjusted[key] = (
+                        min(score, 0.15),
+                        "python_membership_profile_management_guard: do not mutate or select "
+                        "a profile while leaving profile editing; "
+                        + reason,
+                    )
+            return adjusted
+
+        mutation_items = [
+            item for item in click_items if _is_profile_mutation_candidate(item.candidate)
+        ]
+        for item in mutation_items:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                min(score, 0.15),
+                "python_membership_profile_management_guard: profile mutation is not a "
+                "membership/account hub; "
+                + reason,
+            )
+        safe_profile_entries = [
+            item
+            for item in click_items
+            if item not in mutation_items
+            and not _has_membership_forward_semantics(item.candidate)
+        ]
+        if len(safe_profile_entries) == 1 and not _is_profile_editing_screen(screen_text):
+            key = _action_key(safe_profile_entries[0].action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                max(score, 0.80),
+                "python_membership_profile_management_guard: enter the only existing "
+                "viewing profile without changing it; "
+                + reason,
+            )
+        elif "back" in adjusted:
+            score, reason = adjusted["back"]
+            adjusted["back"] = (
+                max(score, 0.80),
+                "python_membership_profile_management_guard: leave profile management; "
+                + reason,
+            )
         return adjusted
 
     def _apply_immediate_repeat_guard(

@@ -15,6 +15,7 @@ from app.services.navigation_dataset_split import (
 )
 from app.services.navigation_model_clients import (
     Exaone45VisionClient,
+    FallbackNavigationPlannerResearchClient,
     NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
@@ -58,14 +59,29 @@ def get_navigation_runtime() -> NavigationRuntime:
         else None
     )
     policy = AndroidWorldResearchPolicy(
-        planner_model=NavigationPlannerResearchClient(
-            OpenAICompatibleChatClient(
-                api_key=settings.navigation_planner_api_key,
-                base_url=settings.navigation_planner_base_url,
-                model=settings.navigation_planner_model,
-                timeout_seconds=settings.navigation_planner_timeout_seconds,
+        planner_model=FallbackNavigationPlannerResearchClient(
+            primary=NavigationPlannerResearchClient(
+                OpenAICompatibleChatClient(
+                    api_key=settings.navigation_planner_api_key,
+                    base_url=settings.navigation_planner_base_url,
+                    model=settings.navigation_planner_model,
+                    timeout_seconds=settings.navigation_planner_timeout_seconds,
+                ),
+                provider_name=settings.navigation_planner_provider,
             ),
-            provider_name=settings.navigation_planner_provider,
+            fallback=(
+                NavigationPlannerResearchClient(
+                    OpenAICompatibleChatClient(
+                        api_key=settings.navigation_planner_api_key,
+                        base_url=settings.navigation_planner_base_url,
+                        model=settings.navigation_planner_fallback_model,
+                        timeout_seconds=settings.navigation_planner_timeout_seconds,
+                    ),
+                    provider_name=settings.navigation_planner_fallback_provider,
+                )
+                if settings.navigation_planner_fallback_enabled
+                else None
+            ),
         ),
         exaone_vlm=Exaone45VisionClient(
             OpenAICompatibleChatClient(

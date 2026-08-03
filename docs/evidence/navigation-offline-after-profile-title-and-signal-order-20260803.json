@@ -1,0 +1,71 @@
+{
+  "by_app_split": {
+    "train": {
+      "avoided": 10,
+      "cases": 80,
+      "exact_matches": 29,
+      "failed_clicks": 11,
+      "positive_cases": 63
+    }
+  },
+  "by_goal": {
+    "account.delete": {
+      "cases": 18,
+      "exact_matches": 7,
+      "positive_cases": 18,
+      "recognized": 18
+    },
+    "account.signup": {
+      "cases": 8,
+      "exact_matches": 3,
+      "positive_cases": 8,
+      "recognized": 8
+    },
+    "membership.cancel": {
+      "cases": 40,
+      "exact_matches": 13,
+      "positive_cases": 23,
+      "recognized": 40
+    },
+    "membership.change": {
+      "cases": 11,
+      "exact_matches": 4,
+      "positive_cases": 11,
+      "recognized": 11
+    },
+    "membership.join": {
+      "cases": 3,
+      "exact_matches": 2,
+      "positive_cases": 3,
+      "recognized": 3
+    }
+  },
+  "case_count": 80,
+  "claim_scope": "runtime_direction_gate_only_not_final_ab",
+  "dangerous_auto_click_count": 0,
+  "database": "C:\\Users\\YangGeon\\AppData\\Local\\Temp\\navigation-decision-youtube-staged-20260803.sqlite",
+  "evaluation_kind": "diagnostic_leave_source_app_out_replay",
+  "failed_click_avoidance_rate": 0.9091,
+  "failed_click_case_count": 11,
+  "goal_resolution_failures": [],
+  "positive_action_confusion": {
+    "click->click": 31,
+    "click->scroll": 6,
+    "click->stop_for_user": 1,
+    "scroll->click": 3,
+    "scroll->scroll": 7,
+    "scroll->stop_for_user": 1,
+    "stop_for_user->click": 6,
+    "stop_for_user->scroll": 3,
+    "stop_for_user->stop_for_user": 5
+  },
+  "positive_case_count": 63,
+  "positive_exact_next_action_accuracy": 0.4603,
+  "positive_first_action_accuracy": 0.7778,
+  "positive_first_action_count": 9,
+  "recognized_goal_rate": 1.0,
+  "repeated_failed_case_ids": [
+    "case_failure_33fd2729797c20653eed"
+  ],
+  "retrieval_excludes_source_app": true
+}

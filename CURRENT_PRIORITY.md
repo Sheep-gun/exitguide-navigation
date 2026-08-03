@@ -1,18 +1,18 @@
 # ExitGuide Navigation Current Priority
 
-status: verifying
-phase: implementation
-updated_at: 2026-08-03T21:15:55+09:00
-priority: 계정·프로필 문맥의 평문 식별자 마스킹 누락 수정
+status: completed
+phase: device_validation
+updated_at: 2026-08-04T02:09:25+09:00
+priority: Decision DB collection and runtime parameter tuning
 decision_db_collection: paused
-next_action: 기존 Runtime 기록은 보존하고 Android Executor와 Runtime 저장 경계에 문맥 기반 계정 식별자 마스킹을 추가한 뒤 개인정보 관련 영향 조건만 재검증한다.
+next_action: Wait for the user's intermediate review before resuming real-device collection.
 verification_started_at: 2026-08-03T10:30:41+09:00
-verification_completed_at: 2026-08-03T20:35:50+09:00
+verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `3c49a52`
-deployed_commit: `3c49a52`
+integration_commit: `36a4abe`
+deployed_commit: `36a4abe`
 
 ## 작업 원칙
 
@@ -42,21 +42,21 @@ deployed_commit: `3c49a52`
    - evidence: `docs/evidence/android-executor-device-20260803.log` — 클릭 3회 `screen_changed=true`, 실행 실패는 `false`
 4. 애매한 화면의 스크린샷이 VLM으로 전달됨
    - status: passed
-   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — X step 0의 서버 요청 후 step 1에서 `perception_provider=exaone_4_5`, `visual_reobserve_required=false`
+   - evidence: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md` — 최신 APK 격리 세션에서 `visual_context ready`, `perception=exaone_4_5`, `visualScreenshot=true`
 5. VLM이 현재 화면에 존재하는 candidate_id만 반환함
    - status: passed
-   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — 추천 ID `a11y_df9a5731b862a4339738`가 동일 step의 후보 목록에 존재함
+   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md` — 추천 ID `a11y_df9a5731b862a4339738`가 동일 step의 후보 목록에 존재함; 최신 마스킹 변경은 ID를 보존하며 Android/API 단위 테스트 통과
 6. 실행 실패와 탐색 판단 실패가 별도로 기록됨
    - status: passed
    - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
 7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
    - status: passed
-   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`, `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`; API와 APK 모두 `3c49a52`, APK SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
+   - evidence: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md`; API와 APK 모두 `36a4abe`, APK SHA-256 `70C14240B60029D2C1FD76A84E66BCA15DFD435C22E4839DDECE82E04026CDB1`
    - dangerous_actions_auto_executed: 0
 
 ## 현재 통합 구현 테스트 결과
 
-- Navigation API 단위 테스트: passed — integration_commit에서 `apps/api/tests/*.py` 5개
+- Navigation API 단위 테스트: passed — `36a4abe`에서 관련 전체 5개 및 개인정보 저장 경계 회귀 테스트
 - Android Executor 단위 테스트: passed — `apps/android-executor/app/build/reports/tests/testDebugUnitTest/index.html`
 - Android Executor APK 빌드: passed — integration_commit에서 clean `assembleDebug`
 - ML Kit OCR 및 AndroidX 빌드: passed — clean Android build
@@ -76,7 +76,8 @@ deployed_commit: `3c49a52`
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md`
 - netflix_tuning_report: `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`
 - x_vlm_safety_report: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`
-- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
+- privacy_revalidation_report: `docs/evidence/profile-identifier-masking-and-accessibility-rebind-20260803.md`
+- apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `70C14240B60029D2C1FD76A84E66BCA15DFD435C22E4839DDECE82E04026CDB1`
 
 ## 완료 및 재개 규칙
 

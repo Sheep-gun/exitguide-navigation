@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -1013,6 +1014,84 @@ class Exaone45VisionClient:
         if recovery not in {"reselect", "back", "wait_and_observe", "stop_for_user"}:
             recovery = "wait_and_observe"
         return ReflectionOutput(outcome, str(payload.get("reason", ""))[:500], recovery)
+
+
+class FallbackNavigationPlannerResearchClient:
+    """Use the stable planner only when the primary model call is unusable."""
+
+    def __init__(
+        self,
+        *,
+        primary: NavigationPlannerResearchClient,
+        fallback: NavigationPlannerResearchClient | None,
+    ) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.name = primary.name
+        self._active_name: ContextVar[str] = ContextVar(
+            "navigation_planner_active_name", default=primary.name
+        )
+
+    @property
+    def configured(self) -> bool:
+        return self.primary.configured or bool(self.fallback and self.fallback.configured)
+
+    @property
+    def active_name(self) -> str:
+        return self._active_name.get()
+
+    @property
+    def fallback_name(self) -> str | None:
+        return None if self.fallback is None else self.fallback.name
+
+    @property
+    def fallback_configured(self) -> bool:
+        return bool(self.fallback and self.fallback.configured)
+
+    def _call(self, method: str, **kwargs):
+        if self.primary.configured:
+            try:
+                result = getattr(self.primary, method)(**kwargs)
+                self._active_name.set(self.primary.name)
+                return result
+            except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+                if self.fallback is None or not self.fallback.configured:
+                    raise
+                LOGGER.warning(
+                    "planner_model_provider_failover primary=%s fallback=%s "
+                    "method=%s failure_class=%s detail=%s",
+                    self.primary.name,
+                    self.fallback.name,
+                    method,
+                    type(error).__name__,
+                    str(error)[:500],
+                )
+        if self.fallback is None or not self.fallback.configured:
+            raise RuntimeError("no configured planner model provider")
+        result = getattr(self.fallback, method)(**kwargs)
+        self._active_name.set(self.fallback.name)
+        return result
+
+    def classify_goal(self, **kwargs):
+        return self._call("classify_goal", **kwargs)
+
+    def plan(self, **kwargs):
+        return self._call("plan", **kwargs)
+
+    def verify_action(self, **kwargs):
+        return self._call("verify_action", **kwargs)
+
+    def verify_actions(self, **kwargs):
+        return self._call("verify_actions", **kwargs)
+
+    def plan_and_verify_actions(self, **kwargs):
+        return self._call("plan_and_verify_actions", **kwargs)
+
+    def reflect_trajectory(self, **kwargs):
+        return self._call("reflect_trajectory", **kwargs)
+
+    def reflect_global(self, **kwargs):
+        return self._call("reflect_global", **kwargs)
 
 
 def _response_json(

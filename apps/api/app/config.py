@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     navigation_planner_api_key: str = ""
     navigation_planner_base_url: str = "https://api.upstage.ai/v1"
     navigation_planner_model: str = "solar-pro4"
+    navigation_planner_fallback_enabled: bool = True
+    navigation_planner_fallback_provider: str = "solar_pro3"
+    navigation_planner_fallback_model: str = "solar-pro3"
 
     exaone_vlm_api_key: str = ""
     exaone_vlm_base_url: str = ""

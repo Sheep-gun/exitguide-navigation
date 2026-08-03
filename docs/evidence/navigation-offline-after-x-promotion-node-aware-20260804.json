@@ -1,0 +1,71 @@
+{
+  "by_app_split": {
+    "train": {
+      "avoided": 10,
+      "cases": 85,
+      "exact_matches": 33,
+      "failed_clicks": 11,
+      "positive_cases": 68
+    }
+  },
+  "by_goal": {
+    "account.delete": {
+      "cases": 18,
+      "exact_matches": 7,
+      "positive_cases": 18,
+      "recognized": 18
+    },
+    "account.signup": {
+      "cases": 8,
+      "exact_matches": 3,
+      "positive_cases": 8,
+      "recognized": 8
+    },
+    "membership.cancel": {
+      "cases": 45,
+      "exact_matches": 17,
+      "positive_cases": 28,
+      "recognized": 45
+    },
+    "membership.change": {
+      "cases": 11,
+      "exact_matches": 4,
+      "positive_cases": 11,
+      "recognized": 11
+    },
+    "membership.join": {
+      "cases": 3,
+      "exact_matches": 2,
+      "positive_cases": 3,
+      "recognized": 3
+    }
+  },
+  "case_count": 85,
+  "claim_scope": "runtime_direction_gate_only_not_final_ab",
+  "dangerous_auto_click_count": 0,
+  "database": "C:\\Users\\YangGeon\\Documents\\AI Rookie\\exitguide-navigation-db-redesign\\.artifacts\\navigation-decision-x-tuning-20260804.sqlite",
+  "evaluation_kind": "diagnostic_leave_source_app_out_replay",
+  "failed_click_avoidance_rate": 0.9091,
+  "failed_click_case_count": 11,
+  "goal_resolution_failures": [],
+  "positive_action_confusion": {
+    "click->click": 34,
+    "click->scroll": 6,
+    "click->stop_for_user": 1,
+    "scroll->click": 3,
+    "scroll->scroll": 9,
+    "scroll->stop_for_user": 1,
+    "stop_for_user->click": 6,
+    "stop_for_user->scroll": 3,
+    "stop_for_user->stop_for_user": 5
+  },
+  "positive_case_count": 68,
+  "positive_exact_next_action_accuracy": 0.4853,
+  "positive_first_action_accuracy": 0.8182,
+  "positive_first_action_count": 11,
+  "recognized_goal_rate": 1.0,
+  "repeated_failed_case_ids": [
+    "case_failure_33fd2729797c20653eed"
+  ],
+  "retrieval_excludes_source_app": true
+}
