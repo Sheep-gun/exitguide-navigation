@@ -231,6 +231,11 @@ class NavigationRuntime:
             screen=effective_screen,
             recent_history=recent_history,
         )
+        transient_navigation_waits = _transient_navigation_control_waits(
+            screen=effective_screen,
+            screen_fingerprint=query.screen.semantic_fingerprint,
+            recent_history=recent_history,
+        )
         score_margin = 0.0
         reflection_on_demand = False
         verifier_provider = "not_invoked"
@@ -293,6 +298,31 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_state_change_boundary"
+        elif transient_navigation_waits is not None:
+            if transient_navigation_waits >= 2:
+                proposal = PlannerProposal(
+                    NavigationAction(name="stop_for_user"),
+                    1.0,
+                    "python_transient_navigation_stall_guard",
+                    False,
+                )
+                planner_provider = proposal.provider
+                verifier_provider = proposal.provider
+            else:
+                if _can_request_visual_reobserve(request, perception, self.policy):
+                    visual_reobserve_reason = "transient_single_navigation_control"
+                    provider = "python_visual_reobserve_gate"
+                    verifier_provider = "deferred_until_visual_context"
+                else:
+                    provider = "python_transient_navigation_wait_gate"
+                    verifier_provider = provider
+                proposal = PlannerProposal(
+                    NavigationAction(name="wait_and_observe"),
+                    1.0,
+                    provider,
+                    False,
+                )
+                planner_provider = provider
         else:
             if semantic_scroll_fast_path:
                 proposal = PlannerProposal(
@@ -580,7 +610,10 @@ class NavigationRuntime:
                     failure_class="",
                     recovery_action=None,
                 )
-            elif decision["planner_provider"] == "python_visual_reobserve_gate":
+            elif decision["planner_provider"] in {
+                "python_visual_reobserve_gate",
+                "python_transient_navigation_wait_gate",
+            }:
                 verified = VerifiedTransition(
                     outcome_type="navigated",
                     state_changed=(
@@ -844,6 +877,54 @@ def _can_request_visual_reobserve(
         and perception.provider != policy.exaone_vlm.name
         and policy.exaone_vlm.configured
         and policy.vlm_mode != "disabled"
+    )
+
+
+def _transient_navigation_control_waits(
+    *,
+    screen: ScreenObservation,
+    screen_fingerprint: str,
+    recent_history: Sequence[dict[str, object]],
+) -> int | None:
+    """Detect a sparse transition surface whose only affordance navigates away.
+
+    A model must not turn the absence of forward controls into confidence that
+    a generic Up/Back icon is the next forward action.  We allow two bounded
+    observations (the first can request VLM context), then stop for the user.
+    """
+
+    if len(screen.candidates) != 1 or len(screen.nodes) > 8:
+        return None
+    candidate = screen.candidates[0]
+    if (
+        not candidate.clickable
+        or not candidate.enabled
+        or candidate.risk_level != "low"
+        or candidate.role.casefold() not in {"button", "icon_button", "image_button"}
+    ):
+        return None
+    semantics = " ".join(
+        (
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.nearby_text,
+            candidate.parent_semantics,
+        )
+    ).casefold()
+    navigation_markers = (
+        "위로 이동",
+        "뒤로",
+        "이전 화면",
+        "navigate up",
+        "navigate_up",
+        "go back",
+    )
+    if not any(marker in semantics for marker in navigation_markers):
+        return None
+    return sum(
+        str(item.get("screen_fingerprint", "")) == screen_fingerprint
+        and str(item.get("action_name", "")) == "wait_and_observe"
+        for item in recent_history
     )
 
 

@@ -388,6 +388,88 @@ def main() -> None:
         )
         assert destination_continuation.visual_reobserve_required is False
 
+        transient_policy = _policy()
+        transient_policy.exaone_vlm = Exaone45VisionClient(
+            OpenAICompatibleChatClient(
+                api_key="",
+                base_url="http://127.0.0.1:9/v1",
+                model="test-exaone-4.5",
+            )
+        )
+        transient_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "transient-nav-runtime.sqlite"),
+            policy=transient_policy,
+        )
+        transient_screen = ScreenObservation(
+            app_package="evaluation.transition.app",
+            window_title="External link",
+            activity_name="android.view.View",
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="navigate-up",
+                    label="",
+                    role="icon_button",
+                    icon_semantics="Navigate up",
+                    position_bucket="top",
+                )
+            ],
+        )
+        first_transient = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-transient-nav-1",
+                app_package="evaluation.transition.app",
+                goal_text="cancel subscription",
+                screen=transient_screen,
+            )
+        )
+        assert first_transient.action.name == "wait_and_observe"
+        assert first_transient.planner_provider == "python_visual_reobserve_gate"
+        assert first_transient.visual_reobserve_required is True
+        transient_runtime.observe(
+            ObserveRequest(
+                request_id="request-transient-nav-observe-1",
+                decision_id=first_transient.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=transient_screen,
+            )
+        )
+        second_transient = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-transient-nav-2",
+                session_id=first_transient.session_id,
+                step_ordinal=1,
+                app_package="evaluation.transition.app",
+                goal_text="cancel subscription",
+                visual_reasoning_required=True,
+                screen=transient_screen,
+            )
+        )
+        assert second_transient.action.name == "wait_and_observe"
+        assert second_transient.planner_provider == "python_transient_navigation_wait_gate"
+        transient_runtime.observe(
+            ObserveRequest(
+                request_id="request-transient-nav-observe-2",
+                decision_id=second_transient.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=transient_screen,
+            )
+        )
+        stalled_transient = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-transient-nav-3",
+                session_id=first_transient.session_id,
+                step_ordinal=2,
+                app_package="evaluation.transition.app",
+                goal_text="cancel subscription",
+                screen=transient_screen,
+            )
+        )
+        assert stalled_transient.action.name == "stop_for_user"
+        assert stalled_transient.planner_provider == "python_transient_navigation_stall_guard"
+
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
             store=NavigationRuntimeStore(temporary_path / "execution-failure-runtime.sqlite"),
