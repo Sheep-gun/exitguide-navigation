@@ -156,6 +156,40 @@ def main() -> None:
         assert disconnected.recovery_action.name == "wait_and_observe"
         assert disconnected.session_status == "active"
 
+        execution_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "execution-failure-runtime.sqlite"),
+            policy=_policy(),
+        )
+        not_executed = execution_runtime.decide(
+            DecideRequest(
+                request_id="request-not-executed",
+                app_package="evaluation.execution.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                screen=_account_screen(),
+            )
+        )
+        assert not_executed.action.name == "click"
+        not_executed_observation = execution_runtime.observe(
+            ObserveRequest(
+                request_id="request-not-executed-observe",
+                decision_id=not_executed.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=False,
+                observed_signal="blocked",
+                next_screen=ScreenObservation(
+                    window_title="런처",
+                    activity_name="com.android.launcher",
+                    candidates=[],
+                ),
+            )
+        )
+        assert not_executed_observation.outcome_type == "blocked"
+        assert not_executed_observation.failure_class == "executor_action_not_executed"
+        assert not_executed_observation.candidate_forbidden is False
+        assert not_executed_observation.knowledge_revision_queued is False
+        assert not_executed_observation.session_status == "stopped"
+
         dangerous = runtime.decide(
             DecideRequest(
                 request_id="request-3",

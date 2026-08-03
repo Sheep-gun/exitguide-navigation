@@ -513,11 +513,26 @@ class NavigationRuntime:
                     destination_threshold=_destination_threshold(next_query),
                     observed_signal=observed_signal,
                 )
+            if (
+                request.execution_succeeded is False
+                and str(decision["action_name"]) in {"click", "scroll", "back"}
+            ):
+                verified = VerifiedTransition(
+                    outcome_type="blocked",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="unknown",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="executor_action_not_executed",
+                    recovery_action=NavigationAction(name="stop_for_user"),
+                )
         candidate_forbidden = False
         knowledge_revision_queued = False
         candidate_id = decision.get("candidate_id")
         if (
             request.connectivity_status == "observed"
+            and request.execution_succeeded is not False
             and candidate_id
             and verified.failure_class != "already_satisfied"
             and verified.outcome_type
