@@ -934,6 +934,19 @@ def main() -> None:
         ambiguous_candidates,
         0.25,
     ) == "candidate_scores_too_close"
+    assert _candidate_score_visual_reason(
+        ambiguous_values[:2],
+        [
+            NavigationCandidate(candidate_id="merged-1", label="account membership"),
+            NavigationCandidate(candidate_id="merged-2", label="account membership"),
+        ],
+        0.25,
+    ) == "accessibility_candidate_labels_duplicated"
+    assert _candidate_score_visual_reason(
+        ambiguous_values[:1],
+        [NavigationCandidate(candidate_id="merged", label="account " * 30)],
+        0.25,
+    ) == "accessibility_candidate_text_merged"
     memory_confident_values = [
         value.model_copy(update={"supporting_cases": 2})
         if value.candidate_id == "my-page"

@@ -869,6 +869,16 @@ def _candidate_score_visual_reason(
     candidates: Sequence[NavigationCandidate],
     margin_threshold: float,
 ) -> str:
+    if not candidates:
+        return "no_grounded_candidates"
+    normalized_labels = [" ".join(candidate.label.casefold().split()) for candidate in candidates]
+    if any(not label for label in normalized_labels):
+        return "accessibility_candidate_semantics_missing"
+    if any(len(candidate.label.strip()) > 160 for candidate in candidates):
+        return "accessibility_candidate_text_merged"
+    nonempty_labels = [label for label in normalized_labels if label]
+    if len(nonempty_labels) != len(set(nonempty_labels)):
+        return "accessibility_candidate_labels_duplicated"
     ranked = _safe_ranked_values(values, candidates)
     if len(ranked) < 2:
         return ""

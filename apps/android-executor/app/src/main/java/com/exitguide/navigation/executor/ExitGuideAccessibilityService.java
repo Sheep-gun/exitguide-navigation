@@ -803,9 +803,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             boolean forceCapture,
             VisualContextCallback callback
     ) {
-        boolean visualReasoningRequired = forceCapture || (
-                screenReader != null && screenReader.needsVisualReasoning(snapshot)
-        );
+        // Always give the Navigation API one accessibility-only opportunity.
+        // The API owns DB/fast-path confidence and returns
+        // visual_reobserve_required when the grounded candidates are truly
+        // ambiguous.  Capturing here merely because the surface is a WebView
+        // would preempt an obvious DB scroll/click with a slow VLM call.
+        boolean visualReasoningRequired = forceCapture;
         if (!forceCapture && !visualReasoningRequired) {
             Log.i(LOG_TAG, "visual_context skipped reason=accessibility_clear");
             VisualScreenAugmenter.redactSnapshotInPlace(snapshot);

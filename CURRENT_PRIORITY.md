@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T19:38:29+09:00
-priority: 목적지 특징이 일부 확인된 스크롤 가능 화면의 제한적 아래 스크롤 fast path 검증
+updated_at: 2026-08-03T19:45:00+09:00
+priority: Accessibility 우선 판단 후 필요할 때만 VLM을 호출하는 2단계 실기기 검증
 decision_db_collection: paused
-next_action: 보정된 Navigation API를 N100에 배포한 뒤 Netflix 계정 WebView에서 아래 스크롤이 실행되고 해지 후보 발견 전까지 안전하게 진행되는지 검증한다.
+next_action: 동일 커밋의 Navigation API와 Executor APK를 배포한 뒤 Netflix 계정 WebView의 VLM 없는 제한 스크롤과 해지 후보 앞 정지를 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T17:17:27+09:00
 verified_device: Samsung SM-S936N, Android 16
