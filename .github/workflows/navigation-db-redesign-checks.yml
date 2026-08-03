@@ -41,6 +41,9 @@ jobs:
       - name: Test decision memory
         run: python apps/api/tests/navigation_decision_memory_unit.py
 
+      - name: Test curated public navigation prior
+        run: python apps/api/tests/navigation_public_prior_unit.py
+
       - name: Test standards experience profile
         run: python apps/api/tests/navigation_experience_profile_unit.py
 

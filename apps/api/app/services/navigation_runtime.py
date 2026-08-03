@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping, Sequence
 
 import httpx
@@ -29,6 +30,7 @@ from app.services.navigation_decision_memory import (
 from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
 from app.services.navigation_model_clients import PerceptionOutput
 from app.services.navigation_planner import PlannerProposal
+from app.services.navigation_public_prior import NavigationPublicPrior
 from app.services.navigation_research_policy import (
     AndroidWorldResearchPolicy,
     ReflectionTriggerPolicy,
@@ -60,12 +62,14 @@ class NavigationRuntime:
         memory: NavigationDecisionMemory,
         store: NavigationRuntimeStore,
         policy: AndroidWorldResearchPolicy,
+        public_prior: NavigationPublicPrior | None = None,
         dataset_split_manifest: NavigationDatasetSplitManifest | None = None,
         allow_locked_holdout: bool = False,
     ) -> None:
         self.memory = memory
         self.store = store
         self.policy = policy
+        self.public_prior = public_prior
         self.dataset_split_manifest = dataset_split_manifest
         self.allow_locked_holdout = allow_locked_holdout
         self.reflection_policy = ReflectionTriggerPolicy()
@@ -100,6 +104,11 @@ class NavigationRuntime:
                 "access_mode": "read_only",
             },
             "runtime_db": self.store.status(),
+            "public_prior": (
+                {"enabled": False}
+                if self.public_prior is None
+                else self.public_prior.status()
+            ),
             "dataset_split": (
                 {"enabled": False}
                 if self.dataset_split_manifest is None
@@ -216,6 +225,27 @@ class NavigationRuntime:
             resolve_goal_from_text=False,
         )
         destination_threshold = _destination_threshold(query)
+        if (
+            self.public_prior is not None
+            and query.goal is not None
+            and query.destination_match < destination_threshold
+            and query.fast_path_candidate_id() is None
+        ):
+            try:
+                public_evidence = self.public_prior.search(
+                    goal_text=request.goal_text,
+                    normalized_goal=query.goal,
+                    screen=query.screen,
+                    app_package=request.app_package,
+                )
+                if public_evidence:
+                    query = replace(query, public_prior_evidence=public_evidence)
+            except (OSError, ValueError, sqlite3.Error) as error:
+                LOGGER.warning(
+                    "public_prior_search_skipped failure_class=%s detail=%s",
+                    type(error).__name__,
+                    str(error)[:500],
+                )
         forbidden = self.store.forbidden_candidates(session_id, query.screen.semantic_fingerprint)
         recent_history = self.store.recent_history(session_id, limit=5)
         plan, planner_provider, planner_fallback = self.policy.plan(
@@ -486,6 +516,9 @@ class NavigationRuntime:
             goal_id=None if query.goal is None else query.goal.goal_id,
         )
         evidence_case_ids = [evidence.case_id for evidence in query.evidence]
+        evidence_case_ids.extend(
+            f"public:{evidence.evidence_id}" for evidence in query.public_prior_evidence
+        )
         self.store.record_decision(
             decision_id=decision_id,
             session_id=session_id,

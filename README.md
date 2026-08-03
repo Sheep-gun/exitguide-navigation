@@ -131,6 +131,7 @@ Android Executor는 `/decide → 안전 실행 → /observe` 루프를 최대 15
 ```bash
 python -m pip install -r apps/api/requirements.txt
 python apps/api/tests/navigation_decision_memory_unit.py
+python apps/api/tests/navigation_public_prior_unit.py
 python apps/api/tests/navigation_experience_profile_unit.py
 python apps/api/tests/navigation_interaction_adapter_unit.py
 python apps/api/tests/navigation_research_architecture_unit.py

@@ -308,6 +308,7 @@ class DecisionMemoryQuery:
     action_scores: Mapping[str, float]
     destination_match: float
     standards_profile: str
+    public_prior_evidence: tuple[object, ...] = ()
 
     def fast_path_candidate_id(self) -> str | None:
         eligible = sorted(
@@ -352,6 +353,9 @@ class DecisionMemoryQuery:
                 for candidate in self.screen.candidate_payloads
             ],
             "similar_decision_cases": [item.prompt_payload() for item in self.evidence],
+            "public_prior_evidence": [
+                item.prompt_payload() for item in self.public_prior_evidence
+            ],
             "destination_match": round(self.destination_match, 4),
             "memory_action_scores": {
                 key: round(value, 4) for key, value in self.action_scores.items()

@@ -1318,7 +1318,13 @@ class AndroidWorldResearchPolicy:
             goal=query.goal.prompt_payload() if query.goal else {},
             screen=query.screen.prompt_payload(),
             destination_signatures=query.destination_signatures,
-            decision_evidence=[evidence.prompt_payload() for evidence in query.evidence],
+            decision_evidence=[
+                *[evidence.prompt_payload() for evidence in query.evidence],
+                *[
+                    evidence.prompt_payload()
+                    for evidence in query.public_prior_evidence
+                ],
+            ],
             recent_history=recent_history,
             fallback_plan=plan.model_dump(mode="json"),
             actions=batch_actions,

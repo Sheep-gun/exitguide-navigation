@@ -19,6 +19,7 @@ from app.services.navigation_model_clients import (
     NavigationPlannerResearchClient,
     OpenAICompatibleChatClient,
 )
+from app.services.navigation_public_prior import NavigationPublicPrior
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy
 from app.services.navigation_runtime import NavigationRuntime
 from app.services.navigation_runtime_store import NavigationRuntimeStore
@@ -53,6 +54,18 @@ def get_navigation_runtime() -> NavigationRuntime:
         raise RuntimeError("NAVIGATION_DECISION_DB_PATH is not configured")
     memory = NavigationDecisionMemory(decision_path, read_only=True)
     store = NavigationRuntimeStore(runtime_path)
+    public_prior = None
+    if settings.navigation_public_prior_enabled:
+        if not settings.navigation_public_prior_db_path:
+            raise RuntimeError(
+                "NAVIGATION_PUBLIC_PRIOR_DB_PATH is required when public prior is enabled"
+            )
+        public_prior = NavigationPublicPrior(
+            settings.navigation_public_prior_db_path,
+            failure_db_path=settings.navigation_public_failure_db_path or None,
+            task_db_path=settings.navigation_public_task_db_path or None,
+            max_results=settings.navigation_public_prior_max_results,
+        )
     dataset_split_manifest = (
         NavigationDatasetSplitManifest.load(settings.navigation_dataset_split_manifest_path)
         if settings.navigation_dataset_split_manifest_path
@@ -106,6 +119,7 @@ def get_navigation_runtime() -> NavigationRuntime:
         memory=memory,
         store=store,
         policy=policy,
+        public_prior=public_prior,
         dataset_split_manifest=dataset_split_manifest,
         allow_locked_holdout=settings.navigation_allow_locked_holdout,
     )
