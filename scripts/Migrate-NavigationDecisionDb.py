@@ -103,8 +103,8 @@ SIGNATURES: dict[str, dict[str, object]] = {
     },
     "membership.join": {
         "name": "membership purchase boundary",
-        "required": {"any_groups": [["멤버십", "프리미엄", "membership", "premium"], ["가격", "요금", "월", "price", "month", "plan"]]},
-        "optional": ["혜택", "무료 체험", "다음 결제일", "benefits", "trial"],
+        "required": {"any_groups": [["멤버십", "프리미엄", "구독", "membership", "premium", "subscription"], ["가격", "요금", "월", "price", "month", "plan"]]},
+        "optional": ["혜택", "무료 체험", "다음 결제일", "이용권 구독", "benefits", "trial"],
         "forbidden": [
             "구독 피드",
             "subscriptions feed",
@@ -167,6 +167,68 @@ SIGNATURES: dict[str, dict[str, object]] = {
 ADDITIONAL_SIGNATURES: tuple[tuple[str, str, dict[str, object]], ...] = (
     (
         "membership.join",
+        "ds_membership_join_subscription_entry_v1",
+        {
+            "name": "membership subscription enrollment entry boundary",
+            "required": {
+                "any_groups": [
+                    [
+                        "이용권 관리",
+                        "멤버십 가입",
+                        "멤버쉽 가입",
+                        "membership plans",
+                        "subscription plans",
+                        "plan selection",
+                    ],
+                    [
+                        "이용권 구독",
+                        "새로운 이용권을 구독",
+                        "멤버십 가입",
+                        "멤버쉽 가입",
+                        "구독하기",
+                        "subscribe now",
+                        "choose a plan",
+                    ],
+                ]
+            },
+            "optional": [
+                "보유한 이용권이 없습니다",
+                "요금제",
+                "플랜",
+                "가격",
+                "월",
+                "price",
+                "month",
+                "benefits",
+            ],
+            "forbidden": [
+                "구독 피드",
+                "subscriptions feed",
+                "channels",
+                "프리미엄 회원",
+                "premium 회원",
+                "현재 멤버십",
+                "활성 멤버십",
+                "구독 중",
+                "혜택 이용중",
+                "premium member",
+                "current membership",
+                "active membership",
+                "already subscribed",
+                "benefits active",
+                "benefits in use",
+            ],
+            "terminal": [
+                "이용권 구독",
+                "구독하기",
+                "subscribe now",
+                "choose a plan",
+            ],
+            "threshold": 0.62,
+        },
+    ),
+    (
+        "membership.join",
         "ds_membership_join_member_benefits_v1",
         {
             "name": "member benefits enrollment boundary",
@@ -227,8 +289,8 @@ ROLE_ALIASES: dict[str, tuple[str, tuple[tuple[str, str, float], ...], str, bool
     "auth.signup.entry": ("회원가입 진입", (("회원가입", "ko", 1.0), ("가입하기", "ko", .94), ("계정 만들기", "ko", 1.0), ("sign up", "en", 1.0), ("create account", "en", 1.0), ("register", "en", .92)), "medium", True),
     "account.delete.entry": ("회원탈퇴 진입", (("회원탈퇴", "ko", 1.0), ("회원 탈퇴", "ko", 1.0), ("계정 삭제", "ko", 1.0), ("delete account", "en", 1.0), ("close account", "en", .96)), "high", True),
     "billing.manage": ("결제/청구 관리", (("결제 관리", "ko", 1.0), ("구매 관리", "ko", .96), ("결제 수단", "ko", .90), ("청구", "ko", .88), ("billing", "en", 1.0), ("payments", "en", .92), ("purchases", "en", .88)), "low", False),
-    "membership.hub": ("멤버십 관리 허브", (("멤버십 관리", "ko", 1.0), ("멤버쉽 관리", "ko", 1.0), ("구독 관리", "ko", .98), ("멤버십", "ko", .98), ("멤버쉽", "ko", .98), ("멤버스", "ko", .98), ("프리미엄", "ko", .86), ("와우 멤버십", "ko", .98), ("membership", "en", .92), ("members", "en", .90), ("manage subscription", "en", 1.0), ("premium", "en", .86)), "low", False),
-    "membership.join.entry": ("멤버십 가입 진입", (("멤버십 가입", "ko", 1.0), ("구독 가입", "ko", 1.0), ("프리미엄 가입", "ko", .98), ("subscribe", "en", 1.0), ("join membership", "en", 1.0)), "high", True),
+    "membership.hub": ("멤버십 관리 허브", (("멤버십 관리", "ko", 1.0), ("멤버쉽 관리", "ko", 1.0), ("구독 관리", "ko", .98), ("멤버십", "ko", .98), ("멤버쉽", "ko", .98), ("멤버스", "ko", .98), ("이용권", "ko", .96), ("프리미엄", "ko", .86), ("와우 멤버십", "ko", .98), ("membership", "en", .92), ("members", "en", .90), ("manage subscription", "en", 1.0), ("premium", "en", .86)), "low", False),
+    "membership.join.entry": ("멤버십 가입 진입", (("멤버십 가입", "ko", 1.0), ("구독 가입", "ko", 1.0), ("프리미엄 가입", "ko", .98), ("이용권 구매", "ko", 1.0), ("이용권을 구매", "ko", 1.0), ("이용권 가입", "ko", 1.0), ("이용권 선택", "ko", .98), ("subscribe", "en", 1.0), ("join membership", "en", 1.0), ("view plans", "en", .98), ("choose a plan", "en", 1.0)), "high", True),
     "membership.change.entry": ("멤버십 변경 진입", (("멤버십 변경", "ko", 1.0), ("요금제 변경", "ko", 1.0), ("플랜 변경", "ko", .98), ("change plan", "en", 1.0), ("upgrade", "en", .86), ("downgrade", "en", .86)), "high", True),
     "membership.cancel.entry": ("멤버십 해지 진입", (("구독 해지", "ko", 1.0), ("멤버십 해지", "ko", 1.0), ("자동결제 해지", "ko", .98), ("cancel subscription", "en", 1.0), ("unsubscribe", "en", 1.0), ("end membership", "en", .96)), "high", True),
     "recovery.back": ("이전 화면 복구", (("뒤로가기", "ko", 1.0), ("이전", "ko", .72), ("back", "en", 1.0)), "low", False),

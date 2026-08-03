@@ -325,6 +325,79 @@ def main() -> None:
         assert membership_benefits_destination.destination_match >= destination_threshold
         assert memory.recommend_action(membership_benefits_destination)[0] == "stop_for_user"
 
+        membership_join_entry = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="마이페이지",
+            activity_name="android.view.View",
+            candidates=[
+                {
+                    "candidate_id": "pass-purchase-entry",
+                    "label": "이용권을 구매하세요",
+                    "role": "button",
+                },
+                {"candidate_id": "settings", "label": "설정", "role": "button"},
+            ],
+            top_k=0,
+        )
+        membership_subscription_loading = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="멤버십",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "membership-area",
+                    "label": "",
+                    "nearby_text": "이용권 관리",
+                    "role": "unknown",
+                }
+            ],
+            top_k=0,
+        )
+        assert membership_join_entry.destination_match < destination_threshold
+        assert membership_subscription_loading.destination_match > (
+            membership_join_entry.destination_match
+        )
+        assert membership_subscription_loading.destination_match < destination_threshold
+
+        membership_subscription_destination = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="멤버십",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "membership-area",
+                    "label": "이용권 관리",
+                    "nearby_text": "보유한 이용권이 없습니다. 새로운 이용권을 구독해 보세요!",
+                    "role": "heading",
+                },
+                {
+                    "candidate_id": "subscribe-pass",
+                    "label": "이용권 구독",
+                    "nearby_text": "보유한 이용권이 없습니다. 새로운 이용권을 구독해 보세요!",
+                    "role": "button",
+                    "risk_level": "high",
+                },
+            ],
+            top_k=0,
+        )
+        assert membership_subscription_destination.destination_match >= destination_threshold
+        assert memory.recommend_action(membership_subscription_destination)[0] == "stop_for_user"
+
+        content_subscription_false_positive = memory.retrieve(
+            goal_text="멤버십에 가입하고 싶어",
+            window_title="콘텐츠 홈",
+            activity_name="android.view.View",
+            candidates=[
+                {
+                    "candidate_id": "content",
+                    "label": "오늘의 이용권 구독 추천 콘텐츠",
+                    "role": "card",
+                }
+            ],
+            top_k=0,
+        )
+        assert content_subscription_false_positive.destination_match < destination_threshold
+
         active_membership_screen = memory.retrieve(
             goal_text="멤버십에 가입하고 싶어",
             window_title="계정",
@@ -522,12 +595,20 @@ def main() -> None:
         connection.execute(
             "DELETE FROM affordance_role_aliases WHERE role_id='account.hub' AND locale='ko' AND normalized_alias='계정'"
         )
+        connection.execute(
+            "DELETE FROM destination_signatures WHERE signature_id='ds_membership_join_subscription_entry_v1'"
+        )
         connection.commit()
         patch_module = _load_patch_module()
         first_patch = patch_module.apply_patches(database)
         second_patch = patch_module.apply_patches(database)
         assert first_patch["inserted_aliases"] == 1
-        assert second_patch["unchanged_aliases"] == 1
+        assert first_patch["unchanged_aliases"] == len(patch_module.ALIASES) - 1
+        assert first_patch["inserted_signatures"] == 1
+        assert second_patch["inserted_aliases"] == 0
+        assert second_patch["unchanged_aliases"] == len(patch_module.ALIASES)
+        assert second_patch["inserted_signatures"] == 0
+        assert second_patch["unchanged_signatures"] == 1
         assert memory.infer_affordance_role_scores("계정")["account.hub"] == 0.96
         assert connection.execute("PRAGMA quick_check").fetchone()[0] == "ok"
         connection.close()

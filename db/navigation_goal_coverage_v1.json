@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-04T03:54:52+09:00",
+  "updated_at": "2026-08-04T05:35:22+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "locked_holdout_is_not_explored_or_used_for_tuning",
@@ -190,6 +190,73 @@
           "blocking_issue": null,
           "dangerous_action_auto_executed": false,
           "notes": "4개 안전 행동으로 J 멤버스 혜택·가입 안내 목적지 도달"
+        },
+        {
+          "goal_id": "membership.change",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.cancel",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "app_package": "net.cj.cjhv.gs.tving",
+      "app_name": "TVING",
+      "split": "validation",
+      "app_version": "26.31.02+20263102",
+      "goals": [
+        {
+          "goal_id": "account.signup",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "account.delete",
+          "status": "not_explored",
+          "display_status_ko": "미탐색",
+          "evidence_level": "none",
+          "evidence_refs": [],
+          "last_observed_at": null,
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": ""
+        },
+        {
+          "goal_id": "membership.join",
+          "status": "destination_reached",
+          "display_status_ko": "목적지 도달(검증)",
+          "evidence_level": "real_device_verified",
+          "evidence_refs": [
+            "docs/evidence/tving-public-prior-ab-20260804.md",
+            "docs/evidence/tving-membership-join-fix-20260804.json",
+            "runtime:navs_b83930dda4a74ab6a472a1e4735b468f"
+          ],
+          "last_observed_at": "2026-08-04T05:35:22+09:00",
+          "blocking_issue": null,
+          "dangerous_action_auto_executed": false,
+          "notes": "validation 전용. 공개 prior 개선은 없었으며 OFF 상태의 좁은 Signature/Runtime 수정으로 이용권 화면 도달 후 stop_for_user. 승격 금지"
         },
         {
           "goal_id": "membership.change",

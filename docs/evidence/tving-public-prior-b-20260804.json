@@ -1,0 +1,90 @@
+{
+  "case_count": 4,
+  "claim_scope": "TVING validation only; not locked holdout and not promotion evidence",
+  "dangerous_auto_click_count": 0,
+  "database_sha256": "14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a",
+  "evaluation_cases_database": "/home/exitguide/navigation-validation-output/tving/tving_public_prior_ab_v1.sqlite",
+  "evaluation_cases_sha256": "0b324ded48d81d5a024fdf330688f5aaa5108c1a0ddddf26ab3907e3c8dfad82",
+  "evaluation_kind": "frozen_validation_public_prior_ab",
+  "failed_click_avoidance_rate": null,
+  "failed_click_case_count": 0,
+  "positive_case_count": 4,
+  "positive_exact_next_action_accuracy": 0.25,
+  "positive_first_action_accuracy": 1.0,
+  "positive_first_action_count": 1,
+  "predictions": [
+    {
+      "case_id": "tving_home_to_my",
+      "exact_match": true,
+      "expected_action": "click",
+      "expected_candidate_id": "a11y_591a3cf7272e01221349",
+      "expected_direction": null,
+      "first_action": true,
+      "planner_provider": "semantic_intermediate_role_fast_path",
+      "predicted_action": "click",
+      "predicted_candidate_id": "a11y_591a3cf7272e01221349",
+      "predicted_direction": null,
+      "public_evidence_count": 3
+    },
+    {
+      "case_id": "tving_my_top_to_pass_purchase",
+      "exact_match": false,
+      "expected_action": "click",
+      "expected_candidate_id": "a11y_0985f4bea557baff37d1",
+      "expected_direction": null,
+      "first_action": false,
+      "planner_provider": "python_visual_reobserve_gate",
+      "predicted_action": "wait_and_observe",
+      "predicted_candidate_id": null,
+      "predicted_direction": null,
+      "public_evidence_count": 3
+    },
+    {
+      "case_id": "tving_my_bottom_recover_up",
+      "exact_match": false,
+      "expected_action": "scroll",
+      "expected_candidate_id": null,
+      "expected_direction": "up",
+      "first_action": false,
+      "planner_provider": "python_visual_reobserve_gate",
+      "predicted_action": "wait_and_observe",
+      "predicted_candidate_id": null,
+      "predicted_direction": null,
+      "public_evidence_count": 3
+    },
+    {
+      "case_id": "tving_settings_recover_back",
+      "exact_match": false,
+      "expected_action": "back",
+      "expected_candidate_id": null,
+      "expected_direction": null,
+      "first_action": false,
+      "planner_provider": "python_state_change_boundary",
+      "predicted_action": "stop_for_user",
+      "predicted_candidate_id": null,
+      "predicted_direction": null,
+      "public_evidence_count": 3
+    }
+  ],
+  "public_evidence_case_count": 4,
+  "public_prior": {
+    "canonical_promotion_allowed": false,
+    "enabled": true,
+    "mode": "planner_advisory_only",
+    "runtime_execution_allowed": false
+  },
+  "real_device_episode": {
+    "dangerous_auto_click_count": 0,
+    "db_semantic_fast_path_count": 0,
+    "decision_count": 3,
+    "destination_reached": false,
+    "elapsed_seconds": 49.368,
+    "executed_step_count": 3,
+    "planner_model_action_count": 1,
+    "repeated_down_scroll_count": 0,
+    "session_id": "navs_ec7bbbb0b4f641a1ab06abc9a354ccef",
+    "visual_reobserve_gate_count": 1,
+    "wrong_click_count": 1
+  },
+  "recognized_goal_rate": 1.0
+}

@@ -285,8 +285,16 @@ class NavigationRuntime:
                 len(recent_history),
                 "프로필" in request.screen.window_title.casefold(),
             )
+        safe_goal_entry_fast_path_candidate_id = (
+            self.policy.semantic_safe_goal_entry_fast_path_candidate(
+                query=query,
+                plan=plan,
+                recent_history=recent_history,
+            )
+        )
         semantic_fast_path_candidate_id = (
             profile_gate_fast_path_candidate_id
+            or safe_goal_entry_fast_path_candidate_id
             or self.policy.semantic_intermediate_fast_path_candidate(
                 query=query,
                 plan=plan,
@@ -375,6 +383,19 @@ class NavigationRuntime:
                 ),
                 1.0,
                 "semantic_intermediate_role_fast_path",
+                False,
+            )
+            planner_provider = proposal.provider
+            verifier_provider = proposal.provider
+            score_margin = 1.0
+        elif safe_goal_entry_fast_path_candidate_id is not None:
+            proposal = PlannerProposal(
+                NavigationAction(
+                    name="click",
+                    candidate_id=safe_goal_entry_fast_path_candidate_id,
+                ),
+                1.0,
+                "semantic_safe_goal_entry_fast_path",
                 False,
             )
             planner_provider = proposal.provider
@@ -753,6 +774,26 @@ class NavigationRuntime:
                     destination_match_after=next_query.destination_match,
                     failure_class="",
                     recovery_action=None,
+                )
+            elif (
+                str(decision["action_name"]) == "stop_for_user"
+                and str(decision["planner_provider"]) == "python_terminal_boundary"
+                and next_query.destination_match >= _destination_threshold(next_query)
+            ):
+                # The Executor reports an intentional non-executed stop as a
+                # blocked signal.  When the planner stopped specifically
+                # because the freshly observed screen satisfies its
+                # Destination Signature, that is the safe success boundary,
+                # not an executor/navigation failure.
+                verified = VerifiedTransition(
+                    outcome_type="destination_reached",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="reached",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=NavigationAction(name="stop_for_user"),
                 )
             elif observed_signal != "none":
                 verified = verify_transition(

@@ -90,6 +90,38 @@ def _has_explicit_commercial_membership_semantics(
             "subscription settings",
             "subscription details",
             "paid subscription",
+            "이용권",
+            "view plans",
+            "choose a plan",
+        )
+    )
+
+
+def _is_safe_membership_join_entry_text(value: str) -> bool:
+    """Recognize an obvious plan-selection entry, never a final purchase.
+
+    The phrase must come from the control itself.  Nearby advertising or
+    parent text is intentionally excluded so an unrelated Settings/More
+    control cannot inherit a membership meaning.
+    """
+
+    text = " ".join(value.casefold().split())
+    return any(
+        marker in text
+        for marker in (
+            "이용권을 구매",
+            "이용권 구매",
+            "이용권 가입",
+            "이용권 선택",
+            "멤버십 가입",
+            "멤버쉽 가입",
+            "구독 가입",
+            "가입할 이용권",
+            "요금제 선택",
+            "플랜 선택",
+            "view plans",
+            "choose a plan",
+            "membership plans",
         )
     )
 
@@ -598,18 +630,32 @@ class AndroidWorldResearchPolicy:
         ):
             structural_continuation_candidate_id = None
         semantic_fast_path_candidate_id = None
+        goal_entry_fast_path_candidate_id = None
         if structural_continuation_candidate_id is None:
-            semantic_fast_path_candidate_id = _profile_gate_existing_entry_candidate_id(
+            profile_fast_path_candidate_id = _profile_gate_existing_entry_candidate_id(
                 candidates=candidates,
                 goal_id=None if query.goal is None else query.goal.goal_id,
                 screen_title=query.screen.title,
                 recent_history=recent_history,
                 forbidden_candidate_ids=forbidden_candidate_ids,
-            ) or self.semantic_intermediate_fast_path_candidate(
-                query=query,
-                plan=plan,
-                prior_values=prior_values,
-                recent_history=recent_history,
+            )
+            if profile_fast_path_candidate_id is None:
+                goal_entry_fast_path_candidate_id = (
+                    self.semantic_safe_goal_entry_fast_path_candidate(
+                        query=query,
+                        plan=plan,
+                        recent_history=recent_history,
+                    )
+                )
+            semantic_fast_path_candidate_id = (
+                profile_fast_path_candidate_id
+                or goal_entry_fast_path_candidate_id
+                or self.semantic_intermediate_fast_path_candidate(
+                    query=query,
+                    plan=plan,
+                    prior_values=prior_values,
+                    recent_history=recent_history,
+                )
             )
         should_invoke_planner = self._should_invoke_planner(
             query=query,
@@ -675,6 +721,8 @@ class AndroidWorldResearchPolicy:
             provider = (
                 "structural_continuation_fast_path"
                 if structural_continuation_candidate_id is not None
+                else "semantic_safe_goal_entry_fast_path"
+                if goal_entry_fast_path_candidate_id is not None
                 else "semantic_intermediate_role_fast_path"
                 if semantic_fast_path_candidate_id is not None
                 else "decision_memory_profile_fast_path"
@@ -704,6 +752,9 @@ class AndroidWorldResearchPolicy:
                                 "python_structural_continuation_fast_path: "
                                 "successful expander revealed a same-label safe child"
                                 if structural_continuation_candidate_id is not None
+                                else
+                                "python_semantic_goal_entry_fast_path: unique explicit safe entry"
+                                if goal_entry_fast_path_candidate_id is not None
                                 else
                                 "python_semantic_fast_path: unique safe intermediate role"
                             ),
@@ -1146,6 +1197,13 @@ class AndroidWorldResearchPolicy:
         ):
             return False
 
+        if self.semantic_safe_goal_entry_fast_path_candidate(
+            query=query,
+            plan=plan,
+            recent_history=recent_history,
+        ) is not None:
+            return False
+
         target_roles = set(plan.target_roles)
         for candidate in query.screen.candidate_payloads:
             if bool(candidate.get("dangerous_final", False)):
@@ -1177,6 +1235,50 @@ class AndroidWorldResearchPolicy:
                 return False
             trailing_scrolls += 1
         return trailing_scrolls < DESTINATION_SCROLL_LIMIT
+
+    def semantic_safe_goal_entry_fast_path_candidate(
+        self,
+        *,
+        query: DecisionMemoryQuery,
+        plan: HierarchicalPlan,
+        recent_history: Sequence[Mapping[str, object]],
+    ) -> str | None:
+        """Return one explicit, non-final membership-join entry candidate.
+
+        This narrow path covers labels such as ``이용권을 구매하세요`` that
+        open a plan-selection screen.  It deliberately does not use nearby
+        text, public priors, app names, or coordinates, and it refuses every
+        label already classified as a state-changing/final action.
+        """
+
+        if (
+            query.standards_profile != "exitguide.navigation-experience.v1"
+            or query.goal is None
+            or query.goal.goal_id != "membership.join"
+            or plan.stage not in {"hub_discovery", "destination_entry"}
+            or _history_requires_planner(recent_history)
+        ):
+            return None
+        eligible: list[str] = []
+        for candidate in query.screen.candidate_payloads:
+            candidate_id = str(candidate.get("candidate_id", ""))
+            label = str(candidate.get("label", "")).strip()
+            if (
+                not candidate_id
+                or not label
+                or len(label) > SEMANTIC_FAST_PATH_LABEL_MAX_CHARS
+                or str(candidate.get("risk_level", "low")) != "low"
+                or bool(candidate.get("dangerous_final", False))
+                or not bool(candidate.get("clickable", True))
+                or not bool(candidate.get("enabled", True))
+                or bool(candidate.get("selected", False))
+                or is_state_changing_action_label(label)
+                or is_dangerous_final_candidate(label)
+                or not _is_safe_membership_join_entry_text(label)
+            ):
+                continue
+            eligible.append(candidate_id)
+        return eligible[0] if len(eligible) == 1 else None
 
     def _structural_continuation_fast_path_candidate(
         self,

@@ -1186,6 +1186,116 @@ def main() -> None:
             for _ in range(4)
         ],
     ) is False
+    join_entry_plan = HierarchicalPlan(
+        goal_id="membership.join",
+        stage="destination_entry",
+        target_roles=["membership.join.entry", "membership.hub", "account.hub"],
+        immediate_subgoal="open the pass selection screen",
+        expected_outcome="plans and prices become visible",
+        completion_rule="stop before purchase confirmation",
+        source="decision_memory_fallback",
+    )
+    join_entry_query = replace(
+        destination_scroll_query,
+        goal=NormalizedGoal(
+            goal_id="membership.join",
+            family="membership",
+            operation="join",
+            confidence=1.0,
+            matched_phrase="join membership",
+            terminal_action_policy="stop_before_final_confirmation",
+        ),
+        screen=replace(
+            destination_scroll_query.screen,
+            candidate_payloads=(
+                {
+                    "candidate_id": "buy-pass-entry",
+                    "label": "이용권을 구매하세요",
+                    "risk_level": "low",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "dangerous_final": False,
+                    "function_role_scores": {},
+                },
+                {
+                    "candidate_id": "settings",
+                    "label": "settings",
+                    "risk_level": "low",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "dangerous_final": False,
+                    "function_role_scores": {"account.settings": 0.72},
+                },
+            ),
+        ),
+    )
+    assert selective_policy.semantic_safe_goal_entry_fast_path_candidate(
+        query=join_entry_query,
+        plan=join_entry_plan,
+        recent_history=[],
+    ) == "buy-pass-entry"
+    assert selective_policy.semantic_destination_scroll_fast_path(
+        query=join_entry_query,
+        plan=join_entry_plan,
+        screen=scrollable_screen,
+        recent_history=[],
+    ) is False
+    dangerous_join_query = replace(
+        join_entry_query,
+        screen=replace(
+            join_entry_query.screen,
+            candidate_payloads=(
+                {
+                    "candidate_id": "final-purchase",
+                    "label": "구매하기",
+                    "risk_level": "low",
+                    "clickable": True,
+                    "enabled": True,
+                    "selected": False,
+                    "dangerous_final": True,
+                    "function_role_scores": {"membership.join.entry": 1.0},
+                },
+            ),
+        ),
+    )
+    assert selective_policy.semantic_safe_goal_entry_fast_path_candidate(
+        query=dangerous_join_query,
+        plan=join_entry_plan,
+        recent_history=[],
+    ) is None
+    safe_entry_action, safe_entry_status, _ = ActionSafetyGate().validate(
+        NavigationAction(name="click", candidate_id="safe-pass-entry"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="safe-pass-entry",
+                label="이용권을 구매하세요",
+                role="button",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )
+    assert safe_entry_action.name == "click"
+    assert safe_entry_status == "allowed"
+    subscription_boundary, subscription_status, subscription_reason = (
+        ActionSafetyGate().validate(
+            NavigationAction(name="click", candidate_id="subscribe-pass"),
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="subscribe-pass",
+                    label="이용권 구독",
+                    role="button",
+                    risk_level="low",
+                )
+            ],
+            forbidden_candidate_ids=set(),
+        )
+    )
+    assert subscription_boundary.name == "stop_for_user"
+    assert subscription_status == "replaced_with_safe_action"
+    assert "dangerous final" in subscription_reason
     disabled_action, disabled_status, _ = ActionSafetyGate().validate(
         NavigationAction(name="click", candidate_id="disabled"),
         candidates=[

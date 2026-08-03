@@ -9,6 +9,7 @@
 | Netflix (collection) | 미탐색 | 미탐색 | 미확인(렌더링 오류) | 미탐색 | 탐색 중 |
 | YouTube (collection) | 미탐색 | 미탐색 | 상태 확인(이미 가입됨) | 미탐색 | 탐색 중 |
 | 제주항공 (collection) | 미탐색 | 미탐색 | 목적지 도달 | 미탐색 | 미탐색 |
+| TVING (validation) | 미탐색 | 미탐색 | 목적지 도달(검증) | 미탐색 | 미탐색 |
 
 ## 상태 정의
 
@@ -41,5 +42,9 @@
 - YouTube `membership.join`은 이미 가입된 상태를 확인한 경계 사례다.
 - Netflix·YouTube `membership.cancel`은 중간 전이 근거가 있지만 완료로 세지 않는다.
 - Netflix `membership.join` 렌더링 오류는 탐색 실패나 `not_supported`가 아니다.
+- TVING `membership.join`은 공개 Prior OFF/ON 효과 검증용 `validation` 결과다. 공개
+  Prior 자체는 개선되지 않았고, OFF 상태에서 범용 Destination Signature와 Runtime
+  검증 규칙을 좁게 수정한 뒤 목적지 도달을 확인했다. 이 행은 collection 성공률이나
+  App Knowledge 승격에 섞지 않는다.
 - 이 표만으로 범용 성능 개선을 주장할 수 없으며, 검증 앱의 고정 A/B 사례는 별도로
   구축해야 한다.

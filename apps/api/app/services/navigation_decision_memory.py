@@ -103,6 +103,9 @@ DANGEROUS_FINAL_PHRASES = (
     "주문하기",
     "구독 확정",
     "구독 시작",
+    "이용권 구독",
+    "구독하기",
+    "지금 구독",
     "멤버십 가입 완료",
     "confirm deletion",
     "delete permanently",
@@ -118,6 +121,7 @@ DANGEROUS_FINAL_PHRASES = (
     "add to cart",
     "place order",
     "start subscription",
+    "subscribe now",
 )
 
 # Exact labels that commit a state change but are too generic to search as
@@ -1499,7 +1503,16 @@ def _destination_match(
             else 0.0
         )
         terminal_values = list(terminal) if isinstance(terminal, list) else []
-        terminal_score = max((feature_present(term) for term in terminal_values), default=False)
+        # A terminal verb is evidence for a destination only after every
+        # required semantic group is grounded on the screen.  Otherwise a
+        # harmless entry such as "이용권을 구매하세요" can look closer to the
+        # destination than the WebView it correctly opens merely because it
+        # contains the word "구매".
+        terminal_score = (
+            max((feature_present(term) for term in terminal_values), default=False)
+            if required_score >= 1.0
+            else False
+        )
         forbidden_values = list(forbidden) if isinstance(forbidden, list) else []
         forbidden_hit = any(feature_present(term) for term in forbidden_values)
         score = required_score * 0.70 + optional_score * 0.18 + float(terminal_score) * 0.12

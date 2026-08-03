@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T04:18:30+09:00
+updated_at: 2026-08-04T05:40:04+09:00
 priority: TVING membership.join public-prior A/B evaluation
 decision_db_collection: paused
-next_action: Deploy the TVING validation split and isolated public-prior OFF/ON API services, then verify both report ready before starting the Executor.
+next_action: Commit the verified TVING fix, deploy the same commit with public prior OFF, and verify production 8100 readiness without changing the preserved source DB.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T22:10:05+09:00
 verified_device: Samsung SM-S936N, Android 16
@@ -71,7 +71,23 @@ deployed_commit: `c1a8466`
 - apk_reinstalled_for_this_evaluation: no
 - isolated_a_runtime: `/srv/exitguide/runtime/navigation-validation/tving/a/navigation-runtime-v1.sqlite`
 - isolated_b_runtime: `/srv/exitguide/runtime/navigation-validation/tving/b/navigation-runtime-v1.sqlite`
-- fixed_validation_cases: pending
+- isolated_a_service: passed (`ready=true`, public prior disabled, validation apps 3)
+- isolated_b_service: passed (`ready=true`, public prior enabled, validation apps 3)
+- device_tunnel: passed (`device tcp:8100` -> local `18110` -> N100 `8110`)
+- fixed_validation_cases: passed — 4 cases, A/B payload SHA identical
+- fixed_validation_db_sha256: `0b324ded48d81d5a024fdf330688f5aaa5108c1a0ddddf26ab3907e3c8dfad82`
+- a_frozen_accuracy: 0.25
+- b_frozen_accuracy: 0.25
+- public_prior_effect: not proven; B added irrelevant evidence and did not improve any fixed action
+- real_device_a: destination not reached; repeated down-scroll 2; wrong click 0
+- real_device_b: destination not reached; settings wrong click 1
+- selected_public_prior_setting: disabled
+- patched_validation_decision_db_sha256: `3891d4cc4d44b10d5363e0134937eab215663f115cb0809d9e232bead82fd9c1`
+- patched_frozen_accuracy: 0.50; first-action accuracy 1.00; dangerous auto click 0
+- corrected_real_device_session: `navs_b83930dda4a74ab6a472a1e4735b468f`
+- corrected_real_device_result: `reached` at match 0.8425; candidate-ID clicks 2; dangerous auto click 0
+- safety_regression_history: intermediate build clicked newly classified boundary CTA once; no subscription/payment occurred; final build 0
+- api_unit_tests: passed, 10/10
 - evidence: `docs/evidence/tving-public-prior-ab-20260804.md`
 
 ## 작업 원칙

@@ -526,6 +526,196 @@ def main() -> None:
         )
         assert obvious_intermediate.visual_reobserve_required is False
 
+        safe_join_entry_policy = _policy()
+        safe_join_entry_policy.semantic_safe_goal_entry_fast_path_candidate = (
+            lambda **_: "buy-pass-entry"
+        )
+        safe_join_entry_policy.semantic_intermediate_fast_path_candidate = (
+            lambda **_: None
+        )
+        safe_join_entry_policy.semantic_destination_scroll_fast_path = (
+            lambda **_: True
+        )
+        safe_join_entry_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "safe-join-entry-runtime.sqlite"),
+            policy=safe_join_entry_policy,
+        )
+        safe_join_entry = safe_join_entry_runtime.decide(
+            DecideRequest(
+                request_id="request-safe-membership-join-entry",
+                app_package="evaluation.unseen-pass.app",
+                locale="ko-KR",
+                goal_text="멤버십 가입",
+                screen=ScreenObservation(
+                    app_package="evaluation.unseen-pass.app",
+                    window_title="마이페이지",
+                    activity_name="android.view.View",
+                    nodes=[
+                        AccessibilityNodeSummary(
+                            node_id="scroll-root",
+                            role="container",
+                            scrollable=True,
+                            clickable=False,
+                        ),
+                        AccessibilityNodeSummary(
+                            node_id="buy-pass-entry",
+                            parent_id="scroll-root",
+                            text="이용권을 구매하세요",
+                            role="button",
+                            clickable=True,
+                        ),
+                        AccessibilityNodeSummary(
+                            node_id="settings",
+                            parent_id="scroll-root",
+                            text="settings",
+                            role="button",
+                            clickable=True,
+                        ),
+                        AccessibilityNodeSummary(
+                            node_id="favorites-more",
+                            parent_id="scroll-root",
+                            text="찜 더보기",
+                            role="button",
+                            clickable=True,
+                        ),
+                    ],
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="buy-pass-entry",
+                            label="이용권을 구매하세요",
+                            icon_semantics="이용권을 구매하세요",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="settings",
+                            label="settings",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="favorites-more",
+                            label="찜 더보기",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert safe_join_entry.action.name == "click"
+        assert safe_join_entry.action.candidate_id == "buy-pass-entry"
+        assert safe_join_entry.planner_provider == "semantic_safe_goal_entry_fast_path", (
+            safe_join_entry.model_dump(mode="json")
+        )
+        assert safe_join_entry.visual_reobserve_required is False
+        assert safe_join_entry.safety_status == "allowed"
+        join_loading_screen = ScreenObservation(
+            app_package="evaluation.unseen-pass.app",
+            window_title="멤버십",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="membership-area",
+                    label="",
+                    nearby_text="이용권 관리",
+                    role="unknown",
+                )
+            ],
+        )
+        safe_join_progress = safe_join_entry_runtime.observe(
+            ObserveRequest(
+                request_id="request-safe-membership-join-entry-observe",
+                decision_id=safe_join_entry.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=join_loading_screen,
+            )
+        )
+        assert safe_join_progress.outcome_type == "navigated"
+        assert safe_join_progress.progress_label == "advanced"
+        assert safe_join_progress.navigation_progressed is True
+        assert safe_join_progress.candidate_forbidden is False
+
+        safe_join_destination = safe_join_entry_runtime.decide(
+            DecideRequest(
+                request_id="request-safe-membership-join-destination",
+                session_id=safe_join_entry.session_id,
+                step_ordinal=1,
+                app_package="evaluation.unseen-pass.app",
+                locale="ko-KR",
+                goal_text="멤버십 가입",
+                screen=ScreenObservation(
+                    app_package="evaluation.unseen-pass.app",
+                    window_title="멤버십",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-area",
+                            label="이용권 관리",
+                            nearby_text=(
+                                "보유한 이용권이 없습니다. "
+                                "새로운 이용권을 구독해 보세요!"
+                            ),
+                            role="heading",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="subscribe-pass",
+                            label="이용권 구독",
+                            nearby_text=(
+                                "보유한 이용권이 없습니다. "
+                                "새로운 이용권을 구독해 보세요!"
+                            ),
+                            role="button",
+                            risk_level="high",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert safe_join_destination.action.name == "stop_for_user"
+        assert safe_join_destination.planner_provider == "python_terminal_boundary"
+        assert safe_join_destination.safety_status == "allowed"
+        safe_join_stop = safe_join_entry_runtime.observe(
+            ObserveRequest(
+                request_id="request-safe-membership-join-destination-observe",
+                decision_id=safe_join_destination.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=False,
+                observed_signal="blocked",
+                next_screen=ScreenObservation(
+                    app_package="evaluation.unseen-pass.app",
+                    window_title="멤버십",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-area",
+                            label="이용권 관리",
+                            nearby_text=(
+                                "보유한 이용권이 없습니다. "
+                                "새로운 이용권을 구독해 보세요!"
+                            ),
+                            role="heading",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="subscribe-pass",
+                            label="이용권 구독",
+                            nearby_text=(
+                                "보유한 이용권이 없습니다. "
+                                "새로운 이용권을 구독해 보세요!"
+                            ),
+                            role="button",
+                            risk_level="high",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert safe_join_stop.outcome_type == "destination_reached"
+        assert safe_join_stop.progress_label == "reached"
+        assert safe_join_stop.navigation_progressed is True
+        assert safe_join_stop.failure_class == ""
+        assert safe_join_stop.session_status == "reached"
+        assert safe_join_stop.executor_action_succeeded is False
+
         scroll_gate_policy = _policy()
         scroll_gate_policy.exaone_vlm = Exaone45VisionClient(
             OpenAICompatibleChatClient(
