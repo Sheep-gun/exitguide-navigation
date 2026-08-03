@@ -2,7 +2,7 @@
 
 status: completed
 phase: device_validation
-updated_at: 2026-08-04T03:29:26+09:00
+updated_at: 2026-08-04T03:32:36+09:00
 priority: Build a frozen validation-only case DB for public-prior OFF/ON evaluation
 decision_db_collection: paused
 next_action: Connect the phone and record isolated candidate-complete cases from a validation app (KB Insurance or NH Nonghyup Insurance); do not use collection apps or the locked holdout, and do not promote these validation observations into Decision DB.
@@ -30,12 +30,17 @@ deployed_commit: `c1a8466`
 
 - n100_source_commit: `b48af5aa1ef7812596ab67ac731c9398a0fe4238`
 - local_integration_branch: `agent/public-prior-integration`
+- github_and_n100_deployed_commit: `60184a1b554e51dfcf6e70782e63b3d1619d6a9c`
+- n100_service_status: active, ready=true
+- operating_decision_db_sha256: `14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a`
 - public_role: planner advisory context only
 - runtime_execution_allowed: false
 - canonical_promotion_allowed: false
 - task_contract: `navigation-task-knowledge.v1.schema.json`
 - task_contract_validation: passed, 570/570 rows and 570 unique task IDs
 - irrelevant_task_gate: passed; a service category alone cannot inject a task whose goal text is unrelated
+- deployed_membership_cancel_audit: 3 service hints, 0 failure hints, 0 task hints
+- n100_warning_log: no entries since deployment
 - api_unit_tests: passed, 9/9 files
 - fixed_validation_cases: 0
 - improvement_claim: not permitted until the frozen validation OFF/ON A/B gate passes

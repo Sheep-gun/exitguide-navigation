@@ -61,6 +61,17 @@ All nine API unit-test files passed locally, including:
 
 The production task JSONL also passed the contract validator with all 570 rows.
 
+The integrated GitHub and N100 deployment commit is
+`60184a1b554e51dfcf6e70782e63b3d1619d6a9c`. After deployment:
+
+- `exitguide-navigation-api.service`: active;
+- `/v1/navigation/status`: `ready=true`;
+- Decision DB SHA-256 remained
+  `14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a`;
+- warning-level journal entries since deployment: none;
+- deployed membership-cancel audit: 3 service hints, 0 failure hints, 0 task
+  hints, confirming that the unrelated category-only task was removed.
+
 ## Evaluation limitation and next gate
 
 The Decision DB contains 88 verified cases, all from collection/train apps. The
