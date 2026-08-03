@@ -792,17 +792,20 @@ def main() -> None:
                 label="구독: 새로운 콘텐츠 이용 가능",
             ),
         ),
+        EnumeratedAction(NavigationAction(name="back"), 0.2, None),
     ]
     renewal_detail_scores = policy._apply_membership_hub_affordance_guard(
         scores={
             "click:navigate-up": (0.20, "model underestimated recovery"),
             "click:content-subscriptions": (0.60, "model confused content feed"),
+            "back": (0.20, "bounded reverse action"),
         },
         goal_id="membership.cancel",
         enumerated=renewal_detail_actions,
         renewal_boundary_visible=True,
     )
-    assert renewal_detail_scores["click:navigate-up"][0] >= 0.99
+    assert renewal_detail_scores["back"][0] >= 0.99
+    assert renewal_detail_scores["click:navigate-up"][0] <= 0.20
     assert renewal_detail_scores["click:content-subscriptions"][0] <= 0.20
     renewal_without_up_actions = [
         EnumeratedAction(

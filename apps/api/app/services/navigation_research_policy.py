@@ -1732,6 +1732,28 @@ class AndroidWorldResearchPolicy:
                     + reason,
                 )
         if goal_id == "membership.cancel" and renewal_boundary_visible:
+            # Reverse navigation is exposed as a bounded first-class action.
+            # Prefer it even when the screen also exposes a clickable Up icon:
+            # the runtime deliberately refuses to click reverse-navigation
+            # candidates and requires ``back()`` instead.
+            if "back" in adjusted:
+                score, reason = adjusted["back"]
+                adjusted["back"] = (
+                    max(score, 0.99),
+                    "python_membership_hub_affordance_guard: renewal-only destination "
+                    "must recover through the bounded back action; "
+                    + reason,
+                )
+                for other_key, (other_score, other_reason) in tuple(adjusted.items()):
+                    if other_key == "back":
+                        continue
+                    adjusted[other_key] = (
+                        min(other_score, 0.20),
+                        "python_membership_hub_affordance_guard: renewal-only destination "
+                        "does not advance membership cancellation; "
+                        + other_reason,
+                    )
+                return adjusted
             reverse_items = [
                 item
                 for item in click_items
@@ -1755,25 +1777,7 @@ class AndroidWorldResearchPolicy:
                         "python_membership_hub_affordance_guard: remain inside the "
                         "wrong renewal-only destination only long enough to recover; "
                         + other_reason,
-                    )
-                return adjusted
-            if not reverse_items and "back" in adjusted:
-                score, reason = adjusted["back"]
-                adjusted["back"] = (
-                    max(score, 0.99),
-                    "python_membership_hub_affordance_guard: renewal-only destination "
-                    "has no grounded reverse candidate; use the bounded back action; "
-                    + reason,
                 )
-                for other_key, (other_score, other_reason) in tuple(adjusted.items()):
-                    if other_key == "back":
-                        continue
-                    adjusted[other_key] = (
-                        min(other_score, 0.20),
-                        "python_membership_hub_affordance_guard: renewal-only destination "
-                        "does not advance membership cancellation; "
-                        + other_reason,
-                    )
                 return adjusted
         if len(active_plan_rows) == 1:
             active_key = _action_key(active_plan_rows[0].action)
