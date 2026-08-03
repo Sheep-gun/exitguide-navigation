@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-03T10:30:41+09:00
+updated_at: 2026-08-03T10:38:45+09:00
 priority: 기존 ExitGuide Android 기능을 재사용한 Navigation Executor 완성
 decision_db_collection: paused
-next_action: N100에 별도 격리 Runtime DB와 로그 경로를 확정하고 integration_commit의 API를 검증용 프로세스로 배포한다.
+next_action: SM-S936N에서 ExitGuide Navigation Executor 접근성 서비스를 활성화하고 안전한 설정 화면에서 Accessibility 후보 수집을 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: pending
 verified_device: pending
 verified_apps: pending
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
-deployed_commit: pending
+deployed_commit: `d19a1b56ed968bcd78563fe2a47a546943cf2716`
 
 ## 작업 원칙
 
@@ -65,9 +65,11 @@ deployed_commit: pending
 
 ## 격리 검증 근거
 
-- isolated_runtime_db: pending
+- isolated_api: `http://100.77.172.25:8101` — `ready=true`, integration_commit 일치
+- isolated_code: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/code`
+- isolated_runtime_db: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-runtime-v4.sqlite`
 - android_device_log: pending
-- navigation_api_vlm_log: pending
+- navigation_api_vlm_log: `/home/kyle/exitguide/runtime/executor-validation-d19a1b5/navigation-api.log` (`device validation pending`)
 - device_validation_report: `docs/EXECUTOR_REUSE_DEVICE_VALIDATION_2026-08-03.md` (`pending`)
 - apk_path: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk` — SHA-256 `942F408B59F48AF23A4618DF6F971C576859980A779018EA035AE563490C2182`
 
