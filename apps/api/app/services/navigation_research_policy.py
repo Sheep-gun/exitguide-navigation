@@ -487,7 +487,10 @@ def _trusted_membership_management_handoff(
     if not (has_manage_action and has_handoff_target):
         return False
 
-    screen_text = " ".join(str(token).casefold() for token in screen_tokens)
+    normalized_screen_tokens = {
+        str(token).casefold().strip() for token in screen_tokens if str(token).strip()
+    }
+    screen_text = " ".join(sorted(normalized_screen_tokens))
     has_subscription = any(
         marker in screen_text
         for marker in (
@@ -500,7 +503,7 @@ def _trusted_membership_management_handoff(
             "subscription",
             "recurring",
         )
-    )
+    ) or {"정기", "결제"}.issubset(normalized_screen_tokens)
     has_management_context = any(
         marker in screen_text
         for marker in (
@@ -515,6 +518,12 @@ def _trusted_membership_management_handoff(
             "payment method",
             "next billing",
             "renewal",
+        )
+    ) or (
+        {"정기", "결제"}.issubset(normalized_screen_tokens)
+        and bool(
+            normalized_screen_tokens
+            & {"관리", "설정", "업데이트", "취소", "manage", "settings", "update"}
         )
     )
     return has_subscription and has_management_context

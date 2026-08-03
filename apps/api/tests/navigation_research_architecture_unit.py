@@ -641,6 +641,19 @@ def main() -> None:
     )
     assert trusted_handoff_scores["click:foreign-membership"] == (0.95, "model")
     assert trusted_handoff_scores["stop_for_user"] == (0.05, "model")
+    sparse_token_handoff_scores = policy._apply_external_app_stop_guard(
+        scores={
+            "click:foreign-membership": (0.72, "model"),
+            "back": (0.40, "model"),
+            "stop_for_user": (0.05, "model"),
+        },
+        enumerated=foreign_app_actions,
+        goal_id="membership.change",
+        screen_tokens=("정기", "결제", "설정", "업데이트", "취소"),
+        recent_history=trusted_handoff_history,
+    )
+    assert sparse_token_handoff_scores["click:foreign-membership"] == (0.72, "model")
+    assert sparse_token_handoff_scores["stop_for_user"] == (0.05, "model")
     non_membership_handoff_scores = policy._apply_external_app_stop_guard(
         scores={
             "click:foreign-membership": (0.95, "model"),
