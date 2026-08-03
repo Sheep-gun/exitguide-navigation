@@ -34,10 +34,15 @@ public final class NavigationSafetyPolicyTest {
 
     @Test
     public void stateChangingActionLabelsAreBlockedWithoutSubstringOverreach() {
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 해지"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Cancel subscription"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Unsubscribe"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("저장하기"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel(" Save Changes "));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("적용"));
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("저장된 결제수단"));
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("변경 내역"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 관리"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("해지 안내"));
     }
 }

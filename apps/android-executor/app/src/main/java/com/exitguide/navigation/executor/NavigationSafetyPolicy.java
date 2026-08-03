@@ -62,6 +62,17 @@ public final class NavigationSafetyPolicy {
     };
 
     private static final Set<String> STATE_CHANGING_ACTION_LABELS = Set.of(
+            // Exact cancellation CTA labels are safety boundaries even when
+            // the surrounding page has not yet exposed a separate confirm
+            // dialog.  This keeps the Executor from entering an irreversible
+            // cancellation flow merely because the label omits "확정".
+            "멤버십 해지",
+            "구독 해지",
+            "구독 취소",
+            "이용권 해지",
+            "cancel membership",
+            "cancel subscription",
+            "unsubscribe",
             "저장",
             "저장하기",
             "변경 저장",
@@ -93,8 +104,7 @@ public final class NavigationSafetyPolicy {
                 || node.isEditable()) {
             return "blocked";
         }
-        if (isStateChangingActionLabel(string(node.getText()))
-                || isStateChangingActionLabel(string(node.getContentDescription()))) {
+        if (isStateChangingActionLabel(preferredActionLabel(node))) {
             return "high";
         }
         return isDangerousFinalText(semanticText) ? "high" : "low";
@@ -123,5 +133,17 @@ public final class NavigationSafetyPolicy {
 
     private static String string(CharSequence value) {
         return value == null ? "" : value.toString();
+    }
+
+    private static String preferredActionLabel(AccessibilityNodeInfo node) {
+        for (CharSequence value : new CharSequence[] {
+                node.getText(), node.getContentDescription(), node.getHintText()
+        }) {
+            String candidate = string(value).trim();
+            if (!candidate.isEmpty()) {
+                return candidate;
+            }
+        }
+        return "";
     }
 }

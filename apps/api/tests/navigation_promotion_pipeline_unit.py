@@ -83,7 +83,12 @@ def screen_payload(*, title: str, candidate_id: str, label: str) -> dict:
     }
 
 
-def insert_runtime_session(connection: sqlite3.Connection, ordinal: int) -> str:
+def insert_runtime_session(
+    connection: sqlite3.Connection,
+    ordinal: int,
+    *,
+    status: str = "reached",
+) -> str:
     session_id = f"session-{ordinal}"
     decision_id = f"decision-{ordinal}"
     observation_id = f"observation-{ordinal}"
@@ -117,7 +122,7 @@ def insert_runtime_session(connection: sqlite3.Connection, ordinal: int) -> str:
             "ko-KR",
             "멤버십 해지",
             "membership.cancel",
-            "active",
+            status,
             started,
             finished,
         ),
@@ -276,6 +281,7 @@ def build_runtime(path: Path) -> list[str]:
         (ROOT / "db" / "navigation_runtime_v1.sql").read_text(encoding="utf-8")
     )
     sessions = [insert_runtime_session(connection, index) for index in (1, 2)]
+    sessions.append(insert_runtime_session(connection, 3, status="stopped"))
     connection.commit()
     connection.close()
     return sessions
@@ -336,7 +342,12 @@ def run() -> None:
             argparse.Namespace(runtime_db=runtime, session=sessions, output=episodes_path)
         )
         episodes = PROMOTER.load_interaction_episodes(episodes_path)
-        assert len(episodes) == 2
+        assert len(episodes) == 3
+        assert [episode["status"] for episode in episodes] == [
+            "completed",
+            "completed",
+            "aborted",
+        ]
         assert all(episode["context"]["goal_id"] == "cancel_membership" for episode in episodes)
         assert all(
             episode["context"]["device_context"]["navigation_goal_id"]
@@ -357,6 +368,10 @@ def run() -> None:
         candidates = PROMOTER.read_jsonl(candidates_path)
         assert len(candidates) == 1
         assert candidates[0]["status"] == "ready_for_validation"
+        assert candidates[0]["support_count"] == 2
+        assert {
+            source["episode_id"] for source in candidates[0]["sources"]
+        } == {"session-1", "session-2"}
 
         PROMOTER.command_accept(
             argparse.Namespace(

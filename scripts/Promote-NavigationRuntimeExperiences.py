@@ -224,6 +224,12 @@ def recovery_group_key(row: Mapping[str, Any]) -> str:
 
 
 def eligible_row(row: Mapping[str, Any]) -> bool:
+    # A stopped/active/failed episode can contain individually successful
+    # clicks but it has not established source-goal consistency.  In
+    # particular, an operator-aborted session must never leak those clicks
+    # into canonical App Knowledge.
+    if normalize(row.get("session_status")) not in {"reached", "completed"}:
+        return False
     if row.get("action_name") not in ELIGIBLE_ACTIONS:
         return False
     if row.get("connectivity_status") != "observed":
@@ -247,6 +253,8 @@ def eligible_row(row: Mapping[str, Any]) -> bool:
 
 
 def eligible_failure_row(row: Mapping[str, Any]) -> bool:
+    if normalize(row.get("session_status")) not in {"reached", "completed"}:
+        return False
     if row.get("action_name") != "click":
         return False
     if row.get("connectivity_status") != "observed":

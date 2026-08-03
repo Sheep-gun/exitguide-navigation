@@ -130,6 +130,16 @@ DANGEROUS_FINAL_PHRASES = (
 # "저장하기" must stop for the user.
 STATE_CHANGING_ACTION_LABELS = frozenset(
     {
+        # Exact cancellation CTA labels are terminal safety boundaries even
+        # when the app omits an explicit "confirm" suffix.  Keep these exact
+        # so nearby text such as "해지 안내" does not block unrelated controls.
+        "멤버십 해지",
+        "구독 해지",
+        "구독 취소",
+        "이용권 해지",
+        "cancel membership",
+        "cancel subscription",
+        "unsubscribe",
         "저장",
         "저장하기",
         "변경 저장",

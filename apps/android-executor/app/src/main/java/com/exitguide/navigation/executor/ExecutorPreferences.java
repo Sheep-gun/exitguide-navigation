@@ -13,6 +13,10 @@ final class ExecutorPreferences {
             "com.exitguide.navigation.executor.DIAGNOSTIC_SNAPSHOT";
     static final String ACTION_DIAGNOSTIC_INTERNAL =
             "com.exitguide.navigation.executor.DIAGNOSTIC_SNAPSHOT_INTERNAL";
+    static final String ACTION_ADB_START_NAVIGATION =
+            "com.exitguide.navigation.executor.ADB_START_NAVIGATION";
+    static final String ACTION_ADB_STOP_NAVIGATION =
+            "com.exitguide.navigation.executor.ADB_STOP_NAVIGATION";
 
     private static final String FILE_NAME = "navigation_executor";
     private static final String KEY_API_BASE_URL = "api_base_url";

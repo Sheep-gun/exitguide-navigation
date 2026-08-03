@@ -915,6 +915,38 @@ def main() -> None:
         )
         assert dangerous.action.name == "stop_for_user"
 
+        exact_cancel_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "exact-cancel-runtime.sqlite"),
+            policy=_policy(),
+        )
+        exact_cancel_boundary = exact_cancel_runtime.decide(
+            DecideRequest(
+                request_id="request-exact-membership-cancel-boundary",
+                app_package="evaluation.exact-cancel.app",
+                goal_text="멤버십을 해지하고 싶어",
+                screen=ScreenObservation(
+                    window_title="계정 멤버십",
+                    activity_name="android.webkit.WebView",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="membership-cancel",
+                            label="멤버십 해지",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert exact_cancel_boundary.action.name == "stop_for_user"
+        assert exact_cancel_boundary.planner_provider in {
+            "python_state_change_boundary",
+            "python_terminal_boundary",
+        }
+        assert exact_cancel_boundary.candidate_values[0].score_source == "safety_blocked"
+        assert exact_cancel_boundary.candidate_values[0].final_score == 0.0
+        assert exact_cancel_boundary.safety_status == "allowed"
+
         safety_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
             store=NavigationRuntimeStore(temporary_path / "state-change-runtime.sqlite"),
