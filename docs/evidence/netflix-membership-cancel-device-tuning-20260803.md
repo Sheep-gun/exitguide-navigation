@@ -32,4 +32,33 @@
 
 ## Remaining affected verification
 
-Commit `adde9c4` changed the initial visual-reasoning order so Accessibility/DB receives the first decision opportunity. The forced second-pass path (`visual_reobserve_required` → masked screenshot/OCR → EXAONE 4.5 → existing candidate ID validation) was not exercised in this final Netflix fast-path episode. Completion conditions 4 and 5 therefore remain pending until one genuinely ambiguous, safe collection-app screen triggers that path.
+The forced second-pass path was subsequently verified on X and is recorded in `x-vlm-and-state-change-safety-device-20260803.md`.
+
+## Account-hub priority and full route rerun
+
+- Netflix version: `9.77.0 build 9 64328+64328`
+- Navigation API commit: `3c49a52`
+- Executor APK rebuilt from `3c49a52`; SHA-256 remained `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`, identical to the installed artifact
+- Successful runtime session: `navs_7f48b731e5b5485bab18159ccd584be3`
+
+Two preceding collection attempts exposed a general ranking problem rather than an app-specific route problem:
+
+1. The visible `계정` candidate was correctly inferred as `account.hub=0.96` and ranked first.
+2. The K² plan also allowed lower-priority `profile.hub`, so the semantic fast path treated the screen as ambiguous and delegated to Solar.
+3. Solar failed closed after the normal visual re-observation wait; no dangerous action ran.
+4. `3c49a52` changed semantic fast-path resolution to respect K² target-role order. Ambiguity is now evaluated within the highest-priority visible role, while multiple candidates for the same role still require the planner.
+
+The exact recorded screen replay selected candidate `a11y_69e34fc267c9f884bde5` (`계정`). On the real device the same candidate was then clicked by `semantic_intermediate_role_fast_path` without Solar.
+
+The successful episode ended with:
+
+- `계정` candidate selected by semantic fast path
+- account page entered
+- four bounded `scroll(down)` actions on the account page
+- final observation `destination_reached`
+- visible `멤버십 해지` candidate `a11y_d58ad4e05af6ee045883`
+- final candidate `selected=0`
+- dangerous/final clicks: 0
+- Executor `active=false` with status `목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요.`
+
+The intermediate `위로 이동` step is retained in Runtime DB for failure analysis but is not a positive Decision Memory promotion candidate. Only the verified account-hub entry and bounded destination scroll decisions are candidates for promotion after privacy and duplicate checks.

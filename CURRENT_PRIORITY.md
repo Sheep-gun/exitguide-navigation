@@ -2,17 +2,17 @@
 
 status: completed
 phase: device_validation
-updated_at: 2026-08-03T20:35:50+09:00
-priority: 통합 완료 기록을 기준으로 Decision DB 수집 재개
+updated_at: 2026-08-03T21:07:15+09:00
+priority: Netflix 성공 Runtime 경험의 개인정보·중복·승격 적격성 감사
 decision_db_collection: active
-next_action: Netflix `membership.cancel` 수집을 재개해 계정 화면 맨 아래의 해지 버튼을 발견하고 클릭 전 `stop_for_user`로 종료한다.
+next_action: Netflix `membership.cancel` 성공 세션 `navs_7f48b731e5b5485bab18159ccd584be3`에서 잘못된 중간 동작을 제외하고 계정 진입·하단 스크롤 경험만 Decision Memory 승격 후보로 검증한다.
 verification_started_at: 2026-08-03T10:30:41+09:00
 verification_completed_at: 2026-08-03T20:35:50+09:00
 verified_device: Samsung SM-S936N, Android 16
-verified_apps: YouTube 21.31.524+1561190182; Netflix 9.76.0 build 10 64304+64304; X 12.12.0-release.0+312120000
+verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `2b6e95f`
-deployed_commit: `2b6e95f`
+integration_commit: `3c49a52`
+deployed_commit: `3c49a52`
 
 ## 작업 원칙
 
@@ -51,7 +51,7 @@ deployed_commit: `2b6e95f`
    - evidence: 격리 Runtime DB step 3 — planner 성공, executor 실패, 화면 무변화, 연결 정상, `executor_action_not_executed`
 7. 동일 커밋으로 빌드한 APK의 실기기 통합 테스트가 통과함
    - status: passed
-   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`; API와 설치 APK 모두 `2b6e95f`, APK SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
+   - evidence: `docs/evidence/x-vlm-and-state-change-safety-device-20260803.md`, `docs/evidence/netflix-membership-cancel-device-tuning-20260803.md`; API와 APK 모두 `3c49a52`, APK SHA-256 `45BE8C24E42AF3AB2E778E0BFBC1144CE6C938FAFF5A078586F0FD8925F89FFC`
    - dangerous_actions_auto_executed: 0
 
 ## 현재 통합 구현 테스트 결과
