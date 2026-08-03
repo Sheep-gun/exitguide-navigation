@@ -897,6 +897,22 @@ def main() -> None:
         prior_values=semantic_fast_path_values,
         recent_history=[],
     ) is False
+    expected_visual_wait_history = [
+        {
+            "screen_fingerprint": "membership-home-before-visual",
+            "action_name": "wait_and_observe",
+            "connectivity_status": "observed",
+            "outcome_type": "no_change",
+            "progress_label": "unchanged",
+            "failure_class": "",
+        }
+    ]
+    assert selective_policy._should_invoke_planner(
+        query=semantic_fast_path_query,
+        plan=semantic_fast_path_plan,
+        prior_values=semantic_fast_path_values,
+        recent_history=expected_visual_wait_history,
+    ) is False
     planner_calls_before_semantic_fast_path = planner_transport.plan_calls
     semantic_fast_path_decision = selective_policy.decide_action(
         query=semantic_fast_path_query,
@@ -917,6 +933,25 @@ def main() -> None:
         "semantic_intermediate_role_fast_path"
     )
     assert semantic_fast_path_decision.reflection_on_demand is False
+    assert planner_transport.plan_calls == planner_calls_before_semantic_fast_path
+    semantic_after_visual_wait = selective_policy.decide_action(
+        query=semantic_fast_path_query,
+        plan=semantic_fast_path_plan,
+        candidates=[
+            NavigationCandidate(
+                candidate_id="my-page", label="마이페이지", role="button", risk_level="low"
+            ),
+            NavigationCandidate(
+                candidate_id="search", label="검색", role="button", risk_level="low"
+            ),
+        ],
+        forbidden_candidate_ids=set(),
+        recent_history=expected_visual_wait_history,
+    )
+    assert semantic_after_visual_wait.proposal.action.candidate_id == "my-page"
+    assert semantic_after_visual_wait.proposal.provider == (
+        "semantic_intermediate_role_fast_path"
+    )
     assert planner_transport.plan_calls == planner_calls_before_semantic_fast_path
     ambiguous_semantic_query = replace(
         semantic_fast_path_query,

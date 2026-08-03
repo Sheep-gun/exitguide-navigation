@@ -1240,6 +1240,19 @@ def _history_requires_planner(
     for item in recent_history[-5:]:
         if str(item.get("connectivity_status", "")) != "observed":
             continue
+        # `python_visual_reobserve_gate` deliberately emits one
+        # wait_and_observe before the Executor attaches a screenshot.  A
+        # successful non-mutating wait is not a navigation failure and must
+        # not suppress a newly visible, unique semantic fast path on the next
+        # screen.  A failed wait still carries failure_class and repeated
+        # waits on the same fingerprint are caught by the loop check below.
+        if (
+            str(item.get("action_name", "")) == "wait_and_observe"
+            and not str(item.get("failure_class", "")).strip()
+            and str(item.get("outcome_type", "")) == "no_change"
+            and str(item.get("progress_label", "")) == "unchanged"
+        ):
+            continue
         if str(item.get("progress_label", "")) in {"unchanged", "regressed"}:
             return True
         if str(item.get("outcome_type", "")) in observed_failure_outcomes:
