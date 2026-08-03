@@ -802,8 +802,73 @@ def main() -> None:
         enumerated=renewal_detail_actions,
         renewal_boundary_visible=True,
     )
-    assert renewal_detail_scores["click:navigate-up"][0] >= 0.98
+    assert renewal_detail_scores["click:navigate-up"][0] >= 0.99
     assert renewal_detail_scores["click:content-subscriptions"][0] <= 0.20
+    renewal_without_up_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="my-page"),
+            0.6,
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ),
+        EnumeratedAction(NavigationAction(name="back"), 0.2, None),
+        EnumeratedAction(NavigationAction(name="wait_and_observe"), 0.4, None),
+    ]
+    renewal_without_up_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:my-page": (0.60, "model tried another navigation tab"),
+            "back": (0.20, "model underestimated bounded recovery"),
+            "wait_and_observe": (0.40, "model proposed waiting"),
+        },
+        goal_id="membership.cancel",
+        enumerated=renewal_without_up_actions,
+        renewal_boundary_visible=True,
+    )
+    assert renewal_without_up_scores["back"][0] >= 0.99
+    assert renewal_without_up_scores["click:my-page"][0] <= 0.20
+    assert renewal_without_up_scores["wait_and_observe"][0] <= 0.20
+    enumerated_renewal_actions = policy._enumerate_actions(
+        candidates=[
+            NavigationCandidate(
+                candidate_id="renew",
+                label="갱신",
+                risk_level="high",
+            ),
+            NavigationCandidate(candidate_id="my-page", label="내 페이지"),
+        ],
+        prior_values=[
+            CandidateValue(
+                candidate_id="renew",
+                value=0.0,
+                memory_score=0.0,
+                role_score=0.0,
+                final_score=0.0,
+                forbidden=True,
+                risk_level="high",
+                score_source="safety_blocked",
+            ),
+            CandidateValue(
+                candidate_id="my-page",
+                value=0.3,
+                memory_score=0.3,
+                role_score=0.5,
+                final_score=0.3,
+                forbidden=False,
+                risk_level="low",
+                score_source="decision_memory_fallback",
+            ),
+        ],
+        plan=HierarchicalPlan(
+            goal_id="membership.cancel",
+            stage="hub_discovery",
+            target_roles=["membership.hub"],
+            immediate_subgoal="멤버십 관리로 이동",
+            expected_outcome="멤버십 관리 후보가 나타남",
+            completion_rule="해지 안전 경계 도달",
+            source="decision_memory_fallback",
+        ),
+        recent_history=[],
+    )
+    assert any(item.action.name == "back" for item in enumerated_renewal_actions)
     deep_membership_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),

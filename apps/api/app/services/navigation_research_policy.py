@@ -1440,10 +1440,19 @@ class AndroidWorldResearchPolicy:
                 EnumeratedAction(NavigationAction(name="stop_for_user"), 0.05, None),
             )
         )
+        renewal_boundary_visible = (
+            plan.goal_id == "membership.cancel"
+            and any(
+                is_membership_renewal_action_label(candidate.label)
+                for candidate in candidates
+            )
+        )
         if plan.stage == "selective_recovery" or any(
             str(item.get("progress_label", "")) in {"regressed", "unchanged"}
             for item in recent_history
-        ) or _membership_profile_management_trap(candidates, plan.goal_id, screen_text):
+        ) or _membership_profile_management_trap(
+            candidates, plan.goal_id, screen_text
+        ) or renewal_boundary_visible:
             actions.append(EnumeratedAction(NavigationAction(name="back"), 0.2, None))
         return actions
 
@@ -1732,12 +1741,39 @@ class AndroidWorldResearchPolicy:
                 key = _action_key(reverse_items[0].action)
                 score, reason = adjusted.get(key, (0.0, ""))
                 adjusted[key] = (
-                    max(score, 0.98),
+                    max(score, 0.99),
                     "python_membership_hub_affordance_guard: paid renewal boundary "
                     "is not a cancellation destination; use the single grounded "
                     "reverse-navigation control; "
                     + reason,
                 )
+                for other_key, (other_score, other_reason) in tuple(adjusted.items()):
+                    if other_key == key:
+                        continue
+                    adjusted[other_key] = (
+                        min(other_score, 0.20),
+                        "python_membership_hub_affordance_guard: remain inside the "
+                        "wrong renewal-only destination only long enough to recover; "
+                        + other_reason,
+                    )
+                return adjusted
+            if not reverse_items and "back" in adjusted:
+                score, reason = adjusted["back"]
+                adjusted["back"] = (
+                    max(score, 0.99),
+                    "python_membership_hub_affordance_guard: renewal-only destination "
+                    "has no grounded reverse candidate; use the bounded back action; "
+                    + reason,
+                )
+                for other_key, (other_score, other_reason) in tuple(adjusted.items()):
+                    if other_key == "back":
+                        continue
+                    adjusted[other_key] = (
+                        min(other_score, 0.20),
+                        "python_membership_hub_affordance_guard: renewal-only destination "
+                        "does not advance membership cancellation; "
+                        + other_reason,
+                    )
                 return adjusted
         if len(active_plan_rows) == 1:
             active_key = _action_key(active_plan_rows[0].action)
