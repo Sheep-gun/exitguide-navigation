@@ -14,7 +14,12 @@
 중지됐고, 해당 후보를 실패 후보로 금지하지 않았다. 이 계정으로는 신규 가입 흐름을
 검증할 수 없어 Decision DB 성공 경험으로 승격하지 않았다.
 
-다만 이 결과는 collection 앱 두 개의 구조 수정·계정 상태 경계 검증이다. 고정
+세 번째 collection 앱인 Coupang도 계정이 이미 `WOW! 혜택 이용중`이었다. 첫
+진단에서는 `마이쿠팡`을 반복 클릭했지만, 활성 혜택 상태를 별도 경계로 추가한 최종
+세션에서는 `마이쿠팡` 1회 클릭 후 추가 UI 행동 없이 `already_satisfied`로
+중지했다. 화면별 Solar 후보 판단과 위험 행동은 모두 0회였다.
+
+다만 이 결과는 collection 앱 세 개의 구조 수정·계정 상태 경계 검증이다. 고정
 74건 replay의 전체 다음 행동 정확도는 여전히 `0.4286`이므로, 처음 보는 앱의 범용
 성능이 증명됐다고 볼 수 없다. 이번 Runtime 기록은 Decision DB 크기를 늘리지 않고
 재현 검증 자료로만 보존한다.
@@ -39,6 +44,8 @@ locked holdout 접근 허용은 `false`이며 이번 작업에서 세 앱을 실
 | Jeju Air 초기 성공 | `membership.join` | `reached` | 4 | 125.2초 |
 | Jeju Air 최종 fast path | `membership.join` | `reached` | 4 | 약 14.1초 |
 | YouTube 최종 계정 상태 경계 | `membership.join` | `already_satisfied` 후 중지 | 1 | 약 1.8초 |
+| Coupang 최종 계정 상태 경계 | `membership.join` | `already_satisfied` 후 중지 | 1 클릭 | 약 6.5초 |
+| Netflix | `membership.join` | 검은 화면 지속, 앱 렌더링 오류로 수집 제외 | 0 | - |
 | 나머지 collection 앱 | 미실행 | 다음 부족 영역 선정 대기 | 0 | - |
 
 최종 성공 세션: `navs_a22e45b9ba144c58b56e08707c0149f9`
@@ -75,9 +82,12 @@ Executor가 종료했다.
   추가하고, 행동 전·후 모두 `already_satisfied` 경계를 우선 평가한다.
 - 이미 가입된 상태에 도달한 안전 후보는 `wrong_destination`이나 금지 후보로
   기록하지 않는다.
+- `WOW! 혜택 이용중`처럼 서비스마다 다른 활성 멤버십 표현을 가입 완료와 분리한다.
+- 부분 마스킹된 한국어 이름은 `[account]`, 원화·달러 등 통화 금액은 `[amount]`로
+  일반화해 계정 화면의 개인정보와 잔액을 저장하지 않는다.
 
 N100 Decision DB는 기존 파일을 덮어쓰지 않고
-`navigation-decision-v2-7ab624d0.sqlite`로 새로 생성했다. 이전 DB 파일도 그대로
+`navigation-decision-v2-1f242fa8.sqlite`로 새로 생성했다. 이전 DB 파일도 그대로
 보존했다. v1/v2 무결성 검사를 모두 통과했고 Destination Signature는 6개에서 7개,
 Affordance 별칭은 80개에서 81개가 됐다.
 
@@ -85,19 +95,19 @@ Affordance 별칭은 80개에서 81개가 됐다.
 
 | 항목 | 작업 전 | 작업 후 | 변화 |
 |---|---:|---:|---:|
-| sessions | 32 | 42 | +10 |
-| decisions | 59 | 88 | +29 |
-| observations | 48 | 76 | +28 |
-| 완전한 실행·관찰 step | 43 | 71 | +28 |
-| 화면 후보 | 1,603 | 2,692 | +1,089 |
+| sessions | 32 | 44 | +12 |
+| decisions | 59 | 93 | +34 |
+| observations | 48 | 81 | +33 |
+| 완전한 실행·관찰 step | 43 | 76 | +33 |
+| 화면 후보 | 1,603 | 2,904 | +1,301 |
 | pending 실패 수정 제안 | 7 | 12 | +5 |
 
-- 새 Runtime 완전 실행·관찰 경험: 28개
-- 최종 제주항공 성공 trajectory와 YouTube 계정 상태 경계에 포함된 경험: 5개
+- 새 Runtime 완전 실행·관찰 경험: 33개
+- 최종 제주항공 성공 trajectory와 YouTube·Coupang 계정 상태 경계에 포함된 경험: 7개
 - incomplete decision: 1개
 - Decision DB 승격 후보: 0개
 - 실제 승격: 0개
-- 동일 collection 앱 진단 replay 또는 계정 제약으로 승격에서 제외: 28개
+- collection 앱 진단 replay 또는 계정 제약으로 승격에서 제외: 33개
 - 개인정보 때문에 승격에서 제외: 0개
 
 추가 실행은 collection 앱에서 수정 전후 동작을 비교한 진단 replay다. 마지막
@@ -133,6 +143,15 @@ Decision DB에 자동 승격하지 않았다.
   `rejected` 처리해 감사 이력을 보존했다.
 - 최종 YouTube 세션 `navs_4add085e43b54c808ad3f70b76a9f50d`는 `내 페이지` 클릭
   1회 뒤 `blocked/already_satisfied`, `progress=advanced`, 후보 금지 0건으로 종료됐다.
+- Coupang 첫 세션 `navs_df8b38f66049476ea6e7f4847cc4bf81`에서는 Solar가 이미
+  진입한 `마이쿠팡`을 다시 선택해 `no_change`가 발생했다. 화면의
+  `WOW! 혜택 이용중`을 활성 멤버십 경계로 추가해 반복 원인을 제거했다.
+- 최종 Coupang 세션 `navs_5e1847b33ae8486eb7b7c202a47bebcd`는 `마이쿠팡` 클릭 뒤
+  `python_goal_already_satisfied`로 종료됐다. Solar 호출 0회, 반복 클릭 0건, 후보
+  금지 0건이다. 수정 전 자동 제안 1건은 최신 증거로 `rejected` 처리했다.
+- Netflix는 `SignupNativeActivity`가 20초 이상 검은 화면을 유지했다. 후보가
+  렌더링되지 않아 Executor를 시작하지 않았으며 탐색 실패나 `not_supported`로
+  기록하지 않았다.
 
 ## 개인정보와 화면 유지
 
@@ -143,6 +162,10 @@ ID는 변경하지 않았다.
 YouTube 계정 화면에서 raw `@handle` 4개를 추가로 확인해 `[account]`로 마스킹했다.
 정화 전 백업과 JSON 보고서를 보존했다. 최종 YouTube 세션 뒤 후보·화면 payload의
 `@` 잔존은 각각 0건이며 `quick_check=ok`, 외래키 오류 0건이다.
+
+Coupang 계정 화면에서 부분 마스킹 이름과 절약액·잔액을 확인했다. 새 개인정보 규칙을
+적용하기 전 별도 백업을 만들고 민감 패턴 hit 380건을 0건으로 정화했다. 최종 세션은
+처음부터 `[account]`, `[amount]`로 기록됐고 raw 이름·금액 잔존은 0건이다.
 
 최종 세션 뒤 재검사에서도 민감정보 hit는 0개였고 변경된 행도 0개였다. 별도 백업을
 남긴 뒤 SQLite `quick_check=ok`, 외래키 오류 0건을 다시 확인했다.
@@ -165,6 +188,7 @@ YouTube 계정 화면에서 raw `@handle` 4개를 추가로 확인해 `[account]
 | 화면별 Solar 후보 판단 | 3회 이상 | 0회 |
 | 실기기 소요 시간 | 125.2초 | 약 14.1초 |
 | YouTube 활성 멤버십 오판 | 가입 목적지로 오인 | `already_satisfied`로 안전 중지 |
+| Coupang 활성 멤버십 반복 | `마이쿠팡` 재클릭 후 무변화 | 1회 진입 후 안전 중지 |
 
 고정 replay 성능은 악화되지 않았지만 개선되지도 않았다. 따라서 정적 데이터를 대량
 추가하지 않는다. 다음 수집은 `membership.join`의 두 번째 앱 계열처럼 현재 DB에 없는
@@ -172,8 +196,8 @@ YouTube 계정 화면에서 raw `@handle` 4개를 추가로 확인해 `[account]
 
 ## 검증된 배포
 
-- N100 배포 코드: `46d6e7a8eda0611a9a04ebba334460c150c8d38a`
+- N100 배포 코드: `8d978d3`
 - Decision DB SHA-256:
-  `7ab624d038b9a59a2633a49fe33cd1be97e427c9133335b3dc27e9f630654e11`
+  `1f242fa8646e830abea0a90c2e58f36b43f7a6697a41993df88e0512d9a299b4`
 - N100 API: `ready=true`, `research_models_ready=true`
 - GitHub `main`, `agent/navigation-db-redesign`: Navigation DB Redesign Checks 성공
