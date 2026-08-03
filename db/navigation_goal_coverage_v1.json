@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-04T09:00:00+09:00",
+  "updated_at": "2026-08-04T06:48:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "locked_holdout_is_evaluated_only_after_collection_freeze_and_never_used_for_tuning_or_promotion",
@@ -51,7 +51,7 @@
         {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.join", "status": "in_progress", "display_status_ko": "진행 중(렌더링 오류 복구 필요)", "evidence_level": "recorded_observation", "evidence_refs": ["docs/REAL_DEVICE_COLLECTION_2026-08-03.md"], "last_observed_at": "2026-08-03T09:15:48+09:00", "blocking_issue": "app_rendering_error", "dangerous_action_auto_executed": false, "notes": "SignupNativeActivity 검은 화면은 탐색 실패나 미지원으로 판정하지 않음"},
         {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.cancel", "status": "in_progress", "display_status_ko": "탐색 중", "evidence_level": "recorded_observation", "evidence_refs": ["docs/evidence/netflix-membership-cancel-accepted-candidates-20260803.jsonl", "runtime:navs_7f6ce7935cb443acbc22817a23eaba09", "runtime:navs_d9dd31688a5642ecaacf2c2c5aa662da"], "last_observed_at": "2026-08-04T02:11:13+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "경로 일부는 관찰됐지만 최종 목적지 도달은 아직 확정하지 않음"}
+        {"goal_id": "membership.cancel", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/netflix-membership-cancel-safe-boundary-20260804.md", "runtime:navs_c69db94650b94d9ca9595c90dfa8bed4", "runtime:navs_20210f0aa6d34236b86f223d9861e827"], "last_observed_at": "2026-08-04T06:46:30+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "계정 WebView 하단의 멤버십 해지 후보를 관찰했고 high/terminal/dangerous_final로 분류한 뒤 클릭 없이 stop_for_user로 종료"}
       ]
     },
     {

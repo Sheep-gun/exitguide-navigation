@@ -24,7 +24,11 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.navigation_contracts import ScreenObservation  # noqa: E402
-from app.services.navigation_decision_memory import redact_text, tokenize  # noqa: E402
+from app.services.navigation_decision_memory import (  # noqa: E402
+    contextual_account_identifiers,
+    redact_text,
+    tokenize,
+)
 from app.services.navigation_runtime_store import _screen_payload  # noqa: E402
 from app.services.shared_contract_validation import (  # noqa: E402
     validate_app_knowledge,
@@ -59,6 +63,15 @@ REWARD_BY_PROGRESS = {
     "regressed": -0.5,
     "unknown": None,
 }
+CANDIDATE_TEXT_FIELDS = (
+    "label",
+    "icon_semantics",
+    "nearby_text",
+    "parent_semantics",
+    "child_semantics",
+    "visual_role",
+    "visual_region",
+)
 
 
 def episode_end_reason(session_status: object) -> str:
@@ -188,6 +201,20 @@ def candidate_semantics(candidate: Mapping[str, Any] | None) -> str:
             )
         )
     )
+
+
+def sanitized_candidate_payload(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    """Redact one candidate using context pooled across all semantic fields."""
+
+    payload = dict(candidate)
+    semantic_values = [str(payload.get(field, "")) for field in CANDIDATE_TEXT_FIELDS]
+    identifiers = contextual_account_identifiers((" ".join(semantic_values),))
+    for field in CANDIDATE_TEXT_FIELDS:
+        payload[field] = redact_text(
+            str(payload.get(field, "")),
+            account_identifiers=identifiers,
+        )
+    return payload
 
 
 def action_group_key(row: Mapping[str, Any]) -> str:
@@ -341,7 +368,9 @@ def runtime_candidate_payloads(
         values.append(
             {
                 "candidate_id": str(row[0]),
-                "observed_payload": json.loads(str(row[1])),
+                "observed_payload": sanitized_candidate_payload(
+                    json.loads(str(row[1]))
+                ),
                 "matched_affordance_id": None,
                 "memory_score": row[2],
                 "verifier_score": row[3],
@@ -590,7 +619,10 @@ def screen_from_interaction_observation(
         "activity_name": accessibility.get("activity_name", ""),
         "navigation_depth": accessibility.get("navigation_depth"),
         "nodes": list(accessibility.get("nodes", [])),
-        "candidates": [dict(candidate.get("observed_payload", {})) for candidate in candidates],
+        "candidates": [
+            sanitized_candidate_payload(candidate.get("observed_payload", {}))
+            for candidate in candidates
+        ],
     }
 
 
@@ -616,7 +648,7 @@ def rows_from_interaction_episodes(
             parameters = action.get("parameters", {})
             selected = next(
                 (
-                    dict(candidate.get("observed_payload", {}))
+                    sanitized_candidate_payload(candidate.get("observed_payload", {}))
                     for candidate in candidates
                     if candidate.get("candidate_id") == action.get("candidate_id")
                 ),

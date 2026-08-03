@@ -13,8 +13,8 @@ Navigation API 연결을 검증했다.
 - 기기: Samsung SM-S936N, Android 16
 - serial: `R3CY204GDVE`
 - APK: `apps/android-executor/app/build/outputs/apk/debug/app-debug.apk`
-- APK SHA-256: `0E7D31F62E3B6B58EF08AC756FF998C8D17F2C32DD71750D0B672257FE23FC9D`
-- APK 크기: 52,569,551 bytes
+- APK SHA-256: `776044989FDCC7A3BD601173E63EB2A25F5F57FE13D714358D4092DD5E86F3BA`
+- APK 크기: 52,570,643 bytes
 - 실행 명령: `powershell -ExecutionPolicy Bypass -File .\scripts\Install-NavigationExecutor.ps1`
 - Navigation API: N100 운영 8100, B 고정, `public_prior.enabled=true`
 
@@ -30,7 +30,7 @@ Navigation API 연결을 검증했다.
 - `navigation_api_ready=true`
 - `nodes=13`
 - `candidates=5`
-- diagnostic request ID: `45094ee47a414837a965e5ff0d4c6e32`
+- diagnostic request ID: `9d88003b6d9d409189b0ebb96cb6f734`
 
 기기 로그:
 
@@ -39,7 +39,7 @@ Navigation API 연결을 검증했다.
 
 진단 receiver는 먼저 기존 탐색 active 상태를 false로 만들고, 화면 구조의 개수와 API
 GET 상태만 확인한다. candidate를 클릭하거나 Navigation `/decide`·`/observe`를 호출하지
-않는다. 검증 전후 운영 Runtime은 sessions 113, decisions 393으로 변하지 않았다.
+않는다. 검증 전후 coverage Runtime은 sessions 2, decisions 14로 변하지 않았다.
 
 ## 자동 복원 범위
 

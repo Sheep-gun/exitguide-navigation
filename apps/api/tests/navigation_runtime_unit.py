@@ -1430,9 +1430,17 @@ def main() -> None:
                 "SELECT screen_payload_json FROM navigation_decisions LIMIT 1"
             ).fetchone()[0]
         )
+        stored_candidates = " ".join(
+            str(row[0])
+            for row in privacy_connection.execute(
+                "SELECT observed_payload_json FROM navigation_screen_candidates"
+            )
+        )
         privacy_connection.close()
         assert "carson0306" not in stored_screen
         assert "[account]" in stored_screen
+        assert "carson0306" not in stored_candidates
+        assert "[account]" in stored_candidates
     print("navigation_runtime_unit: ok")
 
 

@@ -325,6 +325,21 @@ def status_report(split: str, accuracy: float = 1.0) -> dict:
 
 
 def run() -> None:
+    sanitized_profile = PROMOTER.sanitized_candidate_payload(
+        {
+            "candidate_id": "profile-id",
+            "label": "carson0306",
+            "icon_semantics": "user avatar",
+            "nearby_text": "",
+            "parent_semantics": "carson0306",
+            "child_semantics": "carson0306",
+            "visual_role": "current profile selection",
+            "visual_region": "profile card",
+        }
+    )
+    assert "carson0306" not in json.dumps(sanitized_profile, ensure_ascii=False)
+    assert sanitized_profile["label"] == "[account]"
+
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         runtime = root / "runtime.sqlite"

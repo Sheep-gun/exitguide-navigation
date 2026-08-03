@@ -709,6 +709,15 @@ class NavigationRuntimeStore:
         selected_candidate_id: str | None,
         captured_at: str,
     ) -> None:
+        # Reuse the screen-wide privacy context for both the snapshot JSON and
+        # the normalized candidate rows.  Redacting each candidate in
+        # isolation can miss an account identifier whose profile context is
+        # carried by a sibling/visual field.
+        sanitized_screen = _screen_payload(screen)
+        sanitized_candidates = {
+            str(candidate["candidate_id"]): candidate
+            for candidate in sanitized_screen["candidates"]
+        }
         connection.execute(
             """
             INSERT INTO navigation_screen_snapshots(
@@ -726,7 +735,7 @@ class NavigationRuntimeStore:
                 redact_text(screen.window_title),
                 redact_text(screen.activity_name),
                 screen.navigation_depth,
-                json.dumps(_screen_payload(screen), ensure_ascii=False, sort_keys=True),
+                json.dumps(sanitized_screen, ensure_ascii=False, sort_keys=True),
                 captured_at,
             ),
         )
@@ -745,7 +754,11 @@ class NavigationRuntimeStore:
                     snapshot_id,
                     candidate.candidate_id,
                     ordinal,
-                    json.dumps(_candidate_payload(candidate), ensure_ascii=False, sort_keys=True),
+                    json.dumps(
+                        sanitized_candidates[candidate.candidate_id],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
                     None if value is None else value.memory_score,
                     None if value is None else value.verifier_score,
                     None if value is None else value.final_score,

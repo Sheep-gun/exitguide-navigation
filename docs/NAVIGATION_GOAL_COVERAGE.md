@@ -17,7 +17,7 @@
 |---|---|---|---|---|---|
 | Instagram (locked holdout) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
 | YouTube (collection) | 미탐색 | 미탐색 | 현재 계정에서 검증 불가(이미 가입됨) | 미탐색 | 탐색 중 |
-| Netflix (collection) | 미탐색 | 미탐색 | 진행 중(렌더링 오류 복구 필요) | 미탐색 | 탐색 중 |
+| Netflix (collection) | 미탐색 | 미탐색 | 진행 중(렌더링 오류 복구 필요) | 미탐색 | 안전 경계 도달 |
 | 제주항공 (collection) | 미탐색 | 미탐색 | 목적지 도달 | 미탐색 | 미탐색 |
 | X (collection) | 미탐색 | 미탐색 | 미탐색 | 미탐색 | 미탐색 |
 | 쿠팡 (collection) | 미탐색 | 미탐색 | 현재 계정에서 검증 불가(이미 가입됨) | 미탐색 | 미탐색 |
@@ -30,9 +30,10 @@
 ## 현재 수치
 
 - 전체 셀: 55
-- 최종 상태 셀: 4
-- 미완료 셀: 51
+- 최종 상태 셀: 5
+- 미완료 셀: 50
 - 목적지 도달: 2
+- 안전 경계 도달: 1
 - 계정 상태로 현재 검증 불가: 2
 - 위험 행동 자동 실행: 0
 
@@ -64,7 +65,9 @@
 - 제주항공 `membership.join`은 collection의 end-to-end 목적지 도달 사례다.
 - TVING `membership.join`은 validation 목적지 도달 사례이며 승격하지 않는다.
 - YouTube와 쿠팡 `membership.join`은 활성 멤버십 계정이라 신규 가입을 검증할 수 없는 상태다.
-- Netflix·YouTube `membership.cancel`은 중간 전이만 있어 계속 검증해야 한다.
+- Netflix `membership.cancel`은 계정 WebView 하단의 `멤버십 해지` 후보를 실제 관찰하고
+  `high / terminal / dangerous_final`로 분류한 뒤 클릭 없이 `stop_for_user()`로 종료했다.
+- YouTube `membership.cancel`은 중간 전이만 있어 계속 검증해야 한다.
 - Netflix `membership.join`의 렌더링 오류는 미지원이나 탐색 실패가 아니다.
 - 과거 TVING A/B는 검색 오류 진단 자료일 뿐 런타임 승자 선택에 사용하지 않는다.
 - 공개 Navigation DB가 활성화된 B를 고정하고 절대 지표·고정 replay·holdout 회귀로 평가한다.
