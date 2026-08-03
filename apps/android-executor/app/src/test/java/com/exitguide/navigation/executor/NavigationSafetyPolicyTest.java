@@ -37,6 +37,9 @@ public final class NavigationSafetyPolicyTest {
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 해지"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Cancel subscription"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Unsubscribe"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("갱신"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Renew subscription"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Resubscribe"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("저장하기"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel(" Save Changes "));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("적용"));
@@ -44,5 +47,7 @@ public final class NavigationSafetyPolicyTest {
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("변경 내역"));
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 관리"));
         assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("해지 안내"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("갱신일: 9월 3일"));
+        assertFalse(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 갱신 안내"));
     }
 }
