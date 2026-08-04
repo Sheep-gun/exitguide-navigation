@@ -291,17 +291,10 @@ def _has_account_hub_semantics(candidate: NavigationCandidate) -> bool:
     )
 
 
-def _account_management_scope(candidate: NavigationCandidate) -> str | None:
-    """Distinguish a provider account gateway from a generic account list.
+def _account_management_label_scope(value: str) -> str | None:
+    """Classify an account-management label without nearby-text leakage."""
 
-    Account/profile menus can expose both a generic ``manage accounts`` entry
-    (usually the device account list) and a provider-scoped account management
-    entry.  For account deletion the latter is the grounded route toward the
-    account's own settings.  This classification uses only the control label;
-    nearby account text must not leak the role into an unrelated candidate.
-    """
-
-    label = " ".join(candidate.label.casefold().split())
+    label = " ".join(value.casefold().split())
     if not label or any(
         marker in label
         for marker in (
@@ -331,6 +324,19 @@ def _account_management_scope(candidate: NavigationCandidate) -> str | None:
     ):
         return "scoped"
     return None
+
+
+def _account_management_scope(candidate: NavigationCandidate) -> str | None:
+    """Distinguish a provider account gateway from a generic account list.
+
+    Account/profile menus can expose both a generic ``manage accounts`` entry
+    (usually the device account list) and a provider-scoped account management
+    entry.  For account deletion the latter is the grounded route toward the
+    account's own settings.  This classification uses only the control label;
+    nearby account text must not leak the role into an unrelated candidate.
+    """
+
+    return _account_management_label_scope(candidate.label)
 
 
 def _is_unrelated_membership_utility(candidate: NavigationCandidate) -> bool:
@@ -607,18 +613,77 @@ def _trusted_membership_management_handoff(
     return has_subscription and has_management_context
 
 
+def _trusted_account_management_handoff(
+    *,
+    goal_id: str | None,
+    screen_tokens: Sequence[str],
+    recent_history: Sequence[Mapping[str, object]],
+) -> bool:
+    """Continue a grounded provider account-settings handoff.
+
+    Provider account pages commonly open in another package and briefly expose
+    no Accessibility candidates while loading.  The trust anchor is an earlier
+    actually clicked, provider-scoped account-management candidate.  Generic
+    device account-list controls do not qualify.
+    """
+
+    if goal_id != "account.delete" or not _external_app_regression_requires_stop(
+        recent_history
+    ):
+        return False
+    has_scoped_gateway = any(
+        str(item.get("outcome_type", "")) in {"external_app", "external_browser"}
+        and _account_management_label_scope(
+            str(item.get("selected_candidate_label") or "")
+        )
+        == "scoped"
+        for item in recent_history[-8:]
+    )
+    if not has_scoped_gateway:
+        return False
+    normalized_tokens = {
+        str(token).casefold().strip()
+        for token in screen_tokens
+        if str(token).strip()
+    }
+    if len(normalized_tokens) <= 2:
+        return True
+    text = " ".join(sorted(normalized_tokens))
+    return any(
+        marker in text
+        for marker in (
+            "계정",
+            "개인정보",
+            "개인 정보",
+            "데이터",
+            "보안",
+            "account",
+            "privacy",
+            "personal info",
+            "data",
+            "security",
+        )
+    )
+
+
 def _external_app_stop_guard_applies(
     *,
     goal_id: str | None,
     screen_tokens: Sequence[str],
     recent_history: Sequence[Mapping[str, object]],
 ) -> bool:
-    return _external_app_regression_requires_stop(
-        recent_history
-    ) and not _trusted_membership_management_handoff(
-        goal_id=goal_id,
-        screen_tokens=screen_tokens,
-        recent_history=recent_history,
+    return (
+        _external_app_regression_requires_stop(recent_history)
+        and not _trusted_membership_management_handoff(
+            goal_id=goal_id,
+            screen_tokens=screen_tokens,
+            recent_history=recent_history,
+        )
+        and not _trusted_account_management_handoff(
+            goal_id=goal_id,
+            screen_tokens=screen_tokens,
+            recent_history=recent_history,
+        )
     )
 
 
@@ -937,6 +1002,36 @@ class AndroidWorldResearchPolicy:
             provider = "python_mobileuse_wrong_destination_back_gate"
             proposal = PlannerProposal(
                 NavigationAction(name="back"),
+                1.0,
+                provider,
+                False,
+            )
+            return ResearchDecision(
+                plan=plan,
+                proposal=proposal,
+                candidate_values=tuple(prior_values),
+                verifier_provider=provider,
+                score_margin=1.0,
+                reflection_on_demand=True,
+            )
+        if (
+            not candidates
+            and _trusted_account_management_handoff(
+                goal_id=None if query.goal is None else query.goal.goal_id,
+                screen_tokens=query.screen.tokens,
+                recent_history=recent_history,
+            )
+        ):
+            already_waited = bool(recent_history) and str(
+                recent_history[-1].get("action_name", "")
+            ) == "wait_and_observe"
+            provider = (
+                "python_trusted_account_handoff_loading_back_gate"
+                if already_waited
+                else "python_trusted_account_handoff_loading_wait_gate"
+            )
+            proposal = PlannerProposal(
+                NavigationAction(name="back" if already_waited else "wait_and_observe"),
                 1.0,
                 provider,
                 False,

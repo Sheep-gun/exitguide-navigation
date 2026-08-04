@@ -675,6 +675,59 @@ def main() -> None:
         external_recovery_decision.verifier_provider
         == "python_mobileuse_external_app_back_gate"
     )
+    trusted_account_history = [
+        {
+            "outcome_type": "external_app",
+            "progress_label": "regressed",
+            "connectivity_status": "observed",
+            "action_name": "click",
+            "selected_candidate_label": "서비스 제공자 계정 관리",
+        }
+    ]
+    empty_external_query = replace(
+        public_prior_query,
+        screen=SemanticScreenState(
+            semantic_fingerprint="provider-loading",
+            title="",
+            auth_state="logged_in",
+            surface_type="native",
+            navigation_depth=3,
+            tokens=(),
+            candidate_payloads=(),
+        ),
+    )
+    loading_wait_decision = policy.decide_action(
+        query=empty_external_query,
+        plan=public_prior_plan,
+        candidates=(),
+        forbidden_candidate_ids=set(),
+        recent_history=trusted_account_history,
+    )
+    assert loading_wait_decision.proposal.action.name == "wait_and_observe"
+    assert (
+        loading_wait_decision.verifier_provider
+        == "python_trusted_account_handoff_loading_wait_gate"
+    )
+    loading_back_decision = policy.decide_action(
+        query=empty_external_query,
+        plan=public_prior_plan,
+        candidates=(),
+        forbidden_candidate_ids=set(),
+        recent_history=[
+            *trusted_account_history,
+            {
+                "outcome_type": "external_app",
+                "progress_label": "regressed",
+                "connectivity_status": "observed",
+                "action_name": "wait_and_observe",
+            },
+        ],
+    )
+    assert loading_back_decision.proposal.action.name == "back"
+    assert (
+        loading_back_decision.verifier_provider
+        == "python_trusted_account_handoff_loading_back_gate"
+    )
     trusted_handoff_history = [
         {
             "outcome_type": "external_app",

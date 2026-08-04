@@ -74,12 +74,47 @@ if (-not $installed.Contains("package:")) {
     throw "target app is not installed: $AppPackage"
 }
 
-# Launch through Android's package-aware launcher event. No coordinate is used.
-Invoke-Adb @(
-    "shell", "monkey", "-p", $AppPackage,
-    "-c", "android.intent.category.LAUNCHER", "1"
-) | Out-Null
-Start-Sleep -Milliseconds 1200
+# An external settings/browser activity can remain on top of the target app's
+# task. Force-stopping only the target package preserves its data and login.
+# Resolve the package's launcher activity at runtime and clear the stale task;
+# no coordinate or app-specific activity name is used.
+Invoke-Adb @("shell", "am", "force-stop", $AppPackage) | Out-Null
+Start-Sleep -Milliseconds 300
+$launcherComponent = (
+    (Invoke-Adb @(
+        "shell", "cmd", "package", "resolve-activity", "--brief",
+        "-a", "android.intent.action.MAIN",
+        "-c", "android.intent.category.LAUNCHER",
+        $AppPackage
+    )) | Select-Object -Last 1
+).Trim()
+$componentPattern = "^" + [Regex]::Escape($AppPackage) + "/[A-Za-z0-9._`$]+$"
+if ($launcherComponent -notmatch $componentPattern) {
+    throw "could not resolve a safe launcher activity for: $AppPackage"
+}
+$launchCommand = @(
+    "am", "start", "-W", "--activity-clear-task",
+    "-a", "android.intent.action.MAIN",
+    "-c", "android.intent.category.LAUNCHER",
+    "-n", (ConvertTo-AdbShellLiteral $launcherComponent)
+) -join " "
+Invoke-Adb @("shell", $launchCommand) | Out-Null
+$foregroundDeadline = [DateTimeOffset]::UtcNow.AddSeconds(8)
+$foregroundConfirmed = $false
+while ([DateTimeOffset]::UtcNow -lt $foregroundDeadline) {
+    $activityDump = (Invoke-Adb @("shell", "dumpsys", "activity", "activities")) -join "`n"
+    $topResumed = @(
+        $activityDump -split "`n" | Where-Object { $_ -match "topResumedActivity" }
+    )
+    if ($topResumed -match [Regex]::Escape("$AppPackage/")) {
+        $foregroundConfirmed = $true
+        break
+    }
+    Start-Sleep -Milliseconds 300
+}
+if (-not $foregroundConfirmed) {
+    throw "target app did not become the foreground package: $AppPackage"
+}
 
 $broadcastCommand = @(
     "am", "broadcast", "--receiver-foreground",
@@ -94,6 +129,7 @@ Invoke-Adb @("shell", $broadcastCommand) | Out-Null
     app_package = $AppPackage
     navigation_api = $NavigationApiBaseUrl
     accessibility_bound = $true
-    launch_method = "package_launcher_event_without_coordinates"
+    launch_method = "resolved_package_launcher_clear_task_without_coordinates"
+    foreground_package_confirmed = $true
     navigation_started = $true
 } | ConvertTo-Json
