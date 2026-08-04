@@ -92,6 +92,68 @@ GOAL_DOMAIN_TOKENS: dict[str, frozenset[str]] = {
         {"membership", "subscription", "billing", "unsubscribe", "renewal"}
     ),
 }
+GOAL_OPERATION_TOKENS: dict[str, frozenset[str]] = {
+    "account.signup": frozenset({"signup", "register", "registration"}),
+    "account.delete": frozenset({"delete", "deactivate", "deactivation", "closure"}),
+    "membership.join": frozenset({"subscribe", "join", "enroll", "purchase", "buy"}),
+    "membership.manage": frozenset({"manage", "management", "settings", "details"}),
+    "membership.change": frozenset({"change", "switch", "upgrade", "downgrade"}),
+    "membership.cancel": frozenset(
+        {"cancel", "cancellation", "unsubscribe", "termination", "terminate"}
+    ),
+}
+GOAL_OPERATION_PHRASES: dict[str, tuple[str, ...]] = {
+    "account.signup": (
+        "sign up",
+        "create account",
+        "create an account",
+        "create a new account",
+        "new account",
+        "계정 만들기",
+        "회원가입",
+    ),
+    "account.delete": (
+        "delete account",
+        "delete an account",
+        "close account",
+        "remove account",
+        "계정 삭제",
+        "회원탈퇴",
+        "회원 탈퇴",
+    ),
+    "membership.join": (
+        "sign up for membership",
+        "join membership",
+        "buy premium",
+        "멤버십 가입",
+        "구독 가입",
+        "이용권 구매",
+    ),
+    "membership.manage": (
+        "manage membership",
+        "manage subscription",
+        "subscription settings",
+        "멤버십 관리",
+        "구독 관리",
+    ),
+    "membership.change": (
+        "change plan",
+        "switch plan",
+        "change membership",
+        "요금제 변경",
+        "플랜 변경",
+        "멤버십 변경",
+    ),
+    "membership.cancel": (
+        "cancel membership",
+        "cancel subscription",
+        "turn off renewal",
+        "stop renewal",
+        "멤버십 해지",
+        "구독 취소",
+        "자동 갱신 해지",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -272,6 +334,7 @@ class NavigationPublicPrior:
             self.service_db_path,
             fts_query=fts_query,
             evidence_kind="service",
+            goal_id=normalized_goal.goal_id,
             goal_tokens=set(goal_tokens),
             domain_tokens=domain_tokens,
             screen_tokens=set(screen_tokens),
@@ -284,6 +347,7 @@ class NavigationPublicPrior:
                 self.failure_db_path,
                 fts_query=fts_query,
                 evidence_kind="failure",
+                goal_id=normalized_goal.goal_id,
                 goal_tokens=set(goal_tokens),
                 domain_tokens=domain_tokens,
                 screen_tokens=set(screen_tokens),
@@ -312,6 +376,7 @@ class NavigationPublicPrior:
         *,
         fts_query: str,
         evidence_kind: str,
+        goal_id: str,
         goal_tokens: set[str],
         domain_tokens: frozenset[str],
         screen_tokens: set[str],
@@ -345,6 +410,17 @@ class NavigationPublicPrior:
                 _tokens(f'{row["candidate_text"]} {row["selected_target"]}')
             )
             if domain_tokens and not domain_tokens.intersection(row_goal_tokens | target_tokens):
+                continue
+            if not _transition_operation_matches(
+                goal_id,
+                " ".join(
+                    (
+                        str(row["goal"]),
+                        str(row["candidate_text"]),
+                        str(row["selected_target"]),
+                    )
+                ),
+            ):
                 continue
             goal_overlap = _bounded_overlap(goal_tokens, row_goal_tokens | target_tokens, 6)
             screen_overlap = _bounded_overlap(screen_tokens, before_tokens | target_tokens, 10)
@@ -460,6 +536,26 @@ def _goal_tokens(goal_text: str, normalized_goal: NormalizedGoal) -> tuple[str, 
         (normalized_goal.family, normalized_goal.operation),
     )
     return _unique_tokens((*aliases, *_tokens(goal_text)), limit=16)
+
+
+def _transition_operation_matches(goal_id: str, text: str) -> bool:
+    """Require the requested operation, not only a broad account/plan noun.
+
+    Public GUI corpora contain many unrelated uses of ``account`` (account
+    manager jobs, account settings, device sync) and ``plan``.  Those records
+    are useful only when their source goal or selected target also expresses
+    the requested lifecycle operation.  Returning fewer records is preferable
+    to padding Solar's context with a high-ranked but contradictory route.
+    """
+
+    normalized = " ".join(text.casefold().split())
+    if any(
+        phrase in normalized
+        for phrase in GOAL_OPERATION_PHRASES.get(goal_id, ())
+    ):
+        return True
+    tokens = set(_tokens(normalized))
+    return bool(tokens & GOAL_OPERATION_TOKENS.get(goal_id, frozenset()))
 
 
 def _screen_tokens(screen: SemanticScreenState) -> tuple[tuple[str, ...], tuple[set[str], ...]]:

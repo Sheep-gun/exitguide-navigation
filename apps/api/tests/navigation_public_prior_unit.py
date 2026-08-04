@@ -266,8 +266,97 @@ def test_task_category_alone_cannot_inject_irrelevant_context() -> None:
         assert all(item.evidence_kind != "task" for item in evidence)
 
 
+def test_account_noun_without_signup_operation_is_not_service_evidence() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        service = Path(temporary) / "service.sqlite"
+        _create_transition_db(service)
+        connection = sqlite3.connect(service)
+        rows = (
+            (
+                3,
+                "irrelevant-account-settings",
+                "fixture",
+                "curated_service_experience",
+                1.0,
+                "com.example.settings",
+                "Open account settings and disable automatic data synchronization",
+                "Account settings",
+                "Manage accounts",
+                "Manage accounts",
+                "click",
+                "Device account list",
+                "navigated",
+                "advanced",
+                "low",
+                0,
+            ),
+            (
+                4,
+                "relevant-account-signup",
+                "fixture",
+                "curated_service_experience",
+                1.0,
+                "com.example.mail",
+                "Register a new account",
+                "Account menu",
+                "Create account",
+                "Create account",
+                "click",
+                "Registration form",
+                "navigated",
+                "advanced",
+                "low",
+                0,
+            ),
+        )
+        connection.executemany(
+            "INSERT INTO transition VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            rows,
+        )
+        connection.execute("INSERT INTO transition_fts(transition_fts) VALUES ('rebuild')")
+        connection.commit()
+        connection.close()
+        prior = NavigationPublicPrior(service)
+        goal = NormalizedGoal(
+            goal_id="account.signup",
+            family="account",
+            operation="signup",
+            confidence=1.0,
+            matched_phrase="회원가입",
+            terminal_action_policy="require_user_confirmation",
+        )
+        screen = SemanticScreenState(
+            semantic_fingerprint="screen-signup-filter",
+            title="Account",
+            auth_state="authenticated",
+            surface_type="settings",
+            navigation_depth=2,
+            tokens=("account", "settings"),
+            candidate_payloads=(
+                {
+                    "candidate_id": "account-add",
+                    "label": "Add account",
+                    "icon_semantics": "account",
+                    "nearby_text": "accounts",
+                    "parent_semantics": "account settings",
+                },
+            ),
+        )
+        evidence = prior.search(
+            goal_text="create a new account",
+            normalized_goal=goal,
+            screen=screen,
+        )
+        service_ids = {
+            item.evidence_id for item in evidence if item.evidence_kind == "service"
+        }
+        assert "service:fixture:relevant-account-signup" in service_ids
+        assert "service:fixture:irrelevant-account-settings" not in service_ids
+
+
 if __name__ == "__main__":
     test_public_prior_is_bounded_advisory_context()
     test_public_prior_refuses_simulated_runtime_source()
     test_task_category_alone_cannot_inject_irrelevant_context()
+    test_account_noun_without_signup_operation_is_not_service_evidence()
     print("navigation public prior unit checks passed")
