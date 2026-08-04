@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
-status: verifying
+status: blocked
 phase: device_validation
-updated_at: 2026-08-04T12:26:00+09:00
+updated_at: 2026-08-04T12:49:00+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
-decision_db_collection: active
-next_action: Netflix의 in_progress 상태인 membership.join을 현재 로그인·활성 멤버십 화면에서 다시 검증해 근거 있는 최종 상태로 확정한다.
+decision_db_collection: paused
+next_action: Samsung SM-S936N을 ADB로 다시 연결한 뒤 commit 07280a8 APK에 scripts/Install-NavigationExecutor.ps1을 실행하고 접근성 bound·90% 실제 스크롤·ADB lease 중지를 검증한 후 Netflix membership.join B 세션을 새로 시작한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
@@ -43,7 +43,8 @@ deployed_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 9셀, 미완료 46셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 6셀, 미완료 49셀
+- pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -59,7 +60,7 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - public failure transitions: 2,737
 - public task records: 570
 - Decision DB: read-only patched immutable clone
-- Runtime DB: coverage 전용, sessions 43, decisions 207, observations 182
+- Runtime DB: coverage 전용, sessions 45, decisions 225, observations 198
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
 - target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
@@ -227,8 +228,43 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - local/N100 API unit tests for deployed code: 10/10 passed
 - evidence: `docs/evidence/youtube-account-signup-auth-boundary-20260804.md`
 
-YouTube의 5개 목표는 모두 근거 있는 최종 상태다. Executor 목표 루프는 중지됐고 wake-lock도
-해제했다. 다음 시작 스크립트는 Netflix를 열고 `membership.join` 새 세션을 시작해야 한다.
+YouTube `membership.join`은 B 고정 이전 A 기록으로 확인돼 재검증 대기로 되돌렸다.
+나머지 4개 YouTube 목표는 근거 있는 최종 상태를 유지한다.
+
+## 90% 스크롤·ADB 단절 자동 중지 — 실기기 재검증 대기
+
+- implementation_commit: `07280a813ded8bcc77a34fe6b748e7d6a541abec`
+- Android unit tests: passed
+- APK build: passed
+- APK SHA-256: `C9B64BF2D724533265B28BEBEE6E7A6B42078D0B797AB2C3C338AAF3E8D4A699`
+- PowerShell parser: Install/Start/Stop/Monitor 4개 passed
+- disconnected monitor branch: `paused`, `adb_disconnected`, `auto_resume=false`
+- viewport scroll policy: Accessibility scrollable 영역 높이의 `0.90`, 예상 중복 약 `0.10`
+- arbitrary model coordinates: 사용하지 않음
+- ADB heartbeat: 5초 간격
+- Executor ADB lease: 15초
+- background execution: Install 스크립트가 device-idle whitelist와
+  `RUN_ANY_IN_BACKGROUND=allow` 적용
+- device deployment: pending
+- real-device 90% overlap verification: pending
+- real-device disconnect lease verification: pending
+- evidence: `docs/evidence/android-executor-scroll-and-adb-pause-20260804.md`
+
+Netflix `membership.join` 사전 수정 세션:
+
+- first_session: `navs_4e35dab60e3d4d5eb14ff2242a3bde36`, stopped
+- second_session: `navs_f1367c3dd19a441a9c4c6288dc9fce23`, stopped
+- observed route: 홈 → 나의 넷플릭스 → 프로필 관리 → 계정 WebView
+- old small scrolls: 4회 연속
+- wrong click: `개인 정보 및 데이터 설정`
+- failure/recovery: `wrong_destination` → `back()` 성공, 후보 금지
+- non-goal branch: `추가 회원 자리 구매`, 일반 membership.join 성공으로 처리하지 않음
+- dangerous purchase confirmation auto execution: 0
+- promotion: 0
+- stop reason: ADB disconnect; 탐색 실패로 변환하지 않음
+
+현재 `adb devices -l`에는 기기가 0대다. 실기기 행동과 Decision DB 수집은 자동 일시중지
+상태이며 연결만 복구돼도 자동 재개하지 않는다.
 
 ## 안전 불변조건
 
