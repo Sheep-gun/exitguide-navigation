@@ -1167,6 +1167,13 @@ class AndroidWorldResearchPolicy:
                     provider += "->python_account_delete_provider_gateway_guard"
                 if any(
                     value.verifier_reason.startswith(
+                        "python_account_delete_explicit_account_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_account_delete_explicit_account_guard"
+                if any(
+                    value.verifier_reason.startswith(
                         "python_account_delete_privacy_entry_guard:"
                     )
                     for value in updated_values
@@ -1964,6 +1971,11 @@ class AndroidWorldResearchPolicy:
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
         )
+        scores = self._apply_account_delete_explicit_account_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+        )
         scores = self._apply_account_delete_privacy_entry_guard(
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
@@ -2241,6 +2253,90 @@ class AndroidWorldResearchPolicy:
                 "python_account_delete_provider_gateway_guard: generic account-list "
                 "management is not account deletion; "
                 + reason,
+            )
+        return adjusted
+
+    def _apply_account_delete_explicit_account_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Prefer an explicit account hub over a generic settings button.
+
+        For account deletion, ``Account`` identifies the object being managed,
+        whereas an otherwise unqualified ``Settings`` control spans the whole
+        app.  When both are visible and safe, this K² grounding rule advances to
+        the narrower account subgoal. It is driven only by observed semantics,
+        never an app/package route, and leaves duplicate account choices to the
+        model instead of guessing.
+        """
+
+        adjusted = dict(scores)
+        if goal_id != "account.delete":
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click"
+            and item.candidate is not None
+            and item.candidate.risk_level == "low"
+            and item.candidate.clickable
+            and item.candidate.enabled
+            and not item.candidate.selected
+            and not is_state_changing_action_label(item.candidate.label)
+        ]
+        explicit_account_labels = {
+            "계정",
+            "내 계정",
+            "계정 관리",
+            "account",
+            "my account",
+            "manage account",
+            "account management",
+        }
+        generic_settings_labels = {
+            "설정",
+            "앱 설정",
+            "settings",
+            "app settings",
+            "general settings",
+        }
+        account_items = [
+            item
+            for item in click_items
+            if _candidate_primary_semantic_text(item.candidate)
+            in explicit_account_labels
+        ]
+        settings_items = [
+            item
+            for item in click_items
+            if _candidate_primary_semantic_text(item.candidate)
+            in generic_settings_labels
+        ]
+        if len(account_items) != 1 or not settings_items:
+            return adjusted
+
+        account_key = _action_key(account_items[0].action)
+        account_score, account_reason = adjusted.get(account_key, (0.0, ""))
+        highest_settings_score = max(
+            adjusted.get(_action_key(item.action), (0.0, ""))[0]
+            for item in settings_items
+        )
+        adjusted[account_key] = (
+            min(1.0, max(account_score, highest_settings_score + 0.001, 0.90)),
+            "python_account_delete_explicit_account_guard: explicit account hub "
+            "grounds a narrower deletion subgoal than generic settings; "
+            + account_reason,
+        )
+        for item in settings_items:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                min(score, 0.74),
+                "python_account_delete_explicit_account_guard: generic settings "
+                "cannot outrank the visible explicit account hub; " + reason,
             )
         return adjusted
 

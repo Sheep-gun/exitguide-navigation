@@ -2140,6 +2140,53 @@ def main() -> None:
     assert max(selected_control_scores, key=lambda key: selected_control_scores[key][0]) == (
         "click:account"
     )
+    account_delete_hierarchy_scores = (
+        selective_policy._apply_account_delete_explicit_account_guard(
+            scores={
+                "click:account": (0.78, "explicit account entry"),
+                "click:settings": (0.85, "generic application settings"),
+            },
+            goal_id="account.delete",
+            enumerated=[
+                EnumeratedAction(
+                    NavigationAction(name="click", candidate_id="account"),
+                    0.69,
+                    NavigationCandidate(
+                        candidate_id="account",
+                        label="계정",
+                        selected=False,
+                        risk_level="low",
+                    ),
+                ),
+                EnumeratedAction(
+                    NavigationAction(name="click", candidate_id="settings"),
+                    0.86,
+                    NavigationCandidate(
+                        candidate_id="settings",
+                        label="설정",
+                        selected=False,
+                        risk_level="low",
+                    ),
+                ),
+            ],
+        )
+    )
+    assert account_delete_hierarchy_scores["click:account"][0] == 0.90
+    assert account_delete_hierarchy_scores["click:settings"][0] == 0.74
+    assert account_delete_hierarchy_scores["click:account"][1].startswith(
+        "python_account_delete_explicit_account_guard:"
+    )
+    assert selective_policy._apply_account_delete_explicit_account_guard(
+        scores={
+            "click:account": (0.78, "explicit account entry"),
+            "click:settings": (0.85, "generic application settings"),
+        },
+        goal_id="membership.cancel",
+        enumerated=[],
+    ) == {
+        "click:account": (0.78, "explicit account entry"),
+        "click:settings": (0.85, "generic application settings"),
+    }
     ambiguous_semantic_query = replace(
         semantic_fast_path_query,
         screen=replace(
