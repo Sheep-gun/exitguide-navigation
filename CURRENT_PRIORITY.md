@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T11:48:03+09:00
+updated_at: 2026-08-04T12:26:00+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: active
-next_action: YouTube를 다시 실행해 account.signup 목표가 현재 로그인 계정 상태에서 검증 가능한지 candidate_id 기반으로 확인한다.
+next_action: Netflix의 in_progress 상태인 membership.join을 현재 로그인·활성 멤버십 화면에서 다시 검증해 근거 있는 최종 상태로 확정한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `a4881f4e38d8ac42ef6268a8fe54a312cf234501`
-deployed_commit: `a4881f4e38d8ac42ef6268a8fe54a312cf234501`
+integration_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
+deployed_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
 
 ## 고정 정책
 
@@ -43,7 +43,7 @@ deployed_commit: `a4881f4e38d8ac42ef6268a8fe54a312cf234501`
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 8셀, 미완료 47셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 9셀, 미완료 46셀
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -52,14 +52,14 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-a4881f4-repo`
-- deployed_git_head: `a4881f4e38d8ac42ef6268a8fe54a312cf234501`
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-3c86df8-repo`
+- deployed_git_head: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
 - Decision DB: read-only patched immutable clone
-- Runtime DB: coverage 전용, sessions 41, decisions 194, observations 170
+- Runtime DB: coverage 전용, sessions 43, decisions 207, observations 182
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
 - target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
@@ -203,8 +203,32 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - promotion candidates: 5 draft, support 1; accepted/generation/projection 0
 - evidence: `docs/evidence/youtube-account-delete-destination-20260804.md`
 
-현재 Executor 목표 루프는 `Google 계정 삭제` 후보가 보이는 목적지에서 안전하게 중지돼 있다.
-다음 시작 스크립트는 YouTube를 다시 열고 `account.signup` 새 세션을 시작해야 한다.
+## YouTube account.signup 기기 인증 경계
+
+- final_session: `navs_e4aba79599d74068b3d46633f0aeb69d`
+- diagnostic_session: `navs_91fde4771e134266b221902f3c46319f`
+- result: `not_testable`
+- blocking_issue: `account_state`
+- observed_path: 내 페이지 → 계정 → 계정 추가 → Samsung 생체 인증·기기 자격 증명
+- candidate-ID clicks: 3
+- executor actions succeeded: 3/3
+- screen changes after clicks: 3/3
+- final outcome/failure: `login_required` / `observed_login_required`
+- final recovery: `stop_for_user`
+- child-account candidate clicks in final session: 0
+- biometric/credential actions: 0
+- connection errors: 0
+- dangerous final auto click: 0
+- interaction episodes: 1 episode / 3 steps, `aborted` / `user_stopped`
+- promotion candidates / generation / projection: 0 / 0 / 0
+- B public-prior replay after filter: service 0, failure 0, task 1 (`0.2917`)
+- generic B tuning: 기기 인증을 사용자 전용 경계로 분리, 일반 회원가입에서 아동용 계정 제외,
+  계정 기능군+동작 토큰 필수화, `didn't register` 실행 상태 오인 제거
+- local/N100 API unit tests for deployed code: 10/10 passed
+- evidence: `docs/evidence/youtube-account-signup-auth-boundary-20260804.md`
+
+YouTube의 5개 목표는 모두 근거 있는 최종 상태다. Executor 목표 루프는 중지됐고 wake-lock도
+해제했다. 다음 시작 스크립트는 Netflix를 열고 `membership.join` 새 세션을 시작해야 한다.
 
 ## 안전 불변조건
 
