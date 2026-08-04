@@ -315,6 +315,22 @@ def main() -> None:
         goal_id="account.delete",
         screen_tokens=("데이터 및 개인 정보 보호", "기록 설정", "데이터 삭제"),
     )
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_privacy_entry_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("개인정보", "보호", "추천", "설정", "내", "활동"),
+    )
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_privacy_entry_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("개인", "정보", "보호", "맞춤설정"),
+    )
     assert not _semantic_fast_path_grounded_progress(
         planner_provider=(
             "solar_pro3_step_evaluator"
@@ -322,6 +338,22 @@ def main() -> None:
         ),
         goal_id="account.delete",
         screen_tokens=("프로필 사진 변경", "요금제 살펴보기"),
+    )
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_provider_gateway_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("Google", "계정", "개인", "정보", "보안"),
+    )
+    assert not _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_provider_gateway_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("알림", "홈", "추천"),
     )
 
     with tempfile.TemporaryDirectory() as temporary:

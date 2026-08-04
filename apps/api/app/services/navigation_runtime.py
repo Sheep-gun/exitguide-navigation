@@ -828,6 +828,28 @@ class NavigationRuntime:
                     failure_class="",
                     recovery_action=NavigationAction(name="stop_for_user"),
                 )
+            elif (
+                observed_signal == "external_app"
+                and str(decision["screen_fingerprint"]) != next_fingerprint
+                and _semantic_fast_path_grounded_progress(
+                    planner_provider=str(decision["planner_provider"]),
+                    goal_id="" if stored_goal is None else stored_goal.goal_id,
+                    screen_tokens=next_query.screen.tokens,
+                )
+            ):
+                # A provider-scoped account-management control can legitimately
+                # hand navigation from the app into the platform/provider UI.
+                # The selected control and the observed destination must both
+                # be semantically grounded; package change alone must not turn
+                # that expected K2 hierarchy step into failure evidence.
+                verified = VerifiedTransition(
+                    outcome_type="navigated",
+                    state_changed=True,
+                    progress_label="advanced",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=None,
+                )
             elif observed_signal != "none":
                 verified = verify_transition(
                     action_name=str(decision["action_name"]),
@@ -1487,10 +1509,19 @@ def _semantic_fast_path_grounded_progress(
     explicit_account_guarded = (
         "python_account_delete_explicit_account_guard" in planner_provider
     )
+    provider_gateway_guarded = (
+        "python_account_delete_provider_gateway_guard" in planner_provider
+    )
     if planner_provider not in {
         "semantic_intermediate_role_fast_path",
         "semantic_safe_goal_entry_fast_path",
-    } and not privacy_hub_guarded and not explicit_account_guarded:
+    } and not any(
+        (
+            privacy_hub_guarded,
+            explicit_account_guarded,
+            provider_gateway_guarded,
+        )
+    ):
         return False
     tokens = {str(token).casefold().strip() for token in screen_tokens if str(token).strip()}
     text = " ".join(sorted(tokens))
@@ -1532,18 +1563,28 @@ def _semantic_fast_path_grounded_progress(
         "register",
     )
     if privacy_hub_guarded:
+        # SemanticScreenState tokenizes multi-word labels.  Match both the
+        # compact Korean form (개인정보) and split forms (개인/정보/보호)
+        # rather than requiring a phrase to survive tokenization verbatim.
+        has_privacy = any(
+            "privacy" in token
+            or "개인정보" in token
+            or "개인 정보" in token
+            for token in tokens
+        )
+        has_split_personal_info = (
+            {"개인", "정보"}.issubset(tokens)
+            or {"personal", "information"}.issubset(tokens)
+        )
+        has_protection_context = bool(
+            tokens & {"보호", "설정", "privacy", "protection", "settings"}
+        )
+        return goal_id == "account.delete" and (
+            has_privacy or (has_split_personal_info and has_protection_context)
+        )
+    if provider_gateway_guarded:
         return goal_id == "account.delete" and any(
-            marker in text
-            for marker in (
-                "데이터 및 개인 정보",
-                "데이터 및 개인정보",
-                "개인 정보 보호",
-                "개인정보 보호",
-                "개인정보 설정",
-                "data and privacy",
-                "data & privacy",
-                "privacy settings",
-            )
+            marker in text for marker in ("계정", "account")
         )
     if explicit_account_guarded:
         return goal_id == "account.delete" and any(
