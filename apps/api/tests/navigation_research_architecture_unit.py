@@ -912,6 +912,36 @@ def main() -> None:
     assert sparse_membership_gateway_scores["click:store-management"][0] >= 0.96
     assert sparse_membership_gateway_scores["click:content-subscriptions"][0] <= 0.10
     assert sparse_membership_gateway_scores["click:navigate-up-sparse"][0] <= 0.10
+    payment_maintenance_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="payment-update"),
+            0.90,
+            NavigationCandidate(
+                candidate_id="payment-update",
+                label="업데이트",
+                nearby_text="기본 결제 수단",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="subscription-settings"),
+            0.70,
+            NavigationCandidate(
+                candidate_id="subscription-settings",
+                label="설정",
+            ),
+        ),
+    ]
+    payment_maintenance_scores = policy._apply_membership_hub_affordance_guard(
+        scores={
+            "click:payment-update": (0.90, "model confused payment maintenance"),
+            "click:subscription-settings": (0.70, "model"),
+        },
+        goal_id="membership.change",
+        enumerated=payment_maintenance_actions,
+        screen_tokens=("정기", "결제", "설정", "업데이트"),
+    )
+    assert payment_maintenance_scores["click:payment-update"][0] <= 0.10
+    assert payment_maintenance_scores["click:subscription-settings"][0] == 0.70
     renewal_detail_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="navigate-up"),

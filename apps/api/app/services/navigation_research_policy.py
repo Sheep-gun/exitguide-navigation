@@ -355,6 +355,42 @@ def _is_generic_content_subscription_navigation(
     }
 
 
+def _is_non_plan_payment_update_candidate(
+    candidate: NavigationCandidate,
+) -> bool:
+    """Reject payment-method maintenance as a membership-plan change."""
+
+    primary = " ".join(
+        (
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.visual_role,
+        )
+    ).casefold()
+    primary = " ".join(primary.split())
+    if primary in {"업데이트", "갱신", "update", "refresh"}:
+        return True
+    has_payment_method = any(
+        marker in primary
+        for marker in ("결제 수단", "payment method", "billing method")
+    )
+    has_maintenance = any(
+        marker in primary for marker in ("업데이트", "갱신", "추가", "update", "add")
+    )
+    has_plan_change = any(
+        marker in primary
+        for marker in (
+            "요금제 변경",
+            "플랜 변경",
+            "change plan",
+            "switch plan",
+            "upgrade",
+            "downgrade",
+        )
+    )
+    return has_payment_method and has_maintenance and not has_plan_change
+
+
 def _has_membership_forward_semantics(candidate: NavigationCandidate) -> bool:
     text = _candidate_primary_semantic_text(candidate)
     return any(
@@ -1946,6 +1982,7 @@ class AndroidWorldResearchPolicy:
             for item in click_items
             if not item.candidate.selected
             and not _is_unrelated_membership_utility(item.candidate)
+            and not _is_non_plan_payment_update_candidate(item.candidate)
             and _has_explicit_commercial_membership_semantics(item.candidate)
         ]
         active_plan_rows = [
@@ -1976,6 +2013,16 @@ class AndroidWorldResearchPolicy:
                     min(score, 0.20),
                     "python_membership_hub_affordance_guard: unrelated utility; "
                     "nearby membership text is not the control role; "
+                    + reason,
+                )
+                continue
+            if goal_id == "membership.change" and _is_non_plan_payment_update_candidate(
+                item.candidate
+            ):
+                adjusted[key] = (
+                    min(score, 0.10),
+                    "python_membership_hub_affordance_guard: payment-method "
+                    "maintenance is not a membership-plan change; "
                     + reason,
                 )
         if goal_id == "membership.change":

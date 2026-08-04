@@ -41,6 +41,7 @@ from app.services.navigation_runtime import (  # noqa: E402
     NavigationRuntime,
     _contextualize_membership_cancellation_safety,
     _interleaved_repeat_guard,
+    _is_non_plan_payment_method_screen,
     _selected_reverse_navigation_guard,
     _successful_back_recovery,
     verify_transition,
@@ -103,6 +104,18 @@ def _account_screen() -> ScreenObservation:
 
 
 def main() -> None:
+    assert _is_non_plan_payment_method_screen(
+        "membership.change",
+        ("기본", "결제", "수단", "업데이트", "카드", "추가"),
+    )
+    assert not _is_non_plan_payment_method_screen(
+        "membership.change",
+        ("요금제", "변경", "결제", "수단"),
+    )
+    assert not _is_non_plan_payment_method_screen(
+        "membership.cancel",
+        ("기본", "결제", "수단", "업데이트"),
+    )
     contextual_cancel_screen = _contextualize_membership_cancellation_safety(
         ScreenObservation(
             window_title="YouTube Premium",

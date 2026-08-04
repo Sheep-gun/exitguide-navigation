@@ -794,6 +794,20 @@ class NavigationRuntime:
                     failure_class="",
                     recovery_action=None,
                 )
+            elif _is_non_plan_payment_method_screen(
+                None if stored_goal is None else stored_goal.goal_id,
+                next_query.screen.tokens,
+            ):
+                verified = VerifiedTransition(
+                    outcome_type="wrong_destination",
+                    state_changed=(
+                        str(decision["screen_fingerprint"]) != next_fingerprint
+                    ),
+                    progress_label="regressed",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="payment_method_update_not_plan_change",
+                    recovery_action=NavigationAction(name="back"),
+                )
             elif (
                 str(decision["action_name"]) == "stop_for_user"
                 and str(decision["planner_provider"]) == "python_terminal_boundary"
@@ -1428,6 +1442,48 @@ def verify_transition(
             NavigationAction(name="back"),
         )
     return VerifiedTransition("navigated", True, "unknown", destination_match_after, "", None)
+
+
+def _is_non_plan_payment_method_screen(
+    goal_id: str | None,
+    screen_tokens: Sequence[str],
+) -> bool:
+    """Detect an observed payment-method editor reached during plan change."""
+
+    if goal_id != "membership.change":
+        return False
+    tokens = {str(token).casefold().strip() for token in screen_tokens if str(token).strip()}
+    text = " ".join(sorted(tokens))
+    has_payment_method = any(
+        marker in text for marker in ("결제 수단", "payment method", "billing method")
+    ) or {"결제", "수단"}.issubset(tokens)
+    has_maintenance = any(
+        marker in text
+        for marker in (
+            "업데이트",
+            "갱신",
+            "카드 추가",
+            "결제 추가",
+            "update",
+            "add card",
+            "add payment",
+        )
+    ) or bool(tokens & {"업데이트", "갱신", "추가", "update"})
+    has_plan_change = any(
+        marker in text
+        for marker in (
+            "요금제 변경",
+            "플랜 변경",
+            "change plan",
+            "switch plan",
+            "upgrade",
+            "downgrade",
+        )
+    ) or (
+        bool(tokens & {"요금제", "플랜", "plan"})
+        and bool(tokens & {"변경", "change", "switch", "upgrade", "downgrade"})
+    )
+    return has_payment_method and has_maintenance and not has_plan_change
 
 
 def _successful_back_recovery(
