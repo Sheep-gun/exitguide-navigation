@@ -2,7 +2,7 @@
 
 status: blocked
 phase: device_validation
-updated_at: 2026-08-04T12:49:00+09:00
+updated_at: 2026-08-04T20:24:15+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: paused
 next_action: Samsung SM-S936N을 ADB로 다시 연결한 뒤 commit 07280a8 APK에 scripts/Install-NavigationExecutor.ps1을 실행하고 접근성 bound·90% 실제 스크롤·ADB lease 중지를 검증한 후 Netflix membership.join B 세션을 새로 시작한다.
@@ -13,6 +13,23 @@ verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328;
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
 deployed_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
+
+## Team Android Executor distribution
+
+- release_status: uploaded_and_hash_verified
+- N100_release: `/srv/exitguide/releases/navigation-executor/07280a8`
+- N100_current_link: `/srv/exitguide/releases/navigation-executor/current`
+- bundle: `navigation-executor-07280a8-team.zip`
+- bundle_SHA256: `5817419FD5F7E11799A41558217B30E35DECDF57A995489AC5529F35645847EF`
+- APK_SHA256: `C9B64BF2D724533265B28BEBEE6E7A6B42078D0B797AB2C3C338AAF3E8D4A699`
+- implementation_commit: `07280a813ded8bcc77a34fe6b748e7d6a541abec`
+- bundle_checksums: passed
+- bundle_zip_test: passed
+- PowerShell_parser: 5/5 passed
+- team_setup_dry_run: no ADB device -> stopped before SSH tunnel, no orphan tunnel
+- exact_APK_real_device_validation: pending
+- decision_db_collection: remains paused until the recorded device-validation next_action succeeds
+- guide: `docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md`
 
 ## 고정 정책
 

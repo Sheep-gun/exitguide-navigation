@@ -1,5 +1,7 @@
 # ExitGuide Navigation DB Redesign
 
+팀원용 Android Executor 배포·설치·병렬 수집 절차는 [docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md](docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md)를 참고한다.
+
 기존 앱별 완성 경로·대형 기능 카탈로그 방식과 분리한 Navigation Agent 실험이다. 이 저장소의 런타임은 **현재 화면에서 발견된 후보만** 다루며, 과거의 화면별 의사결정 결과를 검색해 다음 행동을 선택한다. 앱 이름으로 경로를 재생하거나 임의 좌표를 생성하지 않는다.
 
 ## 시스템을 한눈에 보기
