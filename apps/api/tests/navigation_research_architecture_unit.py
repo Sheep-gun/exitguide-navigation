@@ -658,6 +658,40 @@ def main() -> None:
     assert account_privacy_scores["click:data-privacy"][0] >= 0.95
     assert account_privacy_scores["click:profile-photo"][0] <= 0.12
 
+    privacy_checkup_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="privacy-checkup"),
+            0.90,
+            NavigationCandidate(
+                candidate_id="privacy-checkup",
+                label="개인정보 보호를 위한 추천 설정",
+                child_semantics="개인정보 보호 진단을 실행합니다.",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="scroll", direction="down"),
+            0.18,
+            None,
+        ),
+    ]
+    privacy_checkup_entry_scores = policy._apply_account_delete_privacy_entry_guard(
+        scores={
+            "click:privacy-checkup": (0.90, "model"),
+            "scroll:down": (0.18, "model"),
+        },
+        goal_id="account.delete",
+        enumerated=privacy_checkup_actions,
+    )
+    assert privacy_checkup_entry_scores["click:privacy-checkup"][0] == 0.90
+    privacy_scroll_scores = policy._apply_account_delete_privacy_scroll_guard(
+        scores=privacy_checkup_entry_scores,
+        goal_id="account.delete",
+        enumerated=privacy_checkup_actions,
+        screen_tokens=("개인정보", "보호", "맞춤설정", "활동"),
+    )
+    assert privacy_scroll_scores["scroll:down"][0] >= 0.96
+    assert privacy_scroll_scores["click:privacy-checkup"][0] <= 0.08
+
     promotional_modal_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="modal-close"),

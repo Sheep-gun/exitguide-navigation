@@ -880,7 +880,7 @@ class NavigationDecisionMemory:
                 _signature_payload(row)
                 for row in connection.execute(
                     """
-                    SELECT signature_id, name, required_features_json, optional_features_json,
+                    SELECT signature_id, goal_id, name, required_features_json, optional_features_json,
                            forbidden_features_json, terminal_features_json, match_threshold
                     FROM destination_signatures WHERE goal_id = ? ORDER BY version DESC, name
                     """,
@@ -1492,6 +1492,7 @@ def _value(value: object, key: str, default: object = None) -> object:
 def _signature_payload(row: sqlite3.Row) -> dict[str, object]:
     return {
         "signature_id": str(row["signature_id"]),
+        "goal_id": str(row["goal_id"]),
         "name": str(row["name"]),
         "required_features": json.loads(row["required_features_json"]),
         "optional_features": json.loads(row["optional_features_json"]),
@@ -1570,6 +1571,18 @@ def _destination_match(
 
     best = 0.0
     for signature in signatures:
+        if (
+            signature.get("goal_id") == "account.delete"
+            and not _explicit_account_deletion_boundary(
+                title=title,
+                candidate_payloads=candidate_payloads,
+            )
+        ):
+            # "자동 삭제", history deletion, and individual data/profile
+            # deletion screens contain both account-header and deletion words.
+            # They are not an account-deletion boundary unless the same direct
+            # semantic region explicitly refers to deleting/closing the account.
+            continue
         required = signature.get("required_features", {})
         optional = signature.get("optional_features", [])
         forbidden = signature.get("forbidden_features", [])
@@ -1618,3 +1631,63 @@ def _destination_match(
             score *= 0.2
         best = max(best, score)
     return round(min(1.0, best), 4)
+
+
+def _explicit_account_deletion_boundary(
+    *,
+    title: str,
+    candidate_payloads: Sequence[Mapping[str, object]],
+) -> bool:
+    """Require explicit account identity and deletion in one direct region."""
+
+    direct_fields = ("label", "parent_semantics", "child_semantics")
+    regions = [normalize_text(title)]
+    regions.extend(
+        normalize_text(
+            " ".join(str(candidate.get(field, "")) for field in direct_fields)
+        )
+        for candidate in candidate_payloads
+    )
+    explicit_phrases = (
+        "회원탈퇴",
+        "회원 탈퇴",
+        "계정 삭제",
+        "계정삭제",
+        "계정을 삭제",
+        "계정 영구 삭제",
+        "delete account",
+        "delete your account",
+        "account deletion",
+        "close account",
+        "close your account",
+        "permanently delete account",
+    )
+    non_account_deletion_markers = (
+        "자동 삭제",
+        "기록 삭제",
+        "검색 기록",
+        "활동 삭제",
+        "프로필 사진 삭제",
+        "프로필 이미지 삭제",
+        "auto delete",
+        "auto-delete",
+        "delete history",
+        "delete activity",
+        "delete profile photo",
+        "delete profile picture",
+    )
+    for region in regions:
+        if not region:
+            continue
+        if any(phrase in region for phrase in explicit_phrases):
+            return True
+        tokens = set(tokenize(region))
+        has_account = bool(tokens & {"계정", "account"})
+        has_deletion = bool(tokens & {"삭제", "탈퇴", "delete", "deletion", "close"})
+        if (
+            has_account
+            and has_deletion
+            and not any(marker in region for marker in non_account_deletion_markers)
+        ):
+            return True
+    return False

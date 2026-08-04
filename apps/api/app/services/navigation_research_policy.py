@@ -1181,6 +1181,13 @@ class AndroidWorldResearchPolicy:
                     provider += "->python_account_delete_privacy_entry_guard"
                 if any(
                     value.verifier_reason.startswith(
+                        "python_account_delete_privacy_scroll_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_account_delete_privacy_scroll_guard"
+                if any(
+                    value.verifier_reason.startswith(
                         "python_promotional_modal_dismiss_guard:"
                     )
                     for value in updated_values
@@ -1981,6 +1988,12 @@ class AndroidWorldResearchPolicy:
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
         )
+        scores = self._apply_account_delete_privacy_scroll_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+            screen_tokens=query.screen.tokens,
+        )
         scores = self._apply_membership_hub_affordance_guard(
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
@@ -2384,6 +2397,15 @@ class AndroidWorldResearchPolicy:
                     "privacy hub",
                 )
             )
+            and not any(
+                marker in _candidate_primary_semantic_text(item.candidate)
+                for marker in (
+                    "개인정보 보호 진단",
+                    "추천 설정",
+                    "privacy checkup",
+                    "privacy recommendation",
+                )
+            )
         ]
         if not privacy_items:
             return adjusted
@@ -2429,6 +2451,93 @@ class AndroidWorldResearchPolicy:
                     min(score, 0.12),
                     "python_account_delete_privacy_entry_guard: unrelated account "
                     "utility cannot outrank the visible data/privacy hub; " + reason,
+                )
+        return adjusted
+
+    def _apply_account_delete_privacy_scroll_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+        screen_tokens: Sequence[str],
+    ) -> dict[str, tuple[float, str]]:
+        """Scroll within a privacy hub instead of entering a privacy checkup."""
+
+        adjusted = dict(scores)
+        if goal_id != "account.delete":
+            return adjusted
+        tokens = {
+            str(token).casefold().strip()
+            for token in screen_tokens
+            if str(token).strip()
+        }
+        screen_text = " ".join(sorted(tokens))
+        privacy_context = (
+            any("개인정보" in token or "privacy" in token for token in tokens)
+            or {"개인", "정보", "보호"}.issubset(tokens)
+            or "개인 정보 보호" in screen_text
+        )
+        if not privacy_context:
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click" and item.candidate is not None
+        ]
+        explicit_delete_phrases = (
+            "회원탈퇴",
+            "회원 탈퇴",
+            "계정 삭제",
+            "계정삭제",
+            "계정을 삭제",
+            "delete account",
+            "delete your account",
+            "close account",
+        )
+        if any(
+            any(
+                phrase in _candidate_primary_semantic_text(item.candidate)
+                for phrase in explicit_delete_phrases
+            )
+            for item in click_items
+        ):
+            return adjusted
+        scroll_down = next(
+            (
+                item
+                for item in enumerated
+                if item.action.name == "scroll" and item.action.direction == "down"
+            ),
+            None,
+        )
+        if scroll_down is None:
+            return adjusted
+        scroll_key = _action_key(scroll_down.action)
+        score, reason = adjusted.get(scroll_key, (0.0, ""))
+        adjusted[scroll_key] = (
+            max(score, 0.96),
+            "python_account_delete_privacy_scroll_guard: privacy hub has no "
+            "explicit account-deletion control yet; continue bounded downward "
+            "search; " + reason,
+        )
+        for item in click_items:
+            primary = _candidate_primary_semantic_text(item.candidate)
+            if any(
+                marker in primary
+                for marker in (
+                    "개인정보 보호 진단",
+                    "추천 설정",
+                    "privacy checkup",
+                    "privacy recommendation",
+                )
+            ):
+                key = _action_key(item.action)
+                item_score, item_reason = adjusted.get(key, (0.0, ""))
+                adjusted[key] = (
+                    min(item_score, 0.08),
+                    "python_account_delete_privacy_scroll_guard: privacy "
+                    "checkup is not account deletion; " + item_reason,
                 )
         return adjusted
 

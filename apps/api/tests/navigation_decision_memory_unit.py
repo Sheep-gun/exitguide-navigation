@@ -253,6 +253,44 @@ def main() -> None:
         )
         assert signup_gateway.destination_match < signup_threshold
         assert memory.recommend_action(signup_gateway)[0:2] == ("click", "signup")
+        account_history_auto_delete = memory.retrieve(
+            goal_text="계정을 삭제하고 싶어",
+            window_title="Google 계정",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "history-auto-delete",
+                    "label": "YouTube 기록 자동 삭제",
+                    "nearby_text": "자동 삭제 옵션을 설정하여 기록 보관 기간을 관리합니다.",
+                    "role": "button",
+                },
+                {"candidate_id": "later", "label": "나중에", "role": "button"},
+            ],
+            top_k=0,
+        )
+        account_delete_threshold = min(
+            float(item["threshold"])
+            for item in account_history_auto_delete.destination_signatures
+        )
+        assert account_history_auto_delete.destination_match < account_delete_threshold
+        assert memory.recommend_action(account_history_auto_delete)[0] != "stop_for_user"
+        explicit_account_delete = memory.retrieve(
+            goal_text="계정을 삭제하고 싶어",
+            window_title="Google 계정 삭제",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                {
+                    "candidate_id": "delete-account",
+                    "label": "Google 계정 삭제",
+                    "nearby_text": "계정과 데이터가 영구 삭제됩니다. 주의하세요.",
+                    "role": "button",
+                    "risk_level": "high",
+                }
+            ],
+            top_k=0,
+        )
+        assert explicit_account_delete.destination_match >= account_delete_threshold
+        assert memory.recommend_action(explicit_account_delete)[0] == "stop_for_user"
         unselected_tab_state = memory.semantic_screen_state(
             window_title="전체 메뉴",
             activity_name="android.widget.FrameLayout",
