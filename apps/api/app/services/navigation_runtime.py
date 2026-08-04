@@ -870,6 +870,28 @@ class NavigationRuntime:
                     failure_class="already_satisfied",
                     recovery_action=NavigationAction(name="stop_for_user"),
                 )
+            elif (
+                str(decision["screen_fingerprint"]) != next_fingerprint
+                and next_query.destination_match < _destination_threshold(next_query)
+                and _semantic_fast_path_grounded_progress(
+                    planner_provider=str(decision["planner_provider"]),
+                    goal_id="" if stored_goal is None else stored_goal.goal_id,
+                    screen_tokens=next_query.screen.tokens,
+                )
+            ):
+                # A K2 intermediate hub can have less final-destination text
+                # than the previous screen even though the grounded semantic
+                # fast-path click was correct. Do not turn that expected
+                # hierarchy step into a false MobileUse back recovery solely
+                # because the final Destination Signature score decreased.
+                verified = VerifiedTransition(
+                    outcome_type="navigated",
+                    state_changed=True,
+                    progress_label="advanced",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=None,
+                )
             else:
                 verified = verify_transition(
                     action_name=str(decision["action_name"]),
@@ -1442,6 +1464,72 @@ def verify_transition(
             NavigationAction(name="back"),
         )
     return VerifiedTransition("navigated", True, "unknown", destination_match_after, "", None)
+
+
+def _semantic_fast_path_grounded_progress(
+    *,
+    planner_provider: str,
+    goal_id: str,
+    screen_tokens: Sequence[str],
+) -> bool:
+    """Recognize an observed K2 intermediate without trusting app identity."""
+
+    if planner_provider == "semantic_destination_scroll_fast_path":
+        return True
+    if planner_provider not in {
+        "semantic_intermediate_role_fast_path",
+        "semantic_safe_goal_entry_fast_path",
+    }:
+        return False
+    tokens = {str(token).casefold().strip() for token in screen_tokens if str(token).strip()}
+    text = " ".join(sorted(tokens))
+    account_hub_markers = (
+        "계정",
+        "프로필",
+        "내 정보",
+        "마이페이지",
+        "개인 정보",
+        "개인정보",
+        "설정",
+        "관리",
+        "account",
+        "profile",
+        "personal info",
+        "privacy",
+        "settings",
+        "management",
+    )
+    membership_markers = (
+        "멤버십",
+        "멤버쉽",
+        "구독 관리",
+        "이용권",
+        "요금제",
+        "플랜",
+        "membership",
+        "manage subscription",
+        "subscription settings",
+        "pass",
+        "plan",
+    )
+    signup_markers = (
+        "회원가입",
+        "계정 만들기",
+        "가입하기",
+        "sign up",
+        "create account",
+        "register",
+    )
+    if goal_id == "account.delete":
+        return any(marker in text for marker in account_hub_markers)
+    if goal_id == "account.signup":
+        return any(marker in text for marker in (*signup_markers, *account_hub_markers))
+    if goal_id.startswith("membership."):
+        return any(
+            marker in text
+            for marker in (*membership_markers, *account_hub_markers)
+        )
+    return False
 
 
 def _is_non_plan_payment_method_screen(

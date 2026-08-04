@@ -42,6 +42,7 @@ from app.services.navigation_runtime import (  # noqa: E402
     _contextualize_membership_cancellation_safety,
     _interleaved_repeat_guard,
     _is_non_plan_payment_method_screen,
+    _semantic_fast_path_grounded_progress,
     _selected_reverse_navigation_guard,
     _successful_back_recovery,
     verify_transition,
@@ -286,6 +287,26 @@ def main() -> None:
     )
     assert external_destination_collision.outcome_type == "external_app"
     assert external_destination_collision.progress_label == "regressed"
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider="semantic_intermediate_role_fast_path",
+        goal_id="account.delete",
+        screen_tokens=("계정", "설정"),
+    )
+    assert not _semantic_fast_path_grounded_progress(
+        planner_provider="semantic_intermediate_role_fast_path",
+        goal_id="account.delete",
+        screen_tokens=("구독", "새로운 콘텐츠", "홈"),
+    )
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider="semantic_safe_goal_entry_fast_path",
+        goal_id="membership.cancel",
+        screen_tokens=("프로필", "계정 관리"),
+    )
+    assert not _semantic_fast_path_grounded_progress(
+        planner_provider="solar_pro3_step_evaluator",
+        goal_id="account.delete",
+        screen_tokens=("계정", "설정"),
+    )
 
     with tempfile.TemporaryDirectory() as temporary:
         temporary_path = Path(temporary)
