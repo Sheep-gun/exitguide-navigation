@@ -1206,6 +1206,99 @@ def main() -> None:
         assert signup_terminal.planner_provider == "python_terminal_boundary"
         assert signup_terminal.perception_provider == "structured_input_terminal_boundary"
 
+        signup_auth_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(temporary_path / "signup-auth-runtime.sqlite"),
+            policy=_policy(),
+        )
+        signup_entry = signup_auth_runtime.decide(
+            DecideRequest(
+                request_id="request-signup-account-add",
+                app_package="evaluation.auth.app",
+                goal_text="새 계정을 만들고 싶어",
+                screen=ScreenObservation(
+                    window_title="계정",
+                    activity_name="android.widget.ListView",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="account-add",
+                            label="계정 추가",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        signup_auth_observation = signup_auth_runtime.observe(
+            ObserveRequest(
+                request_id="request-signup-device-auth-observe",
+                decision_id=signup_entry.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                observed_signal="external_app",
+                next_screen=ScreenObservation(
+                    app_package="com.vendor.android.biometric.setting",
+                    window_title="[redacted]",
+                    activity_name="android.widget.FrameLayout",
+                    nodes=[
+                        AccessibilityNodeSummary(
+                            node_id="use-credential",
+                            text="[redacted]",
+                            view_id="com.vendor.android.biometric.setting:id/button_use_credential",
+                            role="button",
+                            clickable=True,
+                        )
+                    ],
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="use-credential",
+                            label="[redacted]",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert signup_auth_observation.outcome_type == "login_required"
+        assert signup_auth_observation.recovery_action is not None
+        assert signup_auth_observation.recovery_action.name == "stop_for_user"
+        assert signup_auth_observation.session_status == "stopped"
+
+        direct_biometric_boundary = signup_auth_runtime.decide(
+            DecideRequest(
+                request_id="request-signup-device-auth-boundary",
+                app_package="evaluation.auth.app",
+                goal_text="새 계정을 만들고 싶어",
+                screen=ScreenObservation(
+                    app_package="com.vendor.android.biometric.setting",
+                    window_title="[redacted]",
+                    activity_name="android.widget.FrameLayout",
+                    nodes=[
+                        AccessibilityNodeSummary(
+                            node_id="fingerprint-prompt",
+                            text="본인 인증",
+                            content_description="지문을 입력하세요",
+                            view_id="com.vendor.android.biometric.setting:id/prompt_layout",
+                            role="button",
+                            clickable=True,
+                        )
+                    ],
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="fingerprint-prompt",
+                            label="[redacted]",
+                            role="button",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert direct_biometric_boundary.action.name == "stop_for_user", (
+            direct_biometric_boundary.model_dump(mode="json")
+        )
+        assert direct_biometric_boundary.planner_provider == "python_authentication_boundary"
+        assert direct_biometric_boundary.perception_provider == "structured_input_auth_boundary"
+
         already_member = auth_transition_runtime.decide(
             DecideRequest(
                 request_id="request-already-member",

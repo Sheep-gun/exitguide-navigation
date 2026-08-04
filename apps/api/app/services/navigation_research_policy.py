@@ -339,6 +339,22 @@ def _account_management_scope(candidate: NavigationCandidate) -> str | None:
     return _account_management_label_scope(candidate.label)
 
 
+def _is_child_account_candidate(candidate: NavigationCandidate) -> bool:
+    """Keep a generic account.signup goal out of child-specific enrollment."""
+
+    text = _candidate_primary_semantic_text(candidate)
+    return any(
+        marker in text
+        for marker in (
+            "아동용",
+            "자녀 계정",
+            "키즈 계정",
+            "child account",
+            "kids account",
+        )
+    )
+
+
 def _is_unrelated_membership_utility(candidate: NavigationCandidate) -> bool:
     text = " ".join(_candidate_primary_semantic_text(candidate).split())
     return any(
@@ -1896,6 +1912,10 @@ class AndroidWorldResearchPolicy:
             value
             for value in prior_values
             if not value.forbidden and value.score_source != "safety_blocked"
+            and not (
+                plan.goal_id == "account.signup"
+                and _is_child_account_candidate(candidate_by_id[value.candidate_id])
+            )
         ][: self.max_verified_clicks]
         actions = [
             EnumeratedAction(

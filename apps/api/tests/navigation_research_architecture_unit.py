@@ -2229,6 +2229,57 @@ def main() -> None:
     assert max(selected_control_scores, key=lambda key: selected_control_scores[key][0]) == (
         "click:account"
     )
+    signup_actions = selective_policy._enumerate_actions(
+        candidates=[
+            NavigationCandidate(
+                candidate_id="account-add",
+                label="계정 추가",
+                risk_level="low",
+            ),
+            NavigationCandidate(
+                candidate_id="child-account-add",
+                label="아동용 계정 추가",
+                risk_level="low",
+            ),
+        ],
+        prior_values=[
+            CandidateValue(
+                candidate_id="account-add",
+                value=0.55,
+                memory_score=0.40,
+                role_score=0.50,
+                final_score=0.55,
+                forbidden=False,
+                risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="child-account-add",
+                value=0.80,
+                memory_score=0.60,
+                role_score=0.70,
+                final_score=0.80,
+                forbidden=False,
+                risk_level="low",
+            ),
+        ],
+        plan=HierarchicalPlan(
+            goal_id="account.signup",
+            stage="hub_discovery",
+            target_roles=["auth.signup.entry"],
+            immediate_subgoal="계정 추가 진입",
+            expected_outcome="일반 계정 생성 게이트웨이",
+            completion_rule="일반 회원가입 경계 도달",
+            source="decision_memory_fallback",
+        ),
+        recent_history=[],
+    )
+    signup_click_ids = {
+        item.action.candidate_id
+        for item in signup_actions
+        if item.action.name == "click"
+    }
+    assert "account-add" in signup_click_ids
+    assert "child-account-add" not in signup_click_ids
     account_delete_hierarchy_scores = (
         selective_policy._apply_account_delete_explicit_account_guard(
             scores={

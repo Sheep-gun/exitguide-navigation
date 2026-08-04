@@ -203,7 +203,11 @@ class NavigationRuntime:
             goal_resolution.status == "recognized"
             and structured_query.destination_match >= _destination_threshold(structured_query)
         )
-        if _is_authentication_boundary(normalized_goal, structured_screen.auth_state):
+        if _is_authentication_boundary(
+            normalized_goal,
+            structured_screen.auth_state,
+            screen=request.screen,
+        ):
             perception = PerceptionOutput(
                 screen=request.screen,
                 semantic_summary="explicit authentication boundary from structured UI",
@@ -351,10 +355,10 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_goal_already_satisfied"
-        elif (
-            query.goal is not None
-            and _requires_authenticated_account(query.goal.goal_id)
-            and query.screen.auth_state in {"logged_out", "reauthentication"}
+        elif _is_authentication_boundary(
+            query.goal,
+            query.screen.auth_state,
+            screen=request.screen,
         ):
             proposal = PlannerProposal(
                 NavigationAction(name="stop_for_user"),
@@ -719,7 +723,11 @@ class NavigationRuntime:
                 locale=str(decision["locale"]),
                 navigation_depth=request.next_screen.navigation_depth,
             )
-            if _is_authentication_boundary(stored_goal, structured_next_screen.auth_state):
+            if _is_authentication_boundary(
+                stored_goal,
+                structured_next_screen.auth_state,
+                screen=request.next_screen,
+            ):
                 next_perception = PerceptionOutput(
                     screen=request.next_screen,
                     semantic_summary="explicit authentication boundary from structured UI",
@@ -748,7 +756,11 @@ class NavigationRuntime:
             )
             next_fingerprint = next_query.screen.semantic_fingerprint
             observed_signal = request.observed_signal
-            if _is_authentication_boundary(stored_goal, next_query.screen.auth_state):
+            if _is_authentication_boundary(
+                stored_goal,
+                next_query.screen.auth_state,
+                screen=request.next_screen,
+            ):
                 observed_signal = "login_required"
             session_app_package = str(decision.get("app_package") or "")
             previous_app_package = str(
@@ -1726,12 +1738,64 @@ def _goal_already_satisfied(query: DecisionMemoryQuery) -> bool:
 def _is_authentication_boundary(
     goal: NormalizedGoal | None,
     auth_state: str,
+    *,
+    screen: ScreenObservation | None = None,
 ) -> bool:
-    return (
-        goal is not None
-        and _requires_authenticated_account(goal.goal_id)
-        and auth_state in {"logged_out", "reauthentication"}
+    if goal is None:
+        return False
+    # Device credential and biometric prompts are user-only authentication
+    # boundaries for every goal, including account.signup.  A signup flow may
+    # legitimately traverse a normal logged-out screen, so do not treat a
+    # generic login/signup surface as terminal for that goal.  Vendor prompts
+    # frequently redact their visible text; stable semantic view IDs and the
+    # platform package/activity identity therefore provide the grounding.
+    if screen is not None and _is_device_credential_prompt(screen):
+        return True
+    if auth_state == "reauthentication":
+        return True
+    return _requires_authenticated_account(goal.goal_id) and auth_state == "logged_out"
+
+
+def _is_device_credential_prompt(screen: ScreenObservation) -> bool:
+    identity = " ".join(
+        (
+            screen.app_package,
+            screen.activity_name,
+            screen.window_title,
+            *(node.view_id for node in screen.nodes),
+            *(node.text for node in screen.nodes),
+            *(node.content_description for node in screen.nodes),
+        )
+    ).casefold()
+    platform_prompt = any(
+        marker in identity
+        for marker in (
+            "biometric",
+            "fingerprint",
+            "credential",
+            "본인 인증",
+            "본인인증",
+            "본인 확인",
+            "지문을 입력",
+            "생체 인증",
+            "verify it's you",
+            "verify your identity",
+        )
     )
+    prompt_structure = any(
+        marker in identity
+        for marker in (
+            "prompt_layout",
+            "prompt_dialog",
+            "use_credential",
+            "authenticate",
+            "authentication",
+            "지문",
+            "생체",
+            "credential",
+        )
+    )
+    return platform_prompt and prompt_structure
 
 
 def _goal_resolution(
