@@ -291,6 +291,48 @@ def _has_account_hub_semantics(candidate: NavigationCandidate) -> bool:
     )
 
 
+def _account_management_scope(candidate: NavigationCandidate) -> str | None:
+    """Distinguish a provider account gateway from a generic account list.
+
+    Account/profile menus can expose both a generic ``manage accounts`` entry
+    (usually the device account list) and a provider-scoped account management
+    entry.  For account deletion the latter is the grounded route toward the
+    account's own settings.  This classification uses only the control label;
+    nearby account text must not leak the role into an unrelated candidate.
+    """
+
+    label = " ".join(candidate.label.casefold().split())
+    if not label or any(
+        marker in label
+        for marker in (
+            "계정 추가",
+            "아동용 계정",
+            "키즈 계정",
+            "자녀 계정",
+            "add account",
+            "child account",
+            "kids account",
+        )
+    ):
+        return None
+    generic_labels = {
+        "계정 관리",
+        "계정들 관리",
+        "manage accounts",
+        "account management",
+        "accounts",
+    }
+    if label in generic_labels:
+        return "generic"
+    if "계정 관리" in label:
+        return "scoped"
+    if "account" in label and (
+        "manage" in label or "management" in label or "settings" in label
+    ):
+        return "scoped"
+    return None
+
+
 def _is_unrelated_membership_utility(candidate: NavigationCandidate) -> bool:
     text = " ".join(_candidate_primary_semantic_text(candidate).split())
     return any(
@@ -907,6 +949,26 @@ class AndroidWorldResearchPolicy:
                 score_margin=1.0,
                 reflection_on_demand=True,
             )
+        if _external_app_stop_guard_applies(
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            screen_tokens=query.screen.tokens,
+            recent_history=recent_history,
+        ):
+            provider = "python_mobileuse_external_app_back_gate"
+            proposal = PlannerProposal(
+                NavigationAction(name="back"),
+                1.0,
+                provider,
+                False,
+            )
+            return ResearchDecision(
+                plan=plan,
+                proposal=proposal,
+                candidate_values=tuple(prior_values),
+                verifier_provider=provider,
+                score_margin=1.0,
+                reflection_on_demand=True,
+            )
         current_fingerprint = query.screen.semantic_fingerprint
         prior_visits = sum(
             bool(current_fingerprint)
@@ -1001,6 +1063,13 @@ class AndroidWorldResearchPolicy:
                     for value in updated_values
                 ):
                     provider += "->python_direct_role_guard"
+                if any(
+                    value.verifier_reason.startswith(
+                        "python_account_delete_provider_gateway_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_account_delete_provider_gateway_guard"
                 if any(
                     value.verifier_reason.startswith(
                         "python_membership_hub_affordance_guard:"
@@ -1774,6 +1843,11 @@ class AndroidWorldResearchPolicy:
             prior_values=prior_values,
             enumerated=enumerated,
         )
+        scores = self._apply_account_delete_provider_gateway_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+        )
         scores = self._apply_membership_hub_affordance_guard(
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
@@ -1952,6 +2026,59 @@ class AndroidWorldResearchPolicy:
                     "source-app navigation evidence; "
                     + reason,
                 )
+        return adjusted
+
+    def _apply_account_delete_provider_gateway_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Prefer an explicit account-settings scope over a device account list."""
+
+        adjusted = dict(scores)
+        if goal_id != "account.delete":
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click"
+            and item.candidate is not None
+            and item.candidate.risk_level == "low"
+            and item.candidate.clickable
+            and item.candidate.enabled
+            and not item.candidate.selected
+        ]
+        scoped = [
+            item
+            for item in click_items
+            if _account_management_scope(item.candidate) == "scoped"
+        ]
+        generic = [
+            item
+            for item in click_items
+            if _account_management_scope(item.candidate) == "generic"
+        ]
+        if len(scoped) != 1 or not generic:
+            return adjusted
+        scoped_key = _action_key(scoped[0].action)
+        scoped_score, scoped_reason = adjusted.get(scoped_key, (0.0, ""))
+        adjusted[scoped_key] = (
+            max(scoped_score, 0.96),
+            "python_account_delete_provider_gateway_guard: explicit provider-scoped "
+            "account settings outrank a generic account list; "
+            + scoped_reason,
+        )
+        for item in generic:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                min(score, 0.10),
+                "python_account_delete_provider_gateway_guard: generic account-list "
+                "management is not account deletion; "
+                + reason,
+            )
         return adjusted
 
     def _apply_membership_hub_affordance_guard(

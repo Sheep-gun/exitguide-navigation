@@ -592,6 +592,43 @@ def main() -> None:
     assert profile_edit_exit_scores["click:profile-entry"][0] <= 0.15
     assert profile_edit_exit_scores["click:add-from-edit"][0] <= 0.15
 
+    account_management_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="generic-account-list"),
+            0.70,
+            NavigationCandidate(
+                candidate_id="generic-account-list",
+                label="계정 관리",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="provider-account-settings"),
+            0.70,
+            NavigationCandidate(
+                candidate_id="provider-account-settings",
+                label="서비스 제공자 계정 관리",
+            ),
+        ),
+    ]
+    account_management_scores = policy._apply_account_delete_provider_gateway_guard(
+        scores={
+            "click:generic-account-list": (0.95, "model chose generic account list"),
+            "click:provider-account-settings": (0.10, "model missed scoped settings"),
+        },
+        goal_id="account.delete",
+        enumerated=account_management_actions,
+    )
+    assert account_management_scores["click:provider-account-settings"][0] >= 0.96
+    assert account_management_scores["click:generic-account-list"][0] <= 0.10
+    assert policy._apply_account_delete_provider_gateway_guard(
+        scores={
+            "click:generic-account-list": (0.95, "model"),
+            "click:provider-account-settings": (0.10, "model"),
+        },
+        goal_id="membership.cancel",
+        enumerated=account_management_actions,
+    )["click:generic-account-list"][0] == 0.95
+
     foreign_app_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="foreign-membership"),
@@ -619,6 +656,25 @@ def main() -> None:
     assert foreign_app_scores["stop_for_user"][0] >= 0.99
     assert foreign_app_scores["click:foreign-membership"][0] <= 0.05
     assert foreign_app_scores["back"][0] <= 0.05
+    external_recovery_decision = policy.decide_action(
+        query=public_prior_query,
+        plan=public_prior_plan,
+        candidates=public_prior_candidates,
+        forbidden_candidate_ids=set(),
+        recent_history=[
+            {
+                "outcome_type": "external_app",
+                "progress_label": "regressed",
+                "connectivity_status": "observed",
+                "action_name": "click",
+            }
+        ],
+    )
+    assert external_recovery_decision.proposal.action.name == "back"
+    assert (
+        external_recovery_decision.verifier_provider
+        == "python_mobileuse_external_app_back_gate"
+    )
     trusted_handoff_history = [
         {
             "outcome_type": "external_app",

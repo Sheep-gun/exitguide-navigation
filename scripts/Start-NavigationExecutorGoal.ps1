@@ -46,6 +46,19 @@ function Invoke-Adb {
     return $output
 }
 
+function ConvertTo-AdbShellLiteral {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    if ($Value.Contains("`0") -or $Value.Contains("`r") -or $Value.Contains("`n")) {
+        throw "ADB shell string extras cannot contain NUL or newline characters."
+    }
+    # `adb shell` joins its host arguments before the Android shell parses them.
+    # Preserve whitespace and prevent shell expansion with a POSIX single-quoted literal.
+    $singleQuote = [string][char]39
+    $doubleQuote = [string][char]34
+    $escapedSingleQuote = $singleQuote + $doubleQuote + $singleQuote + $doubleQuote + $singleQuote
+    return $singleQuote + $Value.Replace($singleQuote, $escapedSingleQuote) + $singleQuote
+}
+
 $devices = @(Invoke-Adb @("devices") | Select-String -Pattern "\sdevice(?:\s|$)")
 if ($devices.Count -ne 1) {
     throw "exactly one authorized ADB device is required; found $($devices.Count)"
@@ -68,13 +81,14 @@ Invoke-Adb @(
 ) | Out-Null
 Start-Sleep -Milliseconds 1200
 
-Invoke-Adb @(
-    "shell", "am", "broadcast", "--receiver-foreground",
+$broadcastCommand = @(
+    "am", "broadcast", "--receiver-foreground",
     "-a", $startAction,
     "-n", $receiver,
-    "--es", "goal", $Goal,
-    "--es", "api_base_url", $NavigationApiBaseUrl
-) | Out-Null
+    "--es", "goal", (ConvertTo-AdbShellLiteral $Goal),
+    "--es", "api_base_url", (ConvertTo-AdbShellLiteral $NavigationApiBaseUrl)
+) -join " "
+Invoke-Adb @("shell", $broadcastCommand) | Out-Null
 
 [pscustomobject]@{
     app_package = $AppPackage
