@@ -28,8 +28,16 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             if (apiBaseUrl.isEmpty()) {
                 apiBaseUrl = ExecutorPreferences.apiBaseUrl(context);
             }
+            ExecutorPreferences.startAdbLease(context);
             ExecutorPreferences.configure(context, apiBaseUrl, goal, true);
             Log.i(LOG_TAG, "adb_control started goal_chars=" + goal.length());
+            return;
+        }
+        if (ExecutorPreferences.ACTION_ADB_HEARTBEAT.equals(action)) {
+            if (ExecutorPreferences.active(context)) {
+                ExecutorPreferences.refreshAdbLease(context);
+                Log.d(LOG_TAG, "adb_control heartbeat");
+            }
             return;
         }
         if (ExecutorPreferences.ACTION_ADB_STOP_NAVIGATION.equals(action)) {

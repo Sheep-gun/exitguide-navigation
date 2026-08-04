@@ -2,6 +2,7 @@ package com.exitguide.navigation.executor;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,6 +11,8 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
+import android.graphics.Path;
+import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
 import android.os.Handler;
@@ -43,6 +46,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private static final long MAX_OBSERVATION_SETTLE_MS = 3_500;
     private static final int MAX_ACTIONS = 15;
     private static final long MAX_EPISODE_DURATION_MS = 10 * 60 * 1_000L;
+    private static final long SCROLL_GESTURE_DURATION_MS = 350L;
+    private static final long MAX_ADB_HEARTBEAT_AGE_MS = 15_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final NavigationApiClient apiClient = new NavigationApiClient();
@@ -307,6 +312,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (!ExecutorPreferences.active(this) || inFlight) {
             return;
         }
+        if (!ensureAdbLease()) {
+            return;
+        }
         if (episodeStartedAtElapsed == 0L) {
             episodeStartedAtElapsed = SystemClock.elapsedRealtime();
         }
@@ -423,6 +431,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     ) {
         if (!acceptsCallback(generation)) {
             requestSessionStop(response.optString("session_id", ""));
+            return;
+        }
+        if (!ensureAdbLease()) {
+            requestSessionStop(response.optString("session_id", sessionId));
             return;
         }
         sessionId = response.optString("session_id", sessionId);
@@ -622,19 +634,47 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return new ActionExecution(false, "blocked", "스크롤 가능한 영역을 찾지 못했습니다.");
         }
         try {
-            int action = "up".equals(direction)
-                    ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-                    : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
-            boolean succeeded = scrollable.performAction(action);
+            Rect bounds = new Rect();
+            scrollable.getBoundsInScreen(bounds);
+            ViewportScrollPlan plan = ViewportScrollPlan.create(
+                    bounds.left,
+                    bounds.top,
+                    bounds.right,
+                    bounds.bottom,
+                    getResources().getDisplayMetrics().widthPixels,
+                    getResources().getDisplayMetrics().heightPixels,
+                    "up".equals(direction)
+            );
+            if (plan == null) {
+                return new ActionExecution(
+                        false,
+                        "blocked",
+                        "스크롤 영역이 너무 작거나 화면 밖이어서 스크롤을 차단했습니다."
+                );
+            }
+            Path path = new Path();
+            path.moveTo(plan.startX, plan.startY);
+            path.lineTo(plan.endX, plan.endY);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(
+                            path,
+                            0,
+                            SCROLL_GESTURE_DURATION_MS
+                    ))
+                    .build();
+            boolean succeeded = dispatchGesture(gesture, null, null);
             Log.i(
                     LOG_TAG,
                     "action_execution name=scroll direction=" + direction
+                            + " viewport_fraction=" + plan.viewportFraction
                             + " executor_action_succeeded=" + succeeded
             );
             return new ActionExecution(
                     succeeded,
                     succeeded ? "none" : "blocked",
-                    succeeded ? "Accessibility 스크롤을 실행했습니다." : "Accessibility 스크롤이 거절되었습니다."
+                    succeeded
+                            ? "화면 높이의 90%를 이동하는 Accessibility 스크롤을 실행했습니다."
+                            : "Accessibility 90% 스크롤이 거절되었습니다."
             );
         } finally {
             if (scrollable != root) {
@@ -1051,6 +1091,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         ExecutorPreferences.setActive(this, false);
         releaseScreenAwake();
         publish(message);
+    }
+
+    private boolean ensureAdbLease() {
+        if (ExecutorPreferences.adbLeaseValid(this, MAX_ADB_HEARTBEAT_AGE_MS)) {
+            return true;
+        }
+        inFlight = false;
+        stop("ADB 기기 연결이 끊겨 탐색과 DB 수집을 자동으로 일시중지했습니다.");
+        return false;
     }
 
     @SuppressWarnings("deprecation")

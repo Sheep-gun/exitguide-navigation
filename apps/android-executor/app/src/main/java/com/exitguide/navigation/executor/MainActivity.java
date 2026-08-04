@@ -151,6 +151,8 @@ public final class MainActivity extends Activity {
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
+        // Manual on-device use does not depend on an ADB collection lease.
+        ExecutorPreferences.clearAdbLease(this);
         ExecutorPreferences.configure(this, baseUrl, goalText, true);
         ExecutorPreferences.publishStatus(this, "현재 화면을 관찰하는 중입니다.");
         moveTaskToBack(true);

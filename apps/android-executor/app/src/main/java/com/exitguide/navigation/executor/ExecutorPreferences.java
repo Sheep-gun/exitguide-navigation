@@ -3,6 +3,7 @@ package com.exitguide.navigation.executor;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.SystemClock;
 
 final class ExecutorPreferences {
     static final String ACTION_CONFIGURATION_CHANGED =
@@ -17,12 +18,16 @@ final class ExecutorPreferences {
             "com.exitguide.navigation.executor.ADB_START_NAVIGATION";
     static final String ACTION_ADB_STOP_NAVIGATION =
             "com.exitguide.navigation.executor.ADB_STOP_NAVIGATION";
+    static final String ACTION_ADB_HEARTBEAT =
+            "com.exitguide.navigation.executor.ADB_HEARTBEAT";
 
     private static final String FILE_NAME = "navigation_executor";
     private static final String KEY_API_BASE_URL = "api_base_url";
     private static final String KEY_GOAL = "goal";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_STATUS = "status";
+    private static final String KEY_ADB_LEASE_REQUIRED = "adb_lease_required";
+    private static final String KEY_ADB_HEARTBEAT_ELAPSED = "adb_heartbeat_elapsed";
 
     private ExecutorPreferences() {}
 
@@ -61,10 +66,48 @@ final class ExecutorPreferences {
     }
 
     static void setActive(Context context, boolean active) {
-        preferences(context).edit().putBoolean(KEY_ACTIVE, active).apply();
+        SharedPreferences.Editor editor = preferences(context).edit().putBoolean(KEY_ACTIVE, active);
+        if (!active) {
+            editor.putBoolean(KEY_ADB_LEASE_REQUIRED, false)
+                    .putLong(KEY_ADB_HEARTBEAT_ELAPSED, 0L);
+        }
+        editor.apply();
         context.sendBroadcast(
                 new Intent(ACTION_CONFIGURATION_CHANGED).setPackage(context.getPackageName())
         );
+    }
+
+    static void startAdbLease(Context context) {
+        preferences(context).edit()
+                .putBoolean(KEY_ADB_LEASE_REQUIRED, true)
+                .putLong(KEY_ADB_HEARTBEAT_ELAPSED, SystemClock.elapsedRealtime())
+                .apply();
+    }
+
+    static void refreshAdbLease(Context context) {
+        if (!preferences(context).getBoolean(KEY_ADB_LEASE_REQUIRED, false)) {
+            return;
+        }
+        preferences(context).edit()
+                .putLong(KEY_ADB_HEARTBEAT_ELAPSED, SystemClock.elapsedRealtime())
+                .apply();
+    }
+
+    static void clearAdbLease(Context context) {
+        preferences(context).edit()
+                .putBoolean(KEY_ADB_LEASE_REQUIRED, false)
+                .putLong(KEY_ADB_HEARTBEAT_ELAPSED, 0L)
+                .apply();
+    }
+
+    static boolean adbLeaseValid(Context context, long maxAgeMs) {
+        SharedPreferences values = preferences(context);
+        if (!values.getBoolean(KEY_ADB_LEASE_REQUIRED, false)) {
+            return true;
+        }
+        long lastHeartbeat = values.getLong(KEY_ADB_HEARTBEAT_ELAPSED, 0L);
+        long age = SystemClock.elapsedRealtime() - lastHeartbeat;
+        return lastHeartbeat > 0L && age >= 0L && age <= maxAgeMs;
     }
 
     static void publishStatus(Context context, String status) {

@@ -194,6 +194,13 @@ if (-not $SkipInstall) {
     Invoke-Adb install -r $resolvedApk | Out-Host
 }
 
+# Samsung Freecess can suspend an AccessibilityService process between two
+# bounded decisions even while the screen wake-lock is held. Keep the
+# collection service runnable; the separate short ADB lease still stops every
+# ADB-started episode when the physical device connection disappears.
+Invoke-Adb shell cmd deviceidle whitelist "+$package" | Out-Null
+Invoke-Adb shell cmd appops set $package RUN_ANY_IN_BACKGROUND allow | Out-Null
+
 $enabled = @(Enable-ExecutorAccessibility)
 Invoke-Adb shell svc power stayon true | Out-Null
 $diagnostic = Invoke-ExecutorDiagnostic
@@ -204,6 +211,8 @@ $diagnostic = Invoke-ExecutorDiagnostic
     package = $package
     accessibility_enabled = $true
     accessibility_bound = $true
+    background_execution_whitelisted = $true
+    adb_disconnect_requires_explicit_resume = $true
     preserved_service_count = $enabled.Count
     node_collection_ready = $diagnostic.node_count -gt 0
     candidate_id_generation_ready = $diagnostic.candidate_count -gt 0

@@ -11,10 +11,26 @@ if ([string]::IsNullOrWhiteSpace($AdbPath)) {
     }
 }
 $adb = (Resolve-Path -LiteralPath $AdbPath).Path
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$monitorTokenPath = Join-Path $repoRoot ".artifacts\navigation-executor-device-monitor.token"
+if (Test-Path -LiteralPath $monitorTokenPath -PathType Leaf) {
+    Remove-Item -LiteralPath $monitorTokenPath -Force
+}
+
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$state = & $adb get-state 2>&1
+$stateExit = $LASTEXITCODE
+$ErrorActionPreference = $previousPreference
+if ($stateExit -ne 0 -or (($state -join "").Trim() -ne "device")) {
+    Write-Output '{"navigation_stopped":false,"device_monitor_stopped":true,"reason":"adb_disconnected","auto_resume":false}'
+    exit 0
+}
+
 & $adb shell am broadcast --receiver-foreground `
     -a com.exitguide.navigation.executor.ADB_STOP_NAVIGATION `
     -n com.exitguide.navigation.executor/.ExecutorDiagnosticReceiver | Out-Null
 if ($LASTEXITCODE -ne 0) {
     throw "failed to stop Navigation Executor"
 }
-Write-Output '{"navigation_stopped":true}'
+Write-Output '{"navigation_stopped":true,"device_monitor_stopped":true,"auto_resume":false}'

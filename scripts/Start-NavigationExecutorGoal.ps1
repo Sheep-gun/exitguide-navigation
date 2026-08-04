@@ -16,6 +16,11 @@ $executorPackage = "com.exitguide.navigation.executor"
 $receiver = "$executorPackage/.ExecutorDiagnosticReceiver"
 $startAction = "$executorPackage.ADB_START_NAVIGATION"
 $serviceId = "id=$executorPackage/.ExitGuideAccessibilityService"
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
+$monitorScript = Join-Path $PSScriptRoot "Monitor-NavigationExecutorDevice.ps1"
+$monitorDirectory = Join-Path $repoRoot ".artifacts"
+$monitorTokenPath = Join-Path $monitorDirectory "navigation-executor-device-monitor.token"
+$monitorStatePath = Join-Path $monitorDirectory "navigation-executor-device-state.json"
 
 function Resolve-AdbExecutable {
     if (-not [string]::IsNullOrWhiteSpace($AdbPath)) {
@@ -63,6 +68,7 @@ $devices = @(Invoke-Adb @("devices") | Select-String -Pattern "\sdevice(?:\s|$)"
 if ($devices.Count -ne 1) {
     throw "exactly one authorized ADB device is required; found $($devices.Count)"
 }
+$deviceSerial = (($devices[0].Line -split "\s+")[0]).Trim()
 
 $compactAccessibility = ((Invoke-Adb @("shell", "dumpsys", "accessibility")) -join "`n") -replace "\s", ""
 if (-not $compactAccessibility.Contains($serviceId)) {
@@ -125,6 +131,32 @@ $broadcastCommand = @(
 ) -join " "
 Invoke-Adb @("shell", $broadcastCommand) | Out-Null
 
+# Maintain a short ADB lease while this collection episode is active. If the
+# exact device disappears, the hidden monitor stops heartbeats and records a
+# paused marker. The Executor checks the lease again before every decision and
+# before executing a delayed model response, so it cannot silently resume.
+New-Item -ItemType Directory -Path $monitorDirectory -Force | Out-Null
+$runToken = [Guid]::NewGuid().ToString("N")
+Set-Content -LiteralPath $monitorTokenPath -Value $runToken -Encoding UTF8
+[ordered]@{
+    status = "starting"
+    reason = "awaiting_adb_heartbeat"
+    device_serial = $deviceSerial
+    updated_at = [DateTimeOffset]::Now.ToString("o")
+    auto_resume = $false
+} | ConvertTo-Json | Set-Content -LiteralPath $monitorStatePath -Encoding UTF8
+$monitorArguments = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", ('"' + $monitorScript + '"'),
+    "-AdbPath", ('"' + $adb + '"'),
+    "-DeviceSerial", $deviceSerial,
+    "-RunToken", $runToken,
+    "-TokenPath", ('"' + $monitorTokenPath + '"'),
+    "-StatePath", ('"' + $monitorStatePath + '"')
+) -join " "
+Start-Process -FilePath "powershell.exe" -ArgumentList $monitorArguments -WindowStyle Hidden | Out-Null
+
 [pscustomobject]@{
     app_package = $AppPackage
     navigation_api = $NavigationApiBaseUrl
@@ -132,4 +164,7 @@ Invoke-Adb @("shell", $broadcastCommand) | Out-Null
     launch_method = "resolved_package_launcher_clear_task_without_coordinates"
     foreground_package_confirmed = $true
     navigation_started = $true
+    adb_device_monitor = $true
+    adb_auto_resume = $false
+    monitor_state = $monitorStatePath
 } | ConvertTo-Json
