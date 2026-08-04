@@ -838,10 +838,15 @@ class NavigationRuntime:
                     destination_threshold=_destination_threshold(next_query),
                     observed_signal=observed_signal,
                 )
-            elif decision["planner_provider"] in {
-                "python_visual_reobserve_gate",
-                "python_transient_navigation_wait_gate",
-            }:
+            elif (
+                decision["planner_provider"]
+                in {
+                    "python_visual_reobserve_gate",
+                    "python_transient_navigation_wait_gate",
+                }
+                or "python_promotional_modal_dismiss_guard"
+                in str(decision["planner_provider"])
+            ):
                 verified = VerifiedTransition(
                     outcome_type="navigated",
                     state_changed=(
@@ -1476,10 +1481,16 @@ def _semantic_fast_path_grounded_progress(
 
     if planner_provider == "semantic_destination_scroll_fast_path":
         return True
+    privacy_hub_guarded = (
+        "python_account_delete_privacy_entry_guard" in planner_provider
+    )
+    explicit_account_guarded = (
+        "python_account_delete_explicit_account_guard" in planner_provider
+    )
     if planner_provider not in {
         "semantic_intermediate_role_fast_path",
         "semantic_safe_goal_entry_fast_path",
-    }:
+    } and not privacy_hub_guarded and not explicit_account_guarded:
         return False
     tokens = {str(token).casefold().strip() for token in screen_tokens if str(token).strip()}
     text = " ".join(sorted(tokens))
@@ -1520,6 +1531,25 @@ def _semantic_fast_path_grounded_progress(
         "create account",
         "register",
     )
+    if privacy_hub_guarded:
+        return goal_id == "account.delete" and any(
+            marker in text
+            for marker in (
+                "데이터 및 개인 정보",
+                "데이터 및 개인정보",
+                "개인 정보 보호",
+                "개인정보 보호",
+                "개인정보 설정",
+                "data and privacy",
+                "data & privacy",
+                "privacy settings",
+            )
+        )
+    if explicit_account_guarded:
+        return goal_id == "account.delete" and any(
+            marker in text
+            for marker in ("계정", "내 계정", "account", "my account")
+        )
     if goal_id == "account.delete":
         return any(marker in text for marker in account_hub_markers)
     if goal_id == "account.signup":

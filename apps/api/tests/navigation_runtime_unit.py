@@ -307,6 +307,22 @@ def main() -> None:
         goal_id="account.delete",
         screen_tokens=("계정", "설정"),
     )
+    assert _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_privacy_entry_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("데이터 및 개인 정보 보호", "기록 설정", "데이터 삭제"),
+    )
+    assert not _semantic_fast_path_grounded_progress(
+        planner_provider=(
+            "solar_pro3_step_evaluator"
+            "->python_account_delete_privacy_entry_guard"
+        ),
+        goal_id="account.delete",
+        screen_tokens=("프로필 사진 변경", "요금제 살펴보기"),
+    )
 
     with tempfile.TemporaryDirectory() as temporary:
         temporary_path = Path(temporary)
