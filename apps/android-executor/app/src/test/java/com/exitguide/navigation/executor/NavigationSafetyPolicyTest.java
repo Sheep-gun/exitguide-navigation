@@ -26,6 +26,8 @@ public final class NavigationSafetyPolicyTest {
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("로그아웃"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("프로필 삭제"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Delete profile"));
+        assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Google 계정 삭제"));
+        assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Delete your account"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("장바구니 담기"));
         assertTrue(NavigationSafetyPolicy.isDangerousFinalText("Start subscription"));
         assertFalse(NavigationSafetyPolicy.isDangerousFinalText("마이페이지"));
@@ -37,6 +39,8 @@ public final class NavigationSafetyPolicyTest {
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("멤버십 해지"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Cancel subscription"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Unsubscribe"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Google 계정 삭제"));
+        assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Delete account"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("갱신"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Renew subscription"));
         assertTrue(NavigationSafetyPolicy.isStateChangingActionLabel("Resubscribe"));
