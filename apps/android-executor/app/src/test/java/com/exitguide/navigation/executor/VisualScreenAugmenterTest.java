@@ -48,4 +48,11 @@ public final class VisualScreenAugmenterTest {
         ));
     }
 
+    @Test
+    public void sparseOrAmbiguousAccessibilityForcesSelectiveVisualReasoning() {
+        assertTrue(ExitGuideAccessibilityService.shouldRequestVisualReasoning(false, true));
+        assertTrue(ExitGuideAccessibilityService.shouldRequestVisualReasoning(true, false));
+        assertFalse(ExitGuideAccessibilityService.shouldRequestVisualReasoning(false, false));
+    }
+
 }

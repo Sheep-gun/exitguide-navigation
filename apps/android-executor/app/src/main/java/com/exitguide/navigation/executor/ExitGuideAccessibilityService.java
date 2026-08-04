@@ -1,6 +1,7 @@
 package com.exitguide.navigation.executor;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -91,6 +92,19 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        // Some Compose/WebView-backed account surfaces expose their semantic
+        // descendants as non-important views.  UiAutomator can see those
+        // descendants, but an AccessibilityService without this fetch flag
+        // receives only the empty wrapper node and therefore cannot ground a
+        // candidate_id.  Keep the XML declaration and runtime flag in sync so
+        // an in-place APK update gets the same behavior after re-binding.
+        AccessibilityServiceInfo serviceInfo = getServiceInfo();
+        if (serviceInfo != null) {
+            serviceInfo.flags |= AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+            serviceInfo.flags |= AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+            serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            setServiceInfo(serviceInfo);
+        }
         screenReader = new AccessibilityScreenReader(getResources().getDisplayMetrics());
         IntentFilter filter = new IntentFilter(ExecutorPreferences.ACTION_CONFIGURATION_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -138,7 +152,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 || SYSTEM_UI_PACKAGE.equals(eventPackageName)) {
             return false;
         }
-        AccessibilityNodeInfo activeRoot = getRootInActiveWindow();
+        AccessibilityNodeInfo activeRoot = activeRoot();
         if (activeRoot == null) {
             return false;
         }
@@ -565,7 +579,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (NavigationSafetyPolicy.isStateChangingActionLabel(binding.label)) {
             return new ActionExecution(false, "blocked", "상태 변경 행동은 사용자가 직접 수행해야 합니다.");
         }
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = activeRoot();
         if (root == null) {
             return new ActionExecution(false, "blocked", "클릭 직전 현재 화면을 다시 읽지 못했습니다.");
         }
@@ -599,7 +613,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private ActionExecution scroll(String direction) {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = activeRoot();
         AccessibilityNodeInfo scrollable = findScrollable(root);
         if (scrollable == null) {
             if (root != null) {
@@ -828,7 +842,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private AccessibilityScreenReader.ScreenSnapshot currentSnapshot() {
-        AccessibilityNodeInfo root = getRootInActiveWindow();
+        AccessibilityNodeInfo root = activeRoot();
         if (root == null || screenReader == null) {
             return null;
         }
@@ -840,6 +854,16 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         } finally {
             root.recycle();
         }
+    }
+
+    private AccessibilityNodeInfo activeRoot() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return getRootInActiveWindow(
+                    AccessibilityNodeInfo.FLAG_PREFETCH_DESCENDANTS_BREADTH_FIRST
+                            | AccessibilityNodeInfo.FLAG_PREFETCH_UNINTERRUPTIBLE
+            );
+        }
+        return getRootInActiveWindow();
     }
 
     private boolean hasMultipleApplicationWindows() {
@@ -885,13 +909,18 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             boolean forceCapture,
             VisualContextCallback callback
     ) {
-        // Always give the Navigation API one accessibility-only opportunity.
-        // The API owns DB/fast-path confidence and returns
-        // visual_reobserve_required when the grounded candidates are truly
-        // ambiguous.  Capturing here merely because the surface is a WebView
-        // would preempt an obvious DB scroll/click with a slow VLM call.
-        boolean visualReasoningRequired = forceCapture;
-        if (!forceCapture && !visualReasoningRequired) {
+        // Accessibility remains the fast path only when it actually provides
+        // a clear, grounded candidate set.  Sparse wrappers, missing labels,
+        // duplicate labels and visual surfaces must be sent to the selective
+        // screenshot/OCR/VLM path before the API can mistake "no candidates"
+        // for a navigation failure or recover with back().
+        boolean accessibilityNeedsVisualReasoning = screenReader == null
+                || screenReader.needsVisualReasoning(snapshot);
+        boolean visualReasoningRequired = shouldRequestVisualReasoning(
+                forceCapture,
+                accessibilityNeedsVisualReasoning
+        );
+        if (!visualReasoningRequired) {
             Log.i(LOG_TAG, "visual_context skipped reason=accessibility_clear");
             VisualScreenAugmenter.redactSnapshotInPlace(snapshot);
             callback.onReady("", false);
@@ -935,6 +964,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             VisualScreenAugmenter.redactSnapshotInPlace(snapshot);
             callback.onReady("", visualReasoningRequired);
         }
+    }
+
+    static boolean shouldRequestVisualReasoning(
+            boolean forceCapture,
+            boolean accessibilityNeedsVisualReasoning
+    ) {
+        return forceCapture || accessibilityNeedsVisualReasoning;
     }
 
     static boolean requiresVisualRecovery(
