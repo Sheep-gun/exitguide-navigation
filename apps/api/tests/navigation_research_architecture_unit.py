@@ -695,6 +695,61 @@ def main() -> None:
     assert promotional_modal_scores["click:profile-photo"][0] <= 0.08
     assert promotional_modal_scores["click:data-privacy"][0] <= 0.08
 
+    accessibility_grounded_modal_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="promotion-close"),
+            0.20,
+            NavigationCandidate(
+                candidate_id="promotion-close",
+                label="닫기",
+                nearby_text="Google AI 추가 스토리지 요금제 살펴보기 닫기",
+                parent_semantics="Google AI 요금제 살펴보기 닫기",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="view-plan"),
+            0.55,
+            NavigationCandidate(
+                candidate_id="view-plan",
+                label="요금제 살펴보기",
+                nearby_text="Google AI 추가 스토리지 닫기",
+                parent_semantics="Google AI 요금제 살펴보기 닫기",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="screen-close"),
+            0.50,
+            NavigationCandidate(
+                candidate_id="screen-close",
+                label="닫기",
+                nearby_text="Google 계정 도움말 검색",
+                parent_semantics="Google 계정 닫기 도움말",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="profile-photo"),
+            0.70,
+            NavigationCandidate(
+                candidate_id="profile-photo",
+                label="프로필 사진 변경",
+            ),
+        ),
+    ]
+    accessibility_grounded_modal_scores = (
+        policy._apply_promotional_modal_dismiss_guard(
+            scores={
+                "click:promotion-close": (0.20, "model"),
+                "click:view-plan": (0.55, "model"),
+                "click:screen-close": (0.50, "model"),
+                "click:profile-photo": (0.70, "model"),
+            },
+            enumerated=accessibility_grounded_modal_actions,
+        )
+    )
+    assert accessibility_grounded_modal_scores["click:promotion-close"][0] >= 0.99
+    assert accessibility_grounded_modal_scores["click:screen-close"][0] <= 0.08
+    assert accessibility_grounded_modal_scores["click:profile-photo"][0] <= 0.08
+
     foreign_app_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="foreign-membership"),

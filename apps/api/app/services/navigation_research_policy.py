@@ -2459,17 +2459,6 @@ class AndroidWorldResearchPolicy:
             return " ".join((candidate.visual_region, candidate.visual_role)).casefold()
 
         modal_markers = ("팝업", "모달", "대화상자", "popup", "modal", "dialog", "overlay")
-        modal_items = [
-            item
-            for item in click_items
-            if any(marker in modal_semantics(item) for marker in modal_markers)
-        ]
-        dismiss_labels = {"닫기", "나중에", "close", "dismiss", "not now", "maybe later"}
-        dismiss_items = [
-            item
-            for item in modal_items
-            if " ".join(item.candidate.label.casefold().split()) in dismiss_labels
-        ]
         promotion_markers = (
             "요금제",
             "플랜",
@@ -2484,12 +2473,39 @@ class AndroidWorldResearchPolicy:
             "trial",
             "upgrade",
         )
+        def promotion_context(item: EnumeratedAction) -> str:
+            candidate = item.candidate
+            if candidate is None:
+                return ""
+            return " ".join(
+                (
+                    _candidate_primary_semantic_text(candidate),
+                    candidate.nearby_text,
+                    candidate.parent_semantics,
+                    candidate.child_semantics,
+                    modal_semantics(item),
+                )
+            ).casefold()
+
+        # VLM may omit a visual popup role even though Accessibility grounds a
+        # close button and a plan/offer CTA in the same parent/nearby context.
+        # Treat that shared structure as modal evidence; it also distinguishes
+        # the promotion's close button from an unrelated screen-level close.
+        modal_items = [
+            item
+            for item in click_items
+            if any(marker in modal_semantics(item) for marker in modal_markers)
+            or any(marker in promotion_context(item) for marker in promotion_markers)
+        ]
+        dismiss_labels = {"닫기", "나중에", "close", "dismiss", "not now", "maybe later"}
+        dismiss_items = [
+            item
+            for item in modal_items
+            if " ".join(item.candidate.label.casefold().split()) in dismiss_labels
+        ]
         has_promotional_content = any(
             any(
-                marker in (
-                    _candidate_primary_semantic_text(item.candidate)
-                    + " " + modal_semantics(item)
-                )
+                marker in promotion_context(item)
                 for marker in promotion_markers
             )
             for item in modal_items

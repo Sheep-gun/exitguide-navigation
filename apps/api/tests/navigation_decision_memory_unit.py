@@ -49,6 +49,11 @@ def test_state_changing_action_labels_are_exact() -> None:
 def test_profile_deletion_is_a_dangerous_final_candidate() -> None:
     assert is_dangerous_final_candidate("프로필 삭제") is True
     assert is_dangerous_final_candidate("Delete profile") is True
+    assert is_dangerous_final_candidate("프로필 사진 삭제") is True
+    assert is_dangerous_final_candidate("Delete profile photo") is True
+    assert is_dangerous_final_candidate(
+        "프로필 사진을 삭제하시겠습니까? 프로필 사진 삭제"
+    ) is True
 
 
 def _load_migration_module():
