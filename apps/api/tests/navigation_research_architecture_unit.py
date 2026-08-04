@@ -2093,6 +2093,53 @@ def main() -> None:
         prior_values=ordered_role_values,
         recent_history=expected_visual_wait_history,
     ) == "account"
+    selected_control_scores = selective_policy._apply_selected_control_guard(
+        scores={
+            "click:my-page": (0.88, "model prefers the broad account hub"),
+            "click:account": (0.82, "explicit account entry"),
+            "click:settings": (0.78, "settings entry"),
+        },
+        enumerated=[
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="my-page"),
+                0.15,
+                NavigationCandidate(
+                    candidate_id="my-page",
+                    label="내 페이지",
+                    selected=True,
+                    risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="account"),
+                0.69,
+                NavigationCandidate(
+                    candidate_id="account",
+                    label="계정",
+                    selected=False,
+                    risk_level="low",
+                ),
+            ),
+            EnumeratedAction(
+                NavigationAction(name="click", candidate_id="settings"),
+                0.86,
+                NavigationCandidate(
+                    candidate_id="settings",
+                    label="설정",
+                    selected=False,
+                    risk_level="low",
+                ),
+            ),
+        ],
+    )
+    assert selected_control_scores["click:my-page"][0] == 0.05
+    assert selected_control_scores["click:my-page"][1].startswith(
+        "python_selected_control_guard:"
+    )
+    assert selected_control_scores["click:account"][0] == 0.82
+    assert max(selected_control_scores, key=lambda key: selected_control_scores[key][0]) == (
+        "click:account"
+    )
     ambiguous_semantic_query = replace(
         semantic_fast_path_query,
         screen=replace(

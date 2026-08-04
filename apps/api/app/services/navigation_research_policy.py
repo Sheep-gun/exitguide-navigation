@@ -1181,6 +1181,13 @@ class AndroidWorldResearchPolicy:
                     provider += "->python_promotional_modal_dismiss_guard"
                 if any(
                     value.verifier_reason.startswith(
+                        "python_selected_control_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_selected_control_guard"
+                if any(
+                    value.verifier_reason.startswith(
                         "python_membership_hub_affordance_guard:"
                     )
                     for value in updated_values
@@ -1984,6 +1991,10 @@ class AndroidWorldResearchPolicy:
             scores=scores,
             enumerated=enumerated,
         )
+        scores = self._apply_selected_control_guard(
+            scores=scores,
+            enumerated=enumerated,
+        )
         scores = self._apply_external_app_stop_guard(
             scores=scores,
             enumerated=enumerated,
@@ -2102,6 +2113,40 @@ class AndroidWorldResearchPolicy:
             "python_direct_role_guard: direct candidate role outranks unrelated click; "
             + selected_reason,
         )
+        return adjusted
+
+    def _apply_selected_control_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Keep a model from reselecting the currently active control.
+
+        Accessibility ``selected`` is direct evidence that a tab or navigation
+        control represents the current screen.  The deterministic prior already
+        demotes it, but a model verifier can otherwise overwrite that value and
+        rank the same tab above a newly exposed, deeper account/settings entry.
+        This generic post-model invariant prevents a no-op loop without choosing
+        which of the remaining candidates is correct; Solar still compares them.
+        """
+
+        adjusted = dict(scores)
+        for item in enumerated:
+            candidate = item.candidate
+            if (
+                item.action.name != "click"
+                or candidate is None
+                or not candidate.selected
+            ):
+                continue
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            adjusted[key] = (
+                min(score, 0.05),
+                "python_selected_control_guard: selected control is the current "
+                "surface and cannot advance navigation; " + reason,
+            )
         return adjusted
 
     def _apply_external_app_stop_guard(
