@@ -102,6 +102,26 @@ GOAL_OPERATION_TOKENS: dict[str, frozenset[str]] = {
         {"cancel", "cancellation", "unsubscribe", "termination", "terminate"}
     ),
 }
+GOAL_FAMILY_TOKENS: dict[str, frozenset[str]] = {
+    "account.signup": frozenset(
+        {"account", "accounts", "email", "user", "profile", "계정", "회원"}
+    ),
+    "account.delete": frozenset(
+        {"account", "accounts", "user", "profile", "계정", "회원"}
+    ),
+    "membership.join": frozenset(
+        {"membership", "subscription", "premium", "plan", "멤버십", "구독", "요금제"}
+    ),
+    "membership.manage": frozenset(
+        {"membership", "subscription", "premium", "billing", "멤버십", "구독", "결제"}
+    ),
+    "membership.change": frozenset(
+        {"membership", "subscription", "premium", "plan", "멤버십", "구독", "요금제"}
+    ),
+    "membership.cancel": frozenset(
+        {"membership", "subscription", "premium", "renewal", "멤버십", "구독", "갱신"}
+    ),
+}
 GOAL_OPERATION_PHRASES: dict[str, tuple[str, ...]] = {
     "account.signup": (
         "sign up",
@@ -549,13 +569,31 @@ def _transition_operation_matches(goal_id: str, text: str) -> bool:
     """
 
     normalized = " ".join(text.casefold().split())
+    if goal_id == "account.signup" and any(
+        phrase in normalized
+        for phrase in (
+            "didn't register",
+            "did not register",
+            "doesn't register",
+            "does not register",
+            "failed to register",
+            "not register",
+            "등록되지",
+            "등록 안",
+        )
+    ):
+        # GUI traces often say a previous tap "didn't register".  That is an
+        # execution-status phrase, not evidence of an account registration UI.
+        return False
     if any(
         phrase in normalized
         for phrase in GOAL_OPERATION_PHRASES.get(goal_id, ())
     ):
         return True
     tokens = set(_tokens(normalized))
-    return bool(tokens & GOAL_OPERATION_TOKENS.get(goal_id, frozenset()))
+    has_family = bool(tokens & GOAL_FAMILY_TOKENS.get(goal_id, frozenset()))
+    has_operation = bool(tokens & GOAL_OPERATION_TOKENS.get(goal_id, frozenset()))
+    return has_family and has_operation
 
 
 def _screen_tokens(screen: SemanticScreenState) -> tuple[tuple[str, ...], tuple[set[str], ...]]:
