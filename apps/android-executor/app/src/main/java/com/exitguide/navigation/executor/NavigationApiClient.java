@@ -116,6 +116,14 @@ final class NavigationApiClient {
                 connection.setReadTimeout(120_000);
                 connection.setInstanceFollowRedirects(false);
                 connection.setRequestProperty("Accept", "application/json");
+                // ADB reverse + an SSH local forward can leave an HTTP/1.1
+                // keep-alive response half-open after N100 has already sent
+                // the complete body. Large /decide responses then wait for the
+                // 120-second read timeout and are retried despite a server-side
+                // 200. Close each bounded request explicitly and avoid content
+                // encoding so completion is unambiguous across both tunnels.
+                connection.setRequestProperty("Connection", "close");
+                connection.setRequestProperty("Accept-Encoding", "identity");
                 if (payload != null) {
                     byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
                     connection.setDoOutput(true);
