@@ -629,6 +629,72 @@ def main() -> None:
         enumerated=account_management_actions,
     )["click:generic-account-list"][0] == 0.95
 
+    account_privacy_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="profile-photo"),
+            0.70,
+            NavigationCandidate(
+                candidate_id="profile-photo",
+                label="프로필 사진 변경",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="data-privacy"),
+            0.40,
+            NavigationCandidate(
+                candidate_id="data-privacy",
+                label="데이터 및 개인 정보 보호",
+            ),
+        ),
+    ]
+    account_privacy_scores = policy._apply_account_delete_privacy_entry_guard(
+        scores={
+            "click:profile-photo": (0.70, "model chose profile photo"),
+            "click:data-privacy": (0.40, "model undervalued privacy hub"),
+        },
+        goal_id="account.delete",
+        enumerated=account_privacy_actions,
+    )
+    assert account_privacy_scores["click:data-privacy"][0] >= 0.95
+    assert account_privacy_scores["click:profile-photo"][0] <= 0.12
+
+    promotional_modal_actions = [
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="modal-close"),
+            0.30,
+            NavigationCandidate(
+                candidate_id="modal-close",
+                label="닫기",
+                visual_role="닫기 버튼",
+                visual_region="Google AI 요금제 팝업 상단",
+            ),
+        ),
+        EnumeratedAction(
+            NavigationAction(name="click", candidate_id="view-plans"),
+            0.60,
+            NavigationCandidate(
+                candidate_id="view-plans",
+                label="요금제 살펴보기",
+                visual_role="요금제 살펴보기 버튼",
+                visual_region="Google AI 요금제 팝업 중앙",
+            ),
+        ),
+        *account_privacy_actions,
+    ]
+    promotional_modal_scores = policy._apply_promotional_modal_dismiss_guard(
+        scores={
+            "click:modal-close": (0.30, "model"),
+            "click:view-plans": (0.60, "model"),
+            "click:profile-photo": (0.70, "model"),
+            "click:data-privacy": (0.95, "privacy guard"),
+        },
+        enumerated=promotional_modal_actions,
+    )
+    assert promotional_modal_scores["click:modal-close"][0] >= 0.99
+    assert promotional_modal_scores["click:view-plans"][0] <= 0.08
+    assert promotional_modal_scores["click:profile-photo"][0] <= 0.08
+    assert promotional_modal_scores["click:data-privacy"][0] <= 0.08
+
     foreign_app_actions = [
         EnumeratedAction(
             NavigationAction(name="click", candidate_id="foreign-membership"),

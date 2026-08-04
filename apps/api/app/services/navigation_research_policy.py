@@ -1167,6 +1167,20 @@ class AndroidWorldResearchPolicy:
                     provider += "->python_account_delete_provider_gateway_guard"
                 if any(
                     value.verifier_reason.startswith(
+                        "python_account_delete_privacy_entry_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_account_delete_privacy_entry_guard"
+                if any(
+                    value.verifier_reason.startswith(
+                        "python_promotional_modal_dismiss_guard:"
+                    )
+                    for value in updated_values
+                ):
+                    provider += "->python_promotional_modal_dismiss_guard"
+                if any(
+                    value.verifier_reason.startswith(
                         "python_membership_hub_affordance_guard:"
                     )
                     for value in updated_values
@@ -1943,6 +1957,11 @@ class AndroidWorldResearchPolicy:
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
         )
+        scores = self._apply_account_delete_privacy_entry_guard(
+            scores=scores,
+            goal_id=None if query.goal is None else query.goal.goal_id,
+            enumerated=enumerated,
+        )
         scores = self._apply_membership_hub_affordance_guard(
             scores=scores,
             goal_id=None if query.goal is None else query.goal.goal_id,
@@ -1960,6 +1979,10 @@ class AndroidWorldResearchPolicy:
             goal_id=None if query.goal is None else query.goal.goal_id,
             enumerated=enumerated,
             screen_text=query.screen.title,
+        )
+        scores = self._apply_promotional_modal_dismiss_guard(
+            scores=scores,
+            enumerated=enumerated,
         )
         scores = self._apply_external_app_stop_guard(
             scores=scores,
@@ -2174,6 +2197,180 @@ class AndroidWorldResearchPolicy:
                 "management is not account deletion; "
                 + reason,
             )
+        return adjusted
+
+    def _apply_account_delete_privacy_entry_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        goal_id: str | None,
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Prefer a visible data/privacy hub over unrelated account utilities.
+
+        Account providers generally place deletion below a data/privacy hub.
+        This guard is app-independent and activates only when the current
+        candidate set itself contains that explicit semantic role.
+        """
+
+        adjusted = dict(scores)
+        if goal_id != "account.delete":
+            return adjusted
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click"
+            and item.candidate is not None
+            and item.candidate.risk_level == "low"
+            and item.candidate.clickable
+            and item.candidate.enabled
+            and not item.candidate.selected
+        ]
+        privacy_items = [
+            item
+            for item in click_items
+            if any(
+                marker in _candidate_primary_semantic_text(item.candidate)
+                for marker in (
+                    "데이터 및 개인 정보",
+                    "데이터 및 개인정보",
+                    "개인 정보 보호",
+                    "개인정보 보호",
+                    "개인정보 설정",
+                    "data and privacy",
+                    "data & privacy",
+                    "privacy settings",
+                    "privacy hub",
+                )
+            )
+        ]
+        if not privacy_items:
+            return adjusted
+        unrelated_markers = (
+            "프로필 사진",
+            "프로필 이미지",
+            "프로필 수정",
+            "프로필 편집",
+            "아바타",
+            "요금제 살펴보기",
+            "플랜 살펴보기",
+            "월렛",
+            "결제 수단",
+            "거래 내역",
+            "연결된 앱",
+            "도움말",
+            "검색",
+            "profile photo",
+            "profile picture",
+            "edit profile",
+            "view plans",
+            "wallet",
+            "payment method",
+            "transactions",
+            "connected apps",
+            "help",
+            "search",
+        )
+        privacy_keys = {_action_key(item.action) for item in privacy_items}
+        for item in click_items:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            if key in privacy_keys:
+                adjusted[key] = (
+                    max(score, 0.95),
+                    "python_account_delete_privacy_entry_guard: explicit data/privacy "
+                    "hub is the grounded intermediate destination; " + reason,
+                )
+                continue
+            primary = _candidate_primary_semantic_text(item.candidate)
+            if any(marker in primary for marker in unrelated_markers):
+                adjusted[key] = (
+                    min(score, 0.12),
+                    "python_account_delete_privacy_entry_guard: unrelated account "
+                    "utility cannot outrank the visible data/privacy hub; " + reason,
+                )
+        return adjusted
+
+    def _apply_promotional_modal_dismiss_guard(
+        self,
+        *,
+        scores: Mapping[str, tuple[float, str]],
+        enumerated: Sequence[EnumeratedAction],
+    ) -> dict[str, tuple[float, str]]:
+        """Dismiss an observed promotional modal before clicking content below it."""
+
+        adjusted = dict(scores)
+        click_items = [
+            item
+            for item in enumerated
+            if item.action.name == "click"
+            and item.candidate is not None
+            and item.candidate.risk_level == "low"
+            and item.candidate.clickable
+            and item.candidate.enabled
+            and not item.candidate.selected
+        ]
+
+        def modal_semantics(item: EnumeratedAction) -> str:
+            candidate = item.candidate
+            if candidate is None:
+                return ""
+            return " ".join((candidate.visual_region, candidate.visual_role)).casefold()
+
+        modal_markers = ("팝업", "모달", "대화상자", "popup", "modal", "dialog", "overlay")
+        modal_items = [
+            item
+            for item in click_items
+            if any(marker in modal_semantics(item) for marker in modal_markers)
+        ]
+        dismiss_labels = {"닫기", "나중에", "close", "dismiss", "not now", "maybe later"}
+        dismiss_items = [
+            item
+            for item in modal_items
+            if " ".join(item.candidate.label.casefold().split()) in dismiss_labels
+        ]
+        promotion_markers = (
+            "요금제",
+            "플랜",
+            "혜택",
+            "가입",
+            "체험",
+            "업그레이드",
+            "view plan",
+            "view plans",
+            "learn more",
+            "offer",
+            "trial",
+            "upgrade",
+        )
+        has_promotional_content = any(
+            any(
+                marker in (
+                    _candidate_primary_semantic_text(item.candidate)
+                    + " " + modal_semantics(item)
+                )
+                for marker in promotion_markers
+            )
+            for item in modal_items
+        )
+        if not dismiss_items or not has_promotional_content:
+            return adjusted
+        dismiss_keys = {_action_key(item.action) for item in dismiss_items}
+        for item in click_items:
+            key = _action_key(item.action)
+            score, reason = adjusted.get(key, (0.0, ""))
+            if key in dismiss_keys:
+                adjusted[key] = (
+                    max(score, 0.99),
+                    "python_promotional_modal_dismiss_guard: dismiss the observed "
+                    "non-goal promotion before evaluating underlying content; " + reason,
+                )
+            else:
+                adjusted[key] = (
+                    min(score, 0.08),
+                    "python_promotional_modal_dismiss_guard: underlying or promotional "
+                    "content is blocked until the modal is dismissed; " + reason,
+                )
         return adjusted
 
     def _apply_membership_hub_affordance_guard(

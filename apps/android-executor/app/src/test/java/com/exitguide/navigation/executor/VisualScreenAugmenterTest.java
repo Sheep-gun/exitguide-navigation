@@ -33,6 +33,12 @@ public final class VisualScreenAugmenterTest {
                         "프로필을 변경 또는 관리하세요. carson0306"
                 )
         );
+        assertEquals(
+                "데이터 및 개인 정보 보호 [email]",
+                VisualScreenAugmenter.redactSensitiveText(
+                        "데이터 및 개인 정보 보호 person@example.com"
+                )
+        );
     }
 
     @Test

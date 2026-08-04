@@ -66,7 +66,9 @@ final class VisualScreenAugmenter implements AutoCloseable {
             Pattern.CASE_INSENSITIVE
     );
     private static final Pattern LONG_NUMBER = Pattern.compile("(?<!\\d)\\d{7,}(?!\\d)");
-    private static final Pattern HONORIFIC_NAME = Pattern.compile(".*[가-힣]{2,4}\\s*님.*");
+    private static final Pattern HONORIFIC_NAME = Pattern.compile(
+            "(?<![가-힣])[가-힣]{2,4}\\s*님(?![가-힣])"
+    );
     private static final Pattern STREET_ADDRESS = Pattern.compile(
             ".*(?:주소|[가-힣0-9]+(?:로|길)\\s*\\d+).*"
     );
@@ -137,10 +139,30 @@ final class VisualScreenAugmenter implements AutoCloseable {
             Set<String> accountIdentifiers
     ) {
         String source = value == null ? "" : value;
-        if (hasDirectSensitiveData(source.toLowerCase(Locale.ROOT))) {
+        String normalized = source.toLowerCase(Locale.ROOT);
+        if (normalized.contains("bearer ")
+                || normalized.contains("access token")
+                || normalized.contains("session token")
+                || normalized.contains("password")
+                || normalized.contains("비밀번호")
+                || normalized.contains("인증번호")) {
             return "[redacted]";
         }
-        Matcher matcher = ACCOUNT_IDENTIFIER_TOKEN.matcher(source);
+        // Mask the sensitive fragments rather than replacing the whole UI
+        // sentence. Whole-field replacement erased navigation semantics such
+        // as "데이터 및 개인 정보 보호" whenever an email or account name was
+        // included in the same accessibility label.
+        String redacted = EMAIL.matcher(source).replaceAll("[email]");
+        redacted = USER_HANDLE.matcher(redacted).replaceAll("[handle]");
+        redacted = MASKED_KOREAN_NAME.matcher(redacted).replaceAll("[name]");
+        redacted = PHONE.matcher(redacted).replaceAll("[phone]");
+        redacted = CURRENCY.matcher(redacted).replaceAll("[amount]");
+        redacted = LONG_NUMBER.matcher(redacted).replaceAll("[number]");
+        redacted = HONORIFIC_NAME.matcher(redacted).replaceAll("[name]님");
+        if (STREET_ADDRESS.matcher(redacted).matches()) {
+            redacted = "[address]";
+        }
+        Matcher matcher = ACCOUNT_IDENTIFIER_TOKEN.matcher(redacted);
         StringBuffer output = new StringBuffer();
         while (matcher.find()) {
             String token = matcher.group();
