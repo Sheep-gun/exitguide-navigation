@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-04T07:59:19+09:00
+updated_at: 2026-08-04T09:13:03+09:00
 priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
 decision_db_collection: active
-next_action: 활성 Premium 계정과 현재 결제 관리 화면을 이용해 YouTube membership.change 목적지를 실기기에서 검증한다.
+next_action: YouTube를 다시 실행해 account.delete 목표를 candidate_id 기반으로 실기기 검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-S936N, Android 16
 verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
-deployed_commit: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
+integration_commit: `5adcb54e3831bc0edcca2e5ecd23109cdd47c96f`
+deployed_commit: `5adcb54e3831bc0edcca2e5ecd23109cdd47c96f`
 
 ## 고정 정책
 
@@ -43,7 +43,7 @@ deployed_commit: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 6셀, 미완료 49셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 7셀, 미완료 48셀
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
@@ -52,14 +52,14 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-38fcbf8-repo`
-- deployed_git_head: `38fcbf839f0dde53dd9d8423849db65dd4fbcd78`
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-5adcb54-repo`
+- deployed_git_head: `5adcb54e3831bc0edcca2e5ecd23109cdd47c96f`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
 - Decision DB: read-only patched immutable clone
-- Runtime DB: coverage 전용, sessions 14, decisions 71, observations 64
+- Runtime DB: coverage 전용, sessions 22, decisions 97, observations 84
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
 - target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
@@ -166,6 +166,26 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - interaction episodes: 2 episodes / 5 steps
 - promotion candidates: 1 draft, support 1; generation/projection 0
 - evidence: `docs/evidence/youtube-membership-cancel-safe-boundary-20260804.md`
+
+## YouTube membership.change 서비스 정책 경계
+
+- corrected_session: `navs_5e40c4483d1b46068caa6c6ce039cb75`
+- result: `not_testable`
+- blocking_issue: `service_policy`
+- candidate-ID clicks: 2
+- observed path: 활성 Premium → 외부 구독 관리 게이트웨이 → 설정 → 예비 결제수단 관리
+- plan-change candidates: `요금제 변경` 0, `플랜 변경` 0, `업그레이드` 0, `다운그레이드` 0
+- executor actions succeeded: 4/4
+- screen changes after clicks: 2/2
+- connection errors: 0
+- dangerous final auto click: 0
+- false-success promotion: 0
+- generic B tuning: 콘텐츠 탭 억제, 명시적 관리 게이트웨이 우선, 신뢰된 외부 관리 화면 계속 탐색, 결제수단 유지보수와 요금제 변경 분리
+- local/N100 API unit tests for deployed code: 10/10 passed
+- evidence: `docs/evidence/youtube-membership-change-service-policy-20260804.md`
+
+현재 Executor 목표 루프는 중지돼 있고 실기기는 Google Play의 결제수단 관리 화면에 있다.
+다음 시작 스크립트는 YouTube를 다시 열고 `account.delete` 새 세션을 시작해야 한다.
 
 ## 안전 불변조건
 
