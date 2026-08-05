@@ -24,8 +24,10 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 
 import org.json.JSONException;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.Locale;
 import java.util.List;
 import java.util.UUID;
@@ -70,6 +72,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private String collectionRunId = "";
     private String collectionBatchId = "";
     private String collectionStartedAt = "";
+    private String lastOperatorSignature = "";
+    private int repeatedOperatorCommandCount;
 
     private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
         @Override
@@ -110,6 +114,18 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
     };
 
+    private final BroadcastReceiver operatorCommandReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
+                return;
+            }
+            continuationGate.reset();
+            cancelPending();
+            scheduleDecision(0);
+        }
+    };
+
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
@@ -141,6 +157,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL),
                     Context.RECEIVER_NOT_EXPORTED
             );
+            registerReceiver(
+                    operatorCommandReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_OPERATOR_COMMAND_CHANGED),
+                    Context.RECEIVER_NOT_EXPORTED
+            );
         } else {
             registerReceiver(configurationReceiver, filter);
             registerReceiver(
@@ -150,6 +171,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             registerReceiver(
                     diagnosticReceiver,
                     new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL)
+            );
+            registerReceiver(
+                    operatorCommandReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_OPERATOR_COMMAND_CHANGED)
             );
         }
         publish("접근성 서비스가 준비되었습니다.");
@@ -223,6 +248,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
         try {
             unregisterReceiver(statusReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Service startup did not finish.
+        }
+        try {
+            unregisterReceiver(operatorCommandReceiver);
         } catch (IllegalArgumentException ignored) {
             // Service startup did not finish.
         }
@@ -392,6 +422,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         )
                         + " candidates=" + snapshot.bindings.size()
         );
+        if (ExecutorPreferences.codexOperatorMode(this)) {
+            handleCodexOperatorSnapshot(snapshot, appObservation);
+            return;
+        }
         long generation = episodeGuard.current();
         inFlight = true;
         boolean forceVisualReasoning = forceVisualNextDecision;
@@ -413,7 +447,84 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     emptyToNull(dataUrl),
                     visualReasoningRequired,
                     appObservation,
-                    generation
+                    generation,
+                    null
+            );
+        });
+    }
+
+    private void handleCodexOperatorSnapshot(
+            AccessibilityScreenReader.ScreenSnapshot snapshot,
+            ForegroundAppSessionTracker.Observation appObservation
+    ) {
+        try {
+            LatestScreenStore.write(
+                    this,
+                    snapshot,
+                    ExecutorPreferences.goal(this),
+                    packageVersion(appObservation.currentAppPackage),
+                    sessionId,
+                    stepOrdinal
+            );
+        } catch (IOException | JSONException error) {
+            publish("현재 화면 기록 실패: " + error.getMessage());
+            scheduleDecision(1_000);
+            return;
+        }
+        ExecutorPreferences.OperatorCommand command =
+                ExecutorPreferences.pendingOperatorCommand(this);
+        if (command == null) {
+            publish("화면과 후보를 기록했습니다. Codex 선택을 기다립니다.");
+            return;
+        }
+        if (!snapshot.screenFingerprint.equals(command.expectedScreenFingerprint)) {
+            ExecutorPreferences.clearOperatorCommand(this);
+            publish("화면이 바뀌어 오래된 Codex 명령을 폐기했습니다.");
+            return;
+        }
+        if ("click".equals(command.actionName)
+                && !snapshot.bindings.containsKey(command.candidateId)) {
+            ExecutorPreferences.clearOperatorCommand(this);
+            publish("현재 화면에 없는 후보를 가리킨 Codex 명령을 폐기했습니다.");
+            return;
+        }
+        String operatorSignature = snapshot.screenFingerprint
+                + "|" + command.actionName
+                + "|" + command.candidateId
+                + "|" + command.direction;
+        if (operatorSignature.equals(lastOperatorSignature)) {
+            repeatedOperatorCommandCount++;
+        } else {
+            lastOperatorSignature = operatorSignature;
+            repeatedOperatorCommandCount = 1;
+        }
+        if (repeatedOperatorCommandCount >= 3) {
+            ExecutorPreferences.clearOperatorCommand(this);
+            String previousSessionId = sessionId;
+            resetEpisodeForContinuation();
+            requestSessionStop(
+                    previousSessionId,
+                    "loop_detected",
+                    "same_screen_operator_action_repeated"
+            );
+            publish("같은 화면에서 같은 행동이 반복되어 세션만 닫았습니다. 다른 선택을 기다립니다.");
+            scheduleDecision(300);
+            return;
+        }
+        long generation = episodeGuard.current();
+        inFlight = true;
+        ExecutorPreferences.clearOperatorCommand(this);
+        prepareVisualContext(snapshot, false, (dataUrl, visualReasoningRequired) -> {
+            if (!acceptsCallback(generation)) {
+                return;
+            }
+            postDecision(
+                    snapshot,
+                    emptyToNull(dataUrl),
+                    visualReasoningRequired,
+                    appObservation,
+                    generation,
+                    command
             );
         });
     }
@@ -423,7 +534,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             String screenshotDataUrl,
             boolean visualReasoningRequired,
             ForegroundAppSessionTracker.Observation appObservation,
-            long generation
+            long generation,
+            ExecutorPreferences.OperatorCommand operatorCommand
     ) {
         if (!acceptsCallback(generation)) {
             return;
@@ -453,12 +565,22 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                             collectionStartedAt
                     )
             );
-            request.put("task_context", CollectionRunMetadata.taskContext());
+            request.put("task_context", CollectionRunMetadata.taskContext(this));
+            if (operatorCommand != null) {
+                request.put("operator_action", operatorAction(operatorCommand));
+                request.put("operator_source", "codex");
+                request.put("operator_command_id", operatorCommand.commandId);
+                request.put("operator_reason_codes", reasonCodes(operatorCommand.reasonCodesCsv));
+                request.put("operator_reason_text", operatorCommand.reasonText);
+                request.put("operator_review_status", operatorCommand.reviewStatus);
+            }
             if (screenshotDataUrl != null) {
                 request.put("screenshot_data_url", screenshotDataUrl);
             }
             request.put("screen", snapshot.payload);
-            publish("다음 안전 행동을 판단하는 중입니다.");
+            publish(operatorCommand == null
+                    ? "다음 안전 행동을 판단하는 중입니다."
+                    : "Codex 선택을 안전 검사하고 기록하는 중입니다.");
             apiClient.post(
                     ExecutorPreferences.apiBaseUrl(this),
                     "/v1/navigation/decide",
@@ -493,6 +615,31 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             inFlight = false;
             stop("판단 요청을 만들 수 없습니다: " + error.getMessage());
         }
+    }
+
+    private static JSONObject operatorAction(
+            ExecutorPreferences.OperatorCommand command
+    ) throws JSONException {
+        JSONObject action = new JSONObject();
+        action.put("name", command.actionName);
+        if (!command.candidateId.isEmpty()) {
+            action.put("candidate_id", command.candidateId);
+        }
+        if (!command.direction.isEmpty()) {
+            action.put("direction", command.direction);
+        }
+        return action;
+    }
+
+    private static JSONArray reasonCodes(String csv) {
+        JSONArray values = new JSONArray();
+        for (String item : csv.split(",")) {
+            String value = item.trim();
+            if (!value.isEmpty()) {
+                values.put(value);
+            }
+        }
+        return values;
     }
 
     private void handleDecision(
@@ -1345,6 +1492,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         frameSequence = 0L;
         collectionRunId = "";
         collectionStartedAt = "";
+        lastOperatorSignature = "";
+        repeatedOperatorCommandCount = 0;
     }
 
     private void awaitForegroundAppChange(AccessibilityScreenReader.ScreenSnapshot baseline) {

@@ -6,11 +6,11 @@ import android.content.Intent;
 import android.util.Log;
 
 /**
- * ADB-only bridge for non-mutating installation diagnostics.
+ * ADB-only bridge for collector control and installation diagnostics.
  *
  * <p>The exported receiver requires Android's signature-level DUMP permission,
- * which the ADB shell owns. It forwards the request as an app-internal
- * broadcast; it never starts navigation or executes an accessibility action.</p>
+ * which the ADB shell owns. Accessibility actions are still grounded and
+ * safety-checked by the service and server before execution.</p>
  */
 public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
     private static final String LOG_TAG = "ExitGuideNavigationExecutor";
@@ -32,6 +32,18 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             if (collectorAlias.isEmpty()) {
                 collectorAlias = ExecutorPreferences.collectorAlias(context);
             }
+            ExecutorPreferences.clearOperatorCommand(context);
+            ExecutorPreferences.setTaskPreconditions(
+                    context,
+                    valueOr(intent, "account_state", "unknown"),
+                    valueOr(intent, "service_state", "unknown"),
+                    valueOr(intent, "start_surface", ""),
+                    valueOr(intent, "precondition_status", "unknown"),
+                    valueOr(intent, "reset_method", ""),
+                    intent.getBooleanExtra("reset_verified", false),
+                    valueOr(intent, "precondition_source", "unknown"),
+                    boundedConfidence(intent.getFloatExtra("precondition_confidence", -1.0f))
+            );
             ExecutorPreferences.configure(
                     context,
                     apiBaseUrl,
@@ -44,8 +56,53 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             return;
         }
         if (ExecutorPreferences.ACTION_ADB_STOP_NAVIGATION.equals(action)) {
+            ExecutorPreferences.clearOperatorCommand(context);
             ExecutorPreferences.setActive(context, false);
             Log.i(LOG_TAG, "adb_control stopped");
+            return;
+        }
+        if (ExecutorPreferences.ACTION_ADB_OPERATOR_ACTION.equals(action)) {
+            String actionName = value(intent.getStringExtra("action_name"));
+            String candidateId = value(intent.getStringExtra("candidate_id"));
+            String direction = value(intent.getStringExtra("direction"));
+            String commandId = value(intent.getStringExtra("command_id"));
+            String expectedScreen = value(intent.getStringExtra("expected_screen_fingerprint"));
+            String reasonCodes = value(intent.getStringExtra("reason_codes"));
+            String reasonText = value(intent.getStringExtra("reason_text"));
+            String reviewStatus = valueOr(intent, "review_status", "unreviewed");
+            if (!ExecutorPreferences.active(context)
+                    || !NavigationSafetyPolicy.isAllowedAction(actionName)
+                    || commandId.isEmpty()
+                    || expectedScreen.isEmpty()
+                    || reasonCodes.isEmpty()
+                    || ("click".equals(actionName) && candidateId.isEmpty())
+                    || ("scroll".equals(actionName)
+                            && !("up".equals(direction) || "down".equals(direction)))
+                    || !("unreviewed".equals(reviewStatus)
+                            || "provisional".equals(reviewStatus)
+                            || "verified".equals(reviewStatus))) {
+                Log.w(LOG_TAG, "adb_control operator_action_rejected reason=invalid_command");
+                return;
+            }
+            boolean saved = ExecutorPreferences.saveOperatorCommand(
+                    context,
+                    new ExecutorPreferences.OperatorCommand(
+                            actionName,
+                            candidateId,
+                            direction,
+                            commandId,
+                            expectedScreen,
+                            reasonCodes,
+                            reasonText,
+                            reviewStatus
+                    )
+            );
+            Log.i(
+                    LOG_TAG,
+                    "adb_control operator_action_saved=" + saved
+                            + " command_id=" + commandId
+                            + " action=" + actionName
+            );
             return;
         }
         if (!ExecutorPreferences.ACTION_DIAGNOSTIC_REQUEST.equals(action)) {
@@ -63,5 +120,14 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
 
     private static String value(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private static String valueOr(Intent intent, String key, String fallback) {
+        String result = value(intent.getStringExtra(key));
+        return result.isEmpty() ? fallback : result;
+    }
+
+    private static float boundedConfidence(float value) {
+        return value < 0.0f ? -1.0f : Math.min(1.0f, value);
     }
 }

@@ -35,6 +35,7 @@ from app.services.navigation_research_policy import AndroidWorldResearchPolicy
 from app.services.navigation_runtime import NavigationRuntime
 from app.services.navigation_runtime_store import NavigationRuntimeStore
 from app.services.navigation_review import (
+    NavigationCandidateLabelsRequest,
     NavigationHumanReviewRequest,
     NavigationReviewStore,
 )
@@ -266,6 +267,21 @@ def navigation_save_review(
 ) -> dict[str, object]:
     try:
         return get_navigation_review_store().save_review(decision_id, request)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="navigation decision was not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except (OSError, RuntimeError, sqlite3.Error) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+
+@app.put("/v1/navigation/review/decisions/{decision_id}/candidate-labels")
+def navigation_save_candidate_labels(
+    decision_id: str,
+    request: NavigationCandidateLabelsRequest,
+) -> dict[str, object]:
+    try:
+        return get_navigation_review_store().save_candidate_labels(decision_id, request)
     except KeyError as error:
         raise HTTPException(status_code=404, detail="navigation decision was not found") from error
     except ValueError as error:

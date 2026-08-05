@@ -13,11 +13,11 @@ android {
         applicationId "com.exitguide.navigation.executor"
         minSdk 30
         targetSdk 36
-        versionCode 8
-        versionName "0.5.3"
+        versionCode 9
+        versionName "0.6.0"
 
         buildConfigField "String", "DEFAULT_NAVIGATION_API", '"http://100.77.172.25:8100"'
-        buildConfigField "String", "COLLECTOR_BUILD_ID", '"navigation-runtime-v5-serialized-goal-switch"'
+        buildConfigField "String", "COLLECTOR_BUILD_ID", '"navigation-runtime-v6-codex-operator"'
         testInstrumentationRunner "android.app.InstrumentationTestRunner"
     }
 

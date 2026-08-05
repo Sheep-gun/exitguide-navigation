@@ -771,6 +771,9 @@ def main() -> None:
                 operator_action=NavigationAction(name="click", candidate_id="search"),
                 operator_source="codex",
                 operator_command_id="codex-command-1",
+                operator_reason_codes=["goal_match", "stage_forward"],
+                operator_reason_text="회원 탈퇴 메뉴로 가는 후보",
+                operator_review_status="provisional",
                 screen=_account_screen(),
             )
         )

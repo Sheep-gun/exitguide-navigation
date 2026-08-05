@@ -1,5 +1,7 @@
 # Android Executor v1
 
+> 최신 수집기 운용 기준은 `COLLECTOR_CODEX_OPERATOR_V6.ko.md`를 따른다. 이 문서는 초기 자동 실행기 구조 기록이다.
+
 `apps/android-executor`는 Navigation API가 승인한 행동을 실기기에서 실행하고, 행동 전후 화면과 전체 후보를 다시 API에 보내는 수집기다. 앱별 Gold 경로를 재생하지 않으며 임의 좌표를 만들지 않는다.
 
 ## 한 단계의 실제 흐름

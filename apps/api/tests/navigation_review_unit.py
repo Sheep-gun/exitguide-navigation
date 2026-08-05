@@ -5,6 +5,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -17,6 +18,8 @@ if str(API_ROOT) not in sys.path:
 
 from app.config import get_settings  # noqa: E402
 from app.services.navigation_review import (  # noqa: E402
+    CandidateTrainingLabelRequest,
+    NavigationCandidateLabelsRequest,
     NavigationHumanReviewRequest,
     NavigationReviewStore,
 )
@@ -233,7 +236,7 @@ def main() -> None:
         _build_runtime(runtime_path)
         store = NavigationReviewStore(runtime_path, review_path)
 
-        with store._runtime_connect() as source:
+        with closing(store._runtime_connect()) as source:
             try:
                 source.execute("CREATE TABLE forbidden_write(value TEXT)")
                 raise AssertionError("Runtime DB accepted a write through the review connection")
@@ -269,6 +272,35 @@ def main() -> None:
         assert runtime_path.read_bytes() == source_before
         reviewed = store.detail("d-routine", reviewer="tester")["human_review"]
         assert reviewed["better_candidate_id"] == "candidate-alt"
+        labeled = store.save_candidate_labels(
+            "d-routine",
+            NavigationCandidateLabelsRequest(
+                reviewer="tester",
+                label_source="codex",
+                review_status="provisional",
+                labels=[
+                    CandidateTrainingLabelRequest(
+                        candidate_id="candidate-main",
+                        label="hard_negative",
+                        confidence=0.9,
+                        reason_codes=["wrong_branch"],
+                    ),
+                    CandidateTrainingLabelRequest(
+                        candidate_id="candidate-alt",
+                        label="best",
+                        confidence=0.95,
+                        reason_codes=["stage_forward"],
+                    ),
+                ],
+            ),
+        )
+        assert labeled["label_count"] == 2
+        assert runtime_path.read_bytes() == source_before
+        candidate_labels = store.detail("d-routine", reviewer="tester")["candidate_labels"]
+        assert {item["candidate_id"]: item["label"] for item in candidate_labels} == {
+            "candidate-alt": "best",
+            "candidate-main": "hard_negative",
+        }
         assert store.status(reviewer="tester")["counts"]["reviewed"] == 1
 
         os.environ["NAVIGATION_RUNTIME_DB_PATH"] = str(runtime_path)
@@ -288,6 +320,27 @@ def main() -> None:
         )
         assert response.status_code == 200
         assert response.json()["items"][0]["decision_id"] == "d-routine"
+        response = client.put(
+            "/v1/navigation/review/decisions/d-routine/candidate-labels",
+            json={
+                "reviewer": "api-tester",
+                "label_source": "human",
+                "review_status": "verified",
+                "labels": [
+                    {
+                        "candidate_id": "candidate-alt",
+                        "label": "best",
+                        "confidence": 1.0,
+                        "reason_codes": ["human_verified"],
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["label_count"] == 1
+        client.close()
+        navigation_main.get_navigation_review_store.cache_clear()
+        get_settings.cache_clear()
 
     print("navigation review unit: PASS")
 

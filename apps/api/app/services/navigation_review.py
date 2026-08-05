@@ -16,6 +16,11 @@ ProgressJudgment = Literal["advanced", "unchanged", "regressed", "reached", "unk
 SafetyJudgment = Literal["true", "false", "unknown"]
 BetterCandidateStatus = Literal["selected", "none", "unknown"]
 SuccessJudgment = Literal["correct", "incorrect", "unknown", "not_applicable"]
+CandidateTrainingLabel = Literal[
+    "best", "acceptable", "hard_negative", "unsafe", "unknown"
+]
+CandidateLabelSource = Literal["human", "codex", "server_teacher", "weak_rule"]
+CandidateReviewStatus = Literal["provisional", "verified", "rejected"]
 
 
 def utc_now() -> str:
@@ -51,6 +56,32 @@ class NavigationHumanReviewRequest(BaseModel):
             raise ValueError("better_candidate_id is required when a candidate is selected")
         if self.better_candidate_status != "selected" and self.better_candidate_id is not None:
             raise ValueError("better_candidate_id is only allowed for a selected candidate")
+        return self
+
+
+class CandidateTrainingLabelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    candidate_id: str = Field(min_length=1, max_length=200)
+    label: CandidateTrainingLabel
+    confidence: float = Field(ge=0.0, le=1.0)
+    reason_codes: list[str] = Field(default_factory=list, max_length=20)
+    notes: str = Field(default="", max_length=1000)
+
+
+class NavigationCandidateLabelsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reviewer: str = Field(default="human", min_length=1, max_length=80)
+    label_source: CandidateLabelSource
+    review_status: CandidateReviewStatus
+    labels: list[CandidateTrainingLabelRequest] = Field(min_length=1, max_length=300)
+
+    @model_validator(mode="after")
+    def candidate_ids_are_unique(self) -> "NavigationCandidateLabelsRequest":
+        candidate_ids = [item.candidate_id for item in self.labels]
+        if len(candidate_ids) != len(set(candidate_ids)):
+            raise ValueError("candidate labels must use unique candidate ids")
         return self
 
 
@@ -102,15 +133,41 @@ CREATE TABLE IF NOT EXISTS navigation_machine_assessments (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS navigation_candidate_labels (
+    label_id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL,
+    candidate_id TEXT NOT NULL,
+    reviewer TEXT NOT NULL,
+    label_source TEXT NOT NULL CHECK (label_source IN (
+        'human', 'codex', 'server_teacher', 'weak_rule'
+    )),
+    review_status TEXT NOT NULL CHECK (review_status IN (
+        'provisional', 'verified', 'rejected'
+    )),
+    label TEXT NOT NULL CHECK (label IN (
+        'best', 'acceptable', 'hard_negative', 'unsafe', 'unknown'
+    )),
+    confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    reason_codes_json TEXT NOT NULL CHECK (json_valid(reason_codes_json)),
+    notes TEXT NOT NULL DEFAULT '',
+    source_summary_json TEXT NOT NULL CHECK (json_valid(source_summary_json)),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(decision_id, reviewer, candidate_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_navigation_reviews_reviewer
     ON navigation_human_reviews(reviewer, updated_at);
 
+CREATE INDEX IF NOT EXISTS idx_navigation_candidate_labels_decision
+    ON navigation_candidate_labels(decision_id, reviewer, updated_at);
+
 INSERT OR REPLACE INTO navigation_review_metadata(key, value) VALUES
-    ('schema_version', '1'),
+    ('schema_version', '2'),
     ('database_kind', 'navigation_human_review'),
     ('source_policy', 'runtime_database_read_only');
 
-PRAGMA user_version = 1;
+PRAGMA user_version = 2;
 """
 
 
@@ -521,6 +578,14 @@ class NavigationReviewStore:
                 "SELECT * FROM navigation_machine_assessments WHERE decision_id = ?",
                 (decision_id,),
             ).fetchone()
+            candidate_label_rows = target.execute(
+                """
+                SELECT * FROM navigation_candidate_labels
+                WHERE decision_id = ? AND reviewer = ?
+                ORDER BY candidate_id
+                """,
+                (decision_id, reviewer),
+            ).fetchall()
         review = dict(review_row) if review_row else None
         if review:
             review["source_summary"] = _json_value(review.pop("source_summary_json"), {})
@@ -529,6 +594,12 @@ class NavigationReviewStore:
             machine_assessment["assessment"] = _json_value(
                 machine_assessment.pop("assessment_json"), {}
             )
+        candidate_labels = []
+        for row in candidate_label_rows:
+            item = dict(row)
+            item["reason_codes"] = _json_value(item.pop("reason_codes_json"), [])
+            item["source_summary"] = _json_value(item.pop("source_summary_json"), {})
+            candidate_labels.append(item)
 
         decision["boundary_candidate_id"] = self._boundary_candidate_id(
             decision, screens.get("before")
@@ -541,6 +612,7 @@ class NavigationReviewStore:
             "screens": screens,
             "timeline": timeline,
             "human_review": review,
+            "candidate_labels": candidate_labels,
             "machine_assessment": machine_assessment,
             "source_read_only": True,
         }
@@ -633,6 +705,106 @@ class NavigationReviewStore:
             "review_id": review_id,
             "decision_id": decision_id,
             "reviewer": request.reviewer,
+            "updated_at": now,
+            "source_read_only": True,
+        }
+
+    def save_candidate_labels(
+        self,
+        decision_id: str,
+        request: NavigationCandidateLabelsRequest,
+    ) -> dict[str, object]:
+        with closing(self._runtime_connect()) as source:
+            decision = source.execute(
+                """
+                SELECT d.decision_id, d.session_id, d.step_ordinal,
+                       s.app_package, s.goal_text_redacted
+                FROM navigation_decisions d
+                JOIN navigation_sessions s ON s.session_id = d.session_id
+                WHERE d.decision_id = ?
+                """,
+                (decision_id,),
+            ).fetchone()
+            if decision is None:
+                raise KeyError(decision_id)
+            candidate_rows = source.execute(
+                """
+                SELECT sc.candidate_id, sc.observed_payload_json,
+                       sc.risk_level, sc.terminal, sc.dangerous_final,
+                       sc.forbidden, sc.selected
+                FROM navigation_screen_snapshots ss
+                JOIN navigation_screen_candidates sc ON sc.snapshot_id = ss.snapshot_id
+                WHERE ss.decision_id = ? AND ss.phase = 'before'
+                """,
+                (decision_id,),
+            ).fetchall()
+        candidate_map = {}
+        for row in candidate_rows:
+            item = dict(row)
+            observed = _json_value(item.pop("observed_payload_json"), {})
+            candidate_map[str(row["candidate_id"])] = {**item, "observed": observed}
+        unknown = [item.candidate_id for item in request.labels if item.candidate_id not in candidate_map]
+        if unknown:
+            raise ValueError(
+                "candidate labels reference ids absent from the before screen: "
+                + ", ".join(sorted(unknown))
+            )
+
+        now = utc_now()
+        with closing(self._review_connect()) as target:
+            for item in request.labels:
+                existing = target.execute(
+                    """
+                    SELECT label_id, created_at FROM navigation_candidate_labels
+                    WHERE decision_id = ? AND reviewer = ? AND candidate_id = ?
+                    """,
+                    (decision_id, request.reviewer, item.candidate_id),
+                ).fetchone()
+                label_id = str(existing["label_id"]) if existing else f"navcl_{uuid.uuid4().hex}"
+                created_at = str(existing["created_at"]) if existing else now
+                source_summary = {
+                    "decision": dict(decision),
+                    "candidate": candidate_map[item.candidate_id],
+                }
+                target.execute(
+                    """
+                    INSERT INTO navigation_candidate_labels(
+                        label_id, decision_id, candidate_id, reviewer,
+                        label_source, review_status, label, confidence,
+                        reason_codes_json, notes, source_summary_json,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(decision_id, reviewer, candidate_id) DO UPDATE SET
+                        label_source = excluded.label_source,
+                        review_status = excluded.review_status,
+                        label = excluded.label,
+                        confidence = excluded.confidence,
+                        reason_codes_json = excluded.reason_codes_json,
+                        notes = excluded.notes,
+                        source_summary_json = excluded.source_summary_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        label_id,
+                        decision_id,
+                        item.candidate_id,
+                        request.reviewer,
+                        request.label_source,
+                        request.review_status,
+                        item.label,
+                        item.confidence,
+                        json.dumps(item.reason_codes, ensure_ascii=False, sort_keys=True),
+                        item.notes,
+                        json.dumps(source_summary, ensure_ascii=False, sort_keys=True),
+                        created_at,
+                        now,
+                    ),
+                )
+            target.commit()
+        return {
+            "decision_id": decision_id,
+            "reviewer": request.reviewer,
+            "label_count": len(request.labels),
             "updated_at": now,
             "source_read_only": True,
         }

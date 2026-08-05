@@ -995,6 +995,9 @@ class NavigationRuntime:
                 "operator_command": {
                     "source": request.operator_source,
                     "command_id": request.operator_command_id,
+                    "reason_codes": request.operator_reason_codes,
+                    "reason_text": request.operator_reason_text,
+                    "review_status": request.operator_review_status,
                     "requested_action": (
                         None
                         if request.operator_action is None

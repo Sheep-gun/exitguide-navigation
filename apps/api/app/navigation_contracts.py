@@ -22,6 +22,10 @@ TerminalReason = Literal[
     "transport_error",
     "executor_error",
     "app_crashed",
+    "precondition_not_met",
+    "loop_detected",
+    "no_valid_candidate",
+    "user_stopped",
     "unknown",
 ]
 NormalizedCoordinate = Annotated[float, Field(ge=0.0, le=1.0)]
@@ -86,6 +90,12 @@ class TaskContext(BaseModel):
     service_state: Literal[
         "none", "trial", "active", "paused", "cancelled", "unknown"
     ] = "unknown"
+    start_surface: str = Field(default="", max_length=300)
+    precondition_status: Literal["ready", "not_ready", "unknown"] = "unknown"
+    reset_method: str = Field(default="", max_length=300)
+    reset_verified: bool | None = None
+    precondition_source: Literal["human", "codex", "system", "unknown"] = "unknown"
+    precondition_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class AccessibilityNodeSummary(BaseModel):
@@ -313,6 +323,17 @@ class DecideRequest(BaseModel):
     operator_action: NavigationAction | None = None
     operator_source: Literal["codex"] | None = None
     operator_command_id: str | None = Field(default=None, min_length=1, max_length=200)
+    operator_reason_codes: list[Literal[
+        "goal_match",
+        "stage_forward",
+        "recovery",
+        "offscreen_target",
+        "popup_dismissal",
+        "safety_handoff",
+        "other",
+    ]] = Field(default_factory=list, max_length=12)
+    operator_reason_text: str = Field(default="", max_length=1000)
+    operator_review_status: Literal["unreviewed", "provisional", "verified"] | None = None
     collection_run: CollectionRunContext | None = None
     task_context: TaskContext | None = None
     screen: ScreenObservation
@@ -335,13 +356,24 @@ class DecideRequest(BaseModel):
 
     @model_validator(mode="after")
     def operator_command_is_complete(self) -> "DecideRequest":
-        command_fields_present = self.operator_source is not None or self.operator_command_id is not None
+        command_fields_present = any((
+            self.operator_source is not None,
+            self.operator_command_id is not None,
+            bool(self.operator_reason_codes),
+            bool(self.operator_reason_text),
+            self.operator_review_status is not None,
+        ))
         if self.operator_action is None and command_fields_present:
             raise ValueError("operator metadata requires operator_action")
         if self.operator_action is not None and (
-            self.operator_source is None or self.operator_command_id is None
+            self.operator_source is None
+            or self.operator_command_id is None
+            or not self.operator_reason_codes
+            or self.operator_review_status is None
         ):
-            raise ValueError("operator_action requires source and command id")
+            raise ValueError(
+                "operator_action requires source, command id, reason codes, and review status"
+            )
         return self
 
 

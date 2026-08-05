@@ -70,7 +70,7 @@ final class CollectionRunMetadata {
         return payload;
     }
 
-    static JSONObject taskContext() throws JSONException {
+    static JSONObject taskContext(Context context) throws JSONException {
         JSONObject payload = new JSONObject();
         payload.put("task_source", "human");
         payload.put("task_id", "");
@@ -80,8 +80,19 @@ final class CollectionRunMetadata {
         payload.put("task_constraints", constraints);
         payload.put("success_spec_id", "navigation_destination_v1");
         payload.put("success_spec_version", "1");
-        payload.put("account_state", "unknown");
-        payload.put("service_state", "unknown");
+        payload.put("account_state", ExecutorPreferences.accountState(context));
+        payload.put("service_state", ExecutorPreferences.serviceState(context));
+        payload.put("start_surface", ExecutorPreferences.startSurface(context));
+        payload.put("precondition_status", ExecutorPreferences.preconditionStatus(context));
+        payload.put("reset_method", ExecutorPreferences.resetMethod(context));
+        payload.put("reset_verified", ExecutorPreferences.resetVerified(context));
+        payload.put("precondition_source", ExecutorPreferences.preconditionSource(context));
+        float confidence = ExecutorPreferences.preconditionConfidence(context);
+        if (confidence < 0.0f) {
+            payload.put("precondition_confidence", JSONObject.NULL);
+        } else {
+            payload.put("precondition_confidence", confidence);
+        }
         return payload;
     }
 

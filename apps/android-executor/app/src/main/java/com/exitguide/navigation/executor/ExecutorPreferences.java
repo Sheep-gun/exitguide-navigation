@@ -19,6 +19,10 @@ final class ExecutorPreferences {
             "com.exitguide.navigation.executor.ADB_START_NAVIGATION";
     static final String ACTION_ADB_STOP_NAVIGATION =
             "com.exitguide.navigation.executor.ADB_STOP_NAVIGATION";
+    static final String ACTION_ADB_OPERATOR_ACTION =
+            "com.exitguide.navigation.executor.ADB_OPERATOR_ACTION";
+    static final String ACTION_OPERATOR_COMMAND_CHANGED =
+            "com.exitguide.navigation.executor.OPERATOR_COMMAND_CHANGED";
 
     private static final String FILE_NAME = "navigation_executor";
     private static final String KEY_API_BASE_URL = "api_base_url";
@@ -30,6 +34,23 @@ final class ExecutorPreferences {
     private static final String KEY_DEVICE_INSTANCE_ID = "device_instance_id";
     private static final String KEY_PROGRESS_OVERLAY = "progress_overlay";
     private static final String KEY_TAP_INDICATOR = "tap_indicator";
+    private static final String KEY_DECISION_MODE = "decision_mode";
+    private static final String KEY_ACCOUNT_STATE = "account_state";
+    private static final String KEY_SERVICE_STATE = "service_state";
+    private static final String KEY_START_SURFACE = "start_surface";
+    private static final String KEY_PRECONDITION_STATUS = "precondition_status";
+    private static final String KEY_RESET_METHOD = "reset_method";
+    private static final String KEY_RESET_VERIFIED = "reset_verified";
+    private static final String KEY_PRECONDITION_SOURCE = "precondition_source";
+    private static final String KEY_PRECONDITION_CONFIDENCE = "precondition_confidence";
+    private static final String KEY_OPERATOR_ACTION_NAME = "operator_action_name";
+    private static final String KEY_OPERATOR_CANDIDATE_ID = "operator_candidate_id";
+    private static final String KEY_OPERATOR_DIRECTION = "operator_direction";
+    private static final String KEY_OPERATOR_COMMAND_ID = "operator_command_id";
+    private static final String KEY_OPERATOR_EXPECTED_SCREEN = "operator_expected_screen";
+    private static final String KEY_OPERATOR_REASON_CODES = "operator_reason_codes";
+    private static final String KEY_OPERATOR_REASON_TEXT = "operator_reason_text";
+    private static final String KEY_OPERATOR_REVIEW_STATUS = "operator_review_status";
 
     private ExecutorPreferences() {}
 
@@ -70,6 +91,44 @@ final class ExecutorPreferences {
 
     static boolean tapIndicator(Context context) {
         return preferences(context).getBoolean(KEY_TAP_INDICATOR, true);
+    }
+
+    static boolean codexOperatorMode(Context context) {
+        return "codex_operator".equals(
+                preferences(context).getString(KEY_DECISION_MODE, "codex_operator")
+        );
+    }
+
+    static String accountState(Context context) {
+        return preferences(context).getString(KEY_ACCOUNT_STATE, "unknown").trim();
+    }
+
+    static String serviceState(Context context) {
+        return preferences(context).getString(KEY_SERVICE_STATE, "unknown").trim();
+    }
+
+    static String startSurface(Context context) {
+        return preferences(context).getString(KEY_START_SURFACE, "").trim();
+    }
+
+    static String preconditionStatus(Context context) {
+        return preferences(context).getString(KEY_PRECONDITION_STATUS, "unknown").trim();
+    }
+
+    static String resetMethod(Context context) {
+        return preferences(context).getString(KEY_RESET_METHOD, "").trim();
+    }
+
+    static boolean resetVerified(Context context) {
+        return preferences(context).getBoolean(KEY_RESET_VERIFIED, false);
+    }
+
+    static String preconditionSource(Context context) {
+        return preferences(context).getString(KEY_PRECONDITION_SOURCE, "unknown").trim();
+    }
+
+    static float preconditionConfidence(Context context) {
+        return preferences(context).getFloat(KEY_PRECONDITION_CONFIDENCE, -1.0f);
     }
 
     static String deviceInstanceId(Context context) {
@@ -147,6 +206,79 @@ final class ExecutorPreferences {
         );
     }
 
+    static void setTaskPreconditions(
+            Context context,
+            String accountState,
+            String serviceState,
+            String startSurface,
+            String preconditionStatus,
+            String resetMethod,
+            boolean resetVerified,
+            String preconditionSource,
+            float preconditionConfidence
+    ) {
+        preferences(context).edit()
+                .putString(KEY_ACCOUNT_STATE, valueOr(accountState, "unknown"))
+                .putString(KEY_SERVICE_STATE, valueOr(serviceState, "unknown"))
+                .putString(KEY_START_SURFACE, valueOr(startSurface, ""))
+                .putString(KEY_PRECONDITION_STATUS, valueOr(preconditionStatus, "unknown"))
+                .putString(KEY_RESET_METHOD, valueOr(resetMethod, ""))
+                .putBoolean(KEY_RESET_VERIFIED, resetVerified)
+                .putString(KEY_PRECONDITION_SOURCE, valueOr(preconditionSource, "unknown"))
+                .putFloat(KEY_PRECONDITION_CONFIDENCE, preconditionConfidence)
+                .apply();
+    }
+
+    static boolean saveOperatorCommand(Context context, OperatorCommand command) {
+        boolean saved = preferences(context).edit()
+                .putString(KEY_OPERATOR_ACTION_NAME, command.actionName)
+                .putString(KEY_OPERATOR_CANDIDATE_ID, command.candidateId)
+                .putString(KEY_OPERATOR_DIRECTION, command.direction)
+                .putString(KEY_OPERATOR_EXPECTED_SCREEN, command.expectedScreenFingerprint)
+                .putString(KEY_OPERATOR_REASON_CODES, command.reasonCodesCsv)
+                .putString(KEY_OPERATOR_REASON_TEXT, command.reasonText)
+                .putString(KEY_OPERATOR_REVIEW_STATUS, command.reviewStatus)
+                .putString(KEY_OPERATOR_COMMAND_ID, command.commandId)
+                .commit();
+        if (saved) {
+            context.sendBroadcast(
+                    new Intent(ACTION_OPERATOR_COMMAND_CHANGED).setPackage(context.getPackageName())
+            );
+        }
+        return saved;
+    }
+
+    static OperatorCommand pendingOperatorCommand(Context context) {
+        SharedPreferences preferences = preferences(context);
+        String commandId = preferences.getString(KEY_OPERATOR_COMMAND_ID, "").trim();
+        if (commandId.isEmpty()) {
+            return null;
+        }
+        return new OperatorCommand(
+                preferences.getString(KEY_OPERATOR_ACTION_NAME, "").trim(),
+                preferences.getString(KEY_OPERATOR_CANDIDATE_ID, "").trim(),
+                preferences.getString(KEY_OPERATOR_DIRECTION, "").trim(),
+                commandId,
+                preferences.getString(KEY_OPERATOR_EXPECTED_SCREEN, "").trim(),
+                preferences.getString(KEY_OPERATOR_REASON_CODES, "").trim(),
+                preferences.getString(KEY_OPERATOR_REASON_TEXT, "").trim(),
+                preferences.getString(KEY_OPERATOR_REVIEW_STATUS, "unreviewed").trim()
+        );
+    }
+
+    static void clearOperatorCommand(Context context) {
+        preferences(context).edit()
+                .remove(KEY_OPERATOR_ACTION_NAME)
+                .remove(KEY_OPERATOR_CANDIDATE_ID)
+                .remove(KEY_OPERATOR_DIRECTION)
+                .remove(KEY_OPERATOR_COMMAND_ID)
+                .remove(KEY_OPERATOR_EXPECTED_SCREEN)
+                .remove(KEY_OPERATOR_REASON_CODES)
+                .remove(KEY_OPERATOR_REASON_TEXT)
+                .remove(KEY_OPERATOR_REVIEW_STATUS)
+                .commit();
+    }
+
     static void publishStatus(Context context, String status) {
         preferences(context).edit().putString(KEY_STATUS, status).apply();
         context.sendBroadcast(
@@ -154,5 +286,41 @@ final class ExecutorPreferences {
                         .setPackage(context.getPackageName())
                         .putExtra("status", status)
         );
+    }
+
+    private static String valueOr(String value, String fallback) {
+        String normalized = value == null ? "" : value.trim();
+        return normalized.isEmpty() ? fallback : normalized;
+    }
+
+    static final class OperatorCommand {
+        final String actionName;
+        final String candidateId;
+        final String direction;
+        final String commandId;
+        final String expectedScreenFingerprint;
+        final String reasonCodesCsv;
+        final String reasonText;
+        final String reviewStatus;
+
+        OperatorCommand(
+                String actionName,
+                String candidateId,
+                String direction,
+                String commandId,
+                String expectedScreenFingerprint,
+                String reasonCodesCsv,
+                String reasonText,
+                String reviewStatus
+        ) {
+            this.actionName = valueOr(actionName, "");
+            this.candidateId = valueOr(candidateId, "");
+            this.direction = valueOr(direction, "");
+            this.commandId = valueOr(commandId, "");
+            this.expectedScreenFingerprint = valueOr(expectedScreenFingerprint, "");
+            this.reasonCodesCsv = valueOr(reasonCodesCsv, "");
+            this.reasonText = valueOr(reasonText, "");
+            this.reviewStatus = valueOr(reviewStatus, "unreviewed");
+        }
     }
 }
