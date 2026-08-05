@@ -136,5 +136,8 @@ LoRA가 공통 화면 의미와 절차 패턴을 흡수하면 휴대폰 런타�
 - shadow 내보내기: `scripts/export_navigation_shadow_cases.py`
 - 수집기 버전: `0.6.0`
 - 빌드 ID: `navigation-runtime-v6-codex-operator`
+- N100 API 배포 코드: `/srv/exitguide/runtime/navigation-api-code-codex-operator-v6-88e06b8`
+- N100 APK: `/srv/exitguide/releases/navigation-executor/88e06b8/navigation-executor-debug.apk`
+- 기존 Runtime DB는 이동·변환·삭제하지 않았다.
 
 이 문서가 수집기·학습 데이터·안전 경계에 대한 현재 기준이다. 과거 자동 점수 기반 문서는 실험 기록으로만 해석한다.
