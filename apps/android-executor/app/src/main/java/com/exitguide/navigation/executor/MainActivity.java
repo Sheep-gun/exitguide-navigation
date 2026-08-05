@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -28,6 +29,10 @@ import java.util.List;
 public final class MainActivity extends Activity {
     private EditText apiBaseUrl;
     private EditText goal;
+    private EditText collectorAlias;
+    private CheckBox testAccount;
+    private CheckBox progressOverlay;
+    private CheckBox tapIndicator;
     private TextView accessibilityState;
     private TextView runtimeStatus;
 
@@ -102,6 +107,28 @@ public final class MainActivity extends Activity {
         goal.setText(ExecutorPreferences.goal(this));
         content.addView(goal, matchWrap());
 
+        content.addView(text("수집자 가명", 14, Color.DKGRAY), matchWrap());
+        collectorAlias = new EditText(this);
+        collectorAlias.setSingleLine(true);
+        collectorAlias.setHint("예: yanggeon");
+        collectorAlias.setText(ExecutorPreferences.collectorAlias(this));
+        content.addView(collectorAlias, matchWrap());
+
+        testAccount = new CheckBox(this);
+        testAccount.setText("전용 시험 계정 사용");
+        testAccount.setChecked(ExecutorPreferences.testAccount(this));
+        content.addView(testAccount, matchWrap());
+
+        progressOverlay = new CheckBox(this);
+        progressOverlay.setText("진행 상태 플로팅 표시");
+        progressOverlay.setChecked(ExecutorPreferences.progressOverlay(this));
+        content.addView(progressOverlay, matchWrap());
+
+        tapIndicator = new CheckBox(this);
+        tapIndicator.setText("선택 위치에 빨간 점 표시");
+        tapIndicator.setChecked(ExecutorPreferences.tapIndicator(this));
+        content.addView(tapIndicator, matchWrap());
+
         accessibilityState = text("", 15, Color.rgb(30, 70, 150));
         accessibilityState.setPadding(0, dp(12), 0, dp(8));
         content.addView(accessibilityState, matchWrap());
@@ -151,9 +178,20 @@ public final class MainActivity extends Activity {
             startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
             return;
         }
-        // Manual on-device use does not depend on an ADB collection lease.
-        ExecutorPreferences.clearAdbLease(this);
-        ExecutorPreferences.configure(this, baseUrl, goalText, true);
+        String collector = collectorAlias.getText().toString().trim();
+        if (collector.isEmpty()) {
+            collector = "unassigned";
+        }
+        ExecutorPreferences.configure(
+                this,
+                baseUrl,
+                goalText,
+                collector,
+                testAccount.isChecked(),
+                progressOverlay.isChecked(),
+                tapIndicator.isChecked(),
+                true
+        );
         ExecutorPreferences.publishStatus(this, "현재 화면을 관찰하는 중입니다.");
         moveTaskToBack(true);
     }

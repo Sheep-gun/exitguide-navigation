@@ -14,12 +14,15 @@ from app.navigation_contracts import (
     DecideRequest,
     DecideResponse,
     GoalResolution,
+    HierarchicalPlan,
     NavigationAction,
     NavigationCandidate,
     ObserveRequest,
     ObserveResponse,
     ScreenObservation,
+    SafetyContext,
 )
+from app.services.navigation_agent_rules import NavigationAgentRuleStore
 from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     NavigationDecisionMemory,
@@ -27,10 +30,20 @@ from app.services.navigation_decision_memory import (
     is_dangerous_final_candidate,
     is_contextual_membership_cancellation_action,
     is_state_changing_action_label,
+    normalize_text,
     tokenize,
 )
 from app.services.navigation_dataset_split import NavigationDatasetSplitManifest
 from app.services.navigation_model_clients import PerceptionOutput
+from app.services.navigation_extensions import ExtensionMode, NavigationExtensionRuntime
+from app.services.navigation_extensions.n100_adapter import (
+    action_mapping,
+    build_policy_facts,
+    build_procedure_screen_facts,
+    construct_action,
+    merge_procedure_hint,
+    procedure_fast_path_matches,
+)
 from app.services.navigation_planner import PlannerProposal
 from app.services.navigation_public_prior import NavigationPublicPrior
 from app.services.navigation_research_policy import (
@@ -67,6 +80,9 @@ class NavigationRuntime:
         public_prior: NavigationPublicPrior | None = None,
         dataset_split_manifest: NavigationDatasetSplitManifest | None = None,
         allow_locked_holdout: bool = False,
+        extension: NavigationExtensionRuntime | None = None,
+        agent_rules: NavigationAgentRuleStore | None = None,
+        goal_fast_path_confidence: float = 0.92,
     ) -> None:
         self.memory = memory
         self.store = store
@@ -74,6 +90,9 @@ class NavigationRuntime:
         self.public_prior = public_prior
         self.dataset_split_manifest = dataset_split_manifest
         self.allow_locked_holdout = allow_locked_holdout
+        self.extension = extension
+        self.agent_rules = agent_rules
+        self.goal_fast_path_confidence = max(0.85, min(1.0, goal_fast_path_confidence))
         self.reflection_policy = ReflectionTriggerPolicy()
         if dataset_split_manifest is not None:
             self.store.install_dataset_split_manifest(
@@ -106,10 +125,26 @@ class NavigationRuntime:
                 "access_mode": "read_only",
             },
             "runtime_db": self.store.status(),
+            "navigation_extension": (
+                {"enabled": False}
+                if self.extension is None
+                else {
+                    "enabled": True,
+                    "mode": self.extension.mode.value,
+                    "store": self.extension.store.status(),
+                    "procedure_catalog": self.extension.catalog.metadata(),
+                    "policy_version": self.extension.verifier.policy_version,
+                }
+            ),
             "public_prior": (
                 {"enabled": False}
                 if self.public_prior is None
                 else self.public_prior.status()
+            ),
+            "codex_rule_retrieval": (
+                {"enabled": False, "mode": "off", "runtime_execution_allowed": False}
+                if self.agent_rules is None
+                else self.agent_rules.status()
             ),
             "dataset_split": (
                 {"enabled": False}
@@ -132,7 +167,8 @@ class NavigationRuntime:
                 "exaone_4_5_configured": self.policy.exaone_vlm.configured,
                 "fallback_allowed": self.policy.allow_model_fallback,
                 "planner_model_mode": self.policy.planner_mode,
-                "goal_classifier": "solar_db_allowlist_then_python_validation",
+                "goal_classifier": "python_high_confidence_then_solar_db_allowlist",
+                "goal_fast_path_confidence": self.goal_fast_path_confidence,
                 "exaone_4_5_mode": self.policy.vlm_mode,
             },
             "allowed_actions": [
@@ -144,23 +180,47 @@ class NavigationRuntime:
             ],
         }
 
-    def stop_session(self, session_id: str) -> dict[str, object]:
+    def stop_session(
+        self,
+        session_id: str,
+        *,
+        terminal_reason: str = "manual_stop",
+        handoff_reason: str = "",
+    ) -> dict[str, object]:
         """Idempotently close one executor session without fabricating a UI outcome."""
 
         session = self.store.session(session_id)
         if session is None:
             raise KeyError(session_id)
         if session["status"] == "active":
-            self.store.set_session_status(session_id, "stopped")
+            self.store.set_session_status(
+                session_id,
+                "stopped",
+                terminal_reason=terminal_reason,
+                handoff_reason=handoff_reason,
+            )
             session = self.store.session(session_id)
             if session is None:  # Defensive: the row cannot disappear under the store lock.
                 raise KeyError(session_id)
         return session
 
     def decide(self, request: DecideRequest) -> DecideResponse:
+        if not request.origin_app_package:
+            existing_session = (
+                None if request.session_id is None else self.store.session(request.session_id)
+            )
+            request = request.model_copy(
+                update={
+                    "origin_app_package": (
+                        request.current_app_package
+                        if existing_session is None
+                        else str(existing_session["app_package"])
+                    )
+                }
+            )
         if self.dataset_split_manifest is not None:
             self.dataset_split_manifest.require_collection_access(
-                request.app_package,
+                request.origin_app_package,
                 allow_locked_holdout=self.allow_locked_holdout,
             )
         session_id = request.session_id or f"navs_{uuid.uuid4().hex}"
@@ -203,7 +263,13 @@ class NavigationRuntime:
             goal_resolution.status == "recognized"
             and structured_query.destination_match >= _destination_threshold(structured_query)
         )
-        if _is_authentication_boundary(
+        if request.operator_action is not None:
+            perception = PerceptionOutput(
+                screen=request.screen,
+                semantic_summary="Codex selected an accessibility-grounded action",
+                provider="codex_operator_grounded_input",
+            )
+        elif _is_authentication_boundary(
             normalized_goal,
             structured_screen.auth_state,
             screen=request.screen,
@@ -240,7 +306,8 @@ class NavigationRuntime:
         )
         destination_threshold = _destination_threshold(query)
         if (
-            self.public_prior is not None
+            request.operator_action is None
+            and self.public_prior is not None
             and query.goal is not None
             and query.destination_match < destination_threshold
             and query.fast_path_candidate_id() is None
@@ -260,33 +327,95 @@ class NavigationRuntime:
                     type(error).__name__,
                     str(error)[:500],
                 )
-        forbidden = self.store.forbidden_candidates(session_id, query.screen.semantic_fingerprint)
         recent_history = self.store.recent_history(session_id, limit=5)
-        plan, planner_provider, planner_fallback = self.policy.plan(
-            query=query,
-            forbidden_candidate_ids=forbidden,
-            destination_threshold=destination_threshold,
-            recent_history=recent_history,
+        forbidden = self.store.forbidden_candidates(
+            session_id, query.screen.semantic_fingerprint
         )
+        forbidden.update(
+            _automatic_recovery_forbidden_candidates(
+                screen_fingerprint=query.screen.semantic_fingerprint,
+                candidates=effective_screen.candidates,
+                recent_history=recent_history,
+                goal_id=None if query.goal is None else query.goal.goal_id,
+            )
+        )
+        procedure_screen_facts = build_procedure_screen_facts(
+            query,
+            destination_threshold=destination_threshold,
+        )
+        procedure_hint = None
+        if self.extension is not None:
+            try:
+                procedure_hint = self.extension.prepare_decision(
+                    session_id=session_id,
+                    goal_id=None if query.goal is None else query.goal.goal_id,
+                    app_package=request.app_package,
+                    app_version=request.app_version,
+                    locale=request.locale,
+                    facts={"screen": procedure_screen_facts},
+                    parameters=(
+                        None if query.goal is None else {"operation": query.goal.operation}
+                    ),
+                )
+            except (OSError, ValueError, sqlite3.Error) as error:
+                LOGGER.warning(
+                    "navigation_procedure_skipped failure_class=%s detail=%s",
+                    type(error).__name__,
+                    str(error)[:500],
+                )
+        if request.operator_action is not None:
+            plan = HierarchicalPlan(
+                goal_id=None if query.goal is None else query.goal.goal_id,
+                stage="selective_recovery",
+                target_roles=[],
+                immediate_subgoal="Codex가 지정한 현재 화면 행동을 검증한다.",
+                expected_outcome="지정한 행동 이후의 화면 변화를 관찰한다.",
+                completion_rule="실제 실행 결과와 다음 화면이 함께 기록된다.",
+                source="python_safety_gate",
+            )
+            planner_provider = "codex_operator"
+            planner_fallback = False
+        else:
+            plan, planner_provider, planner_fallback = self.policy.plan(
+                query=query,
+                forbidden_candidate_ids=forbidden,
+                destination_threshold=destination_threshold,
+                recent_history=recent_history,
+            )
+            plan = merge_procedure_hint(plan, procedure_hint)
         candidate_values = self.policy.prior_scorer.score(
             query,
             effective_screen.candidates,
             forbidden_candidate_ids=forbidden,
         )
         memory_candidate_values = list(candidate_values)
-        profile_gate_fast_path_candidate_id = _profile_gate_existing_entry_candidate_id(
+        resolved_query_goal_id = None if query.goal is None else query.goal.goal_id
+        raw_profile_gate_candidate_id = _profile_gate_existing_entry_candidate_id(
             candidates=request.screen.candidates,
-            goal_id=goal_resolution.goal_id,
+            goal_id=resolved_query_goal_id,
+            screen_title=request.screen.window_title,
+            recent_history=recent_history,
+            forbidden_candidate_ids=(),
+        )
+        raw_guarded_profile_gate_candidate_id = _profile_gate_existing_entry_candidate_id(
+            candidates=request.screen.candidates,
+            goal_id=resolved_query_goal_id,
             screen_title=request.screen.window_title,
             recent_history=recent_history,
             forbidden_candidate_ids=tuple(forbidden),
-        ) or _profile_gate_existing_entry_candidate_id(
+        )
+        effective_profile_gate_candidate_id = _profile_gate_existing_entry_candidate_id(
             candidates=effective_screen.candidates,
-            goal_id=goal_resolution.goal_id,
+            goal_id=resolved_query_goal_id,
             screen_title=effective_screen.window_title,
             recent_history=recent_history,
             forbidden_candidate_ids=tuple(forbidden),
             visually_recommended_candidate_id=perception.recommended_candidate_id,
+        )
+        profile_gate_fast_path_candidate_id = (
+            raw_profile_gate_candidate_id
+            or raw_guarded_profile_gate_candidate_id
+            or effective_profile_gate_candidate_id
         )
         if "프로필" in effective_screen.window_title.casefold():
             LOGGER.info(
@@ -306,8 +435,12 @@ class NavigationRuntime:
                 recent_history=recent_history,
             )
         )
+        modal_dismiss_fast_path_candidate_id = _dismissible_modal_fast_path_candidate_id(
+            request.screen
+        ) or _dismissible_modal_fast_path_candidate_id(effective_screen)
         semantic_fast_path_candidate_id = (
-            profile_gate_fast_path_candidate_id
+            modal_dismiss_fast_path_candidate_id
+            or profile_gate_fast_path_candidate_id
             or safe_goal_entry_fast_path_candidate_id
             or self.policy.semantic_intermediate_fast_path_candidate(
                 query=query,
@@ -315,6 +448,11 @@ class NavigationRuntime:
                 prior_values=memory_candidate_values,
                 recent_history=recent_history,
             )
+        )
+        procedure_fast_path_used = procedure_fast_path_matches(
+            hint=procedure_hint,
+            candidate_id=semantic_fast_path_candidate_id,
+            candidate_payloads=query.screen.candidate_payloads,
         )
         semantic_scroll_fast_path = self.policy.semantic_destination_scroll_fast_path(
             query=query,
@@ -327,11 +465,26 @@ class NavigationRuntime:
             screen_fingerprint=query.screen.semantic_fingerprint,
             recent_history=recent_history,
         )
+        empty_candidate_waits = _empty_candidate_screen_waits(
+            screen=effective_screen,
+            screen_fingerprint=query.screen.semantic_fingerprint,
+            recent_history=recent_history,
+        )
         score_margin = 0.0
         reflection_on_demand = False
         verifier_provider = "not_invoked"
         visual_reobserve_reason = ""
-        if goal_resolution.status != "recognized":
+        if request.operator_action is not None:
+            proposal = PlannerProposal(
+                request.operator_action,
+                1.0,
+                "codex_operator",
+                False,
+            )
+            planner_provider = proposal.provider
+            verifier_provider = "python_safety_gate"
+            score_margin = 1.0
+        elif goal_resolution.status != "recognized":
             proposal = PlannerProposal(
                 NavigationAction(name="stop_for_user"),
                 max(0.8, goal_resolution.confidence),
@@ -367,6 +520,31 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_authentication_boundary"
+        elif empty_candidate_waits is not None:
+            if empty_candidate_waits >= 2:
+                proposal = PlannerProposal(
+                    NavigationAction(name="back"),
+                    1.0,
+                    "python_empty_candidate_back_guard",
+                    False,
+                )
+                planner_provider = proposal.provider
+                verifier_provider = proposal.provider
+            else:
+                if _can_request_visual_reobserve(request, perception, self.policy):
+                    visual_reobserve_reason = "transient_empty_candidate_screen"
+                    provider = "python_visual_reobserve_gate"
+                    verifier_provider = "deferred_until_visual_context"
+                else:
+                    provider = "python_empty_candidate_wait_gate"
+                    verifier_provider = provider
+                proposal = PlannerProposal(
+                    NavigationAction(name="wait_and_observe"),
+                    1.0,
+                    provider,
+                    False,
+                )
+                planner_provider = provider
         elif effective_screen.candidates and all(
             candidate.risk_level in {"medium", "high", "blocked"}
             or is_state_changing_action_label(candidate.label)
@@ -389,6 +567,19 @@ class NavigationRuntime:
                 False,
             )
             planner_provider = "python_state_change_boundary"
+        elif modal_dismiss_fast_path_candidate_id is not None:
+            proposal = PlannerProposal(
+                NavigationAction(
+                    name="click",
+                    candidate_id=modal_dismiss_fast_path_candidate_id,
+                ),
+                1.0,
+                "semantic_modal_dismiss_fast_path",
+                False,
+            )
+            planner_provider = proposal.provider
+            verifier_provider = proposal.provider
+            score_margin = 1.0
         elif profile_gate_fast_path_candidate_id is not None:
             proposal = PlannerProposal(
                 NavigationAction(
@@ -418,9 +609,9 @@ class NavigationRuntime:
         elif transient_navigation_waits is not None:
             if transient_navigation_waits >= 2:
                 proposal = PlannerProposal(
-                    NavigationAction(name="stop_for_user"),
+                    NavigationAction(name="back"),
                     1.0,
-                    "python_transient_navigation_stall_guard",
+                    "python_transient_navigation_back_guard",
                     False,
                 )
                 planner_provider = proposal.provider
@@ -477,6 +668,9 @@ class NavigationRuntime:
                         candidates=effective_screen.candidates,
                         forbidden_candidate_ids=forbidden,
                         recent_history=recent_history,
+                        screen_scrollable=any(
+                            node.visible and node.scrollable for node in effective_screen.nodes
+                        ),
                     )
                     plan = research_decision.plan
                     proposal = research_decision.proposal
@@ -503,56 +697,247 @@ class NavigationRuntime:
                         )
                         planner_provider = "python_visual_reobserve_gate"
                         verifier_provider += "->visual_reobserve_deferred"
-        sparse_reverse_guard_action = _selected_reverse_navigation_guard(
-            proposal.action,
-            candidates=effective_screen.candidates,
-            nodes=effective_screen.nodes,
-            screen_fingerprint=query.screen.semantic_fingerprint,
-            recent_history=recent_history,
+        if (
+            proposal.action.name == "stop_for_user"
+            and not _planner_stop_has_grounded_boundary(
+                planner_provider=planner_provider,
+                plan_stage=plan.stage,
+            )
+        ):
+            proposal = PlannerProposal(
+                NavigationAction(name="wait_and_observe"),
+                1.0,
+                "python_ungrounded_handoff_reobserve_guard",
+                False,
+            )
+            planner_provider = proposal.provider
+            verifier_provider = proposal.provider
+            reflection_on_demand = True
+        sparse_reverse_guard_action = (
+            None
+            if request.operator_action is not None
+            or planner_provider == "semantic_modal_dismiss_fast_path"
+            else _selected_reverse_navigation_guard(
+                proposal.action,
+                candidates=effective_screen.candidates,
+                nodes=effective_screen.nodes,
+                screen_fingerprint=query.screen.semantic_fingerprint,
+                recent_history=recent_history,
+            )
         )
         if sparse_reverse_guard_action is not None:
+            alternate = _safe_alternate_after_reverse_selection(
+                proposal.action,
+                candidates=effective_screen.candidates,
+                candidate_values=candidate_values,
+                forbidden_candidate_ids=forbidden,
+            )
+            if alternate is not None:
+                provider = "python_reverse_navigation_alternate_guard"
+                proposal = PlannerProposal(
+                    NavigationAction(name="click", candidate_id=alternate.candidate_id),
+                    alternate.final_score,
+                    provider,
+                    False,
+                )
+                planner_provider = provider
+                verifier_provider = provider
+                reflection_on_demand = True
+                plan = plan.model_copy(
+                    update={
+                        "stage": "selective_recovery",
+                        "immediate_subgoal": "뒤로가기 대신 다음 안전 후보로 경로를 이어간다.",
+                        "expected_outcome": "현재 화면에서 목적에 가까운 다음 화면으로 진행한다.",
+                        "completion_rule": "역방향 후보를 누르지 않고 화면 의미가 달라진다.",
+                    }
+                )
+                sparse_reverse_guard_action = None
+        if sparse_reverse_guard_action is not None:
             provider = (
-                "python_transient_navigation_stall_guard"
-                if sparse_reverse_guard_action.name == "stop_for_user"
+                "python_reverse_navigation_back_guard"
+                if sparse_reverse_guard_action.name == "back"
                 else "python_transient_navigation_wait_gate"
             )
             proposal = PlannerProposal(sparse_reverse_guard_action, 1.0, provider, False)
             planner_provider = provider
             verifier_provider = provider
             reflection_on_demand = True
-        repeat_guard_action = _interleaved_repeat_guard(
-            proposal.action,
-            recent_history=recent_history,
+        repeat_guard_action = (
+            None
+            if request.operator_action is not None
+            or planner_provider == "semantic_modal_dismiss_fast_path"
+            else _interleaved_repeat_guard(
+                proposal.action,
+                recent_history=recent_history,
+            )
         )
         if repeat_guard_action is not None:
             provider = (
-                "python_interleaved_repeat_stall_guard"
-                if repeat_guard_action.name == "stop_for_user"
+                "python_interleaved_repeat_back_guard"
+                if repeat_guard_action.name == "back"
                 else "python_interleaved_repeat_wait_guard"
             )
             proposal = PlannerProposal(repeat_guard_action, 1.0, provider, False)
             planner_provider = provider
             verifier_provider = provider
             reflection_on_demand = True
+        safety_forbidden = set(forbidden)
+        if (
+            profile_gate_fast_path_candidate_id is not None
+            and proposal.action.name == "click"
+            and proposal.action.candidate_id == profile_gate_fast_path_candidate_id
+        ):
+            safety_forbidden.discard(profile_gate_fast_path_candidate_id)
         safe_action, safety_status, safety_reason = self.policy.safety_gate.validate(
             proposal.action,
             candidates=effective_screen.candidates,
-            forbidden_candidate_ids=forbidden,
+            forbidden_candidate_ids=safety_forbidden,
         )
-        confidence = proposal.confidence if safe_action == proposal.action else 1.0
         decision_id = f"navd_{uuid.uuid4().hex}"
+        procedure_fast_path_used = bool(
+            procedure_fast_path_used
+            and proposal.action.name == "click"
+            and proposal.action.candidate_id == semantic_fast_path_candidate_id
+            and safe_action == proposal.action
+        )
+        policy_decision = None
+        if self.extension is not None:
+            query_candidate_payloads = {
+                str(payload.get("candidate_id", "")): dict(payload)
+                for payload in query.screen.candidate_payloads
+            }
+            policy_candidates = []
+            for candidate in effective_screen.candidates:
+                payload = candidate.model_dump(mode="json")
+                payload.update(query_candidate_payloads.get(candidate.candidate_id, {}))
+                semantic_text = " ".join(
+                    (
+                        candidate.label,
+                        candidate.icon_semantics,
+                        candidate.nearby_text,
+                        candidate.parent_semantics,
+                    )
+                )
+                terminal = (
+                    is_state_changing_action_label(candidate.label)
+                    or is_dangerous_final_candidate(semantic_text)
+                )
+                payload["terminal"] = terminal
+                payload["state_changing"] = terminal
+                policy_candidates.append(payload)
+            policy_facts = build_policy_facts(
+                goal_id=None if query.goal is None else query.goal.goal_id,
+                proposed_action=proposal.action,
+                candidates=policy_candidates,
+                forbidden_candidate_ids=safety_forbidden,
+                screen_trusted=True,
+                screen_facts=procedure_screen_facts,
+                procedure_hint=procedure_hint,
+            )
+            try:
+                extension_action, policy_decision = self.extension.verify_action(
+                    session_id=session_id,
+                    decision_id=decision_id,
+                    planner_action=action_mapping(proposal.action),
+                    proposed_action=action_mapping(proposal.action),
+                    grounded_action=action_mapping(safe_action),
+                    grounding_status=safety_status,
+                    grounding_reason=safety_reason,
+                    facts=policy_facts,
+                    confirmation_id=request.confirmation_id,
+                )
+                safe_action = construct_action(type(safe_action), extension_action)
+                if (
+                    self.extension.mode == ExtensionMode.ENFORCE
+                    and policy_decision.verdict.value != "allow"
+                ):
+                    safety_status = "replaced_with_safe_action"
+                    safety_reason = (
+                        f"policy:{policy_decision.rule_ids[0]}: {policy_decision.reason}"
+                    )[:1000]
+                    procedure_fast_path_used = False
+                verifier_provider += "->logic_policy_v1"
+            except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+                LOGGER.error(
+                    "navigation_policy_verifier_failed mode=%s failure_class=%s detail=%s",
+                    self.extension.mode.value,
+                    type(error).__name__,
+                    str(error)[:500],
+                )
+                if self.extension.mode == ExtensionMode.ENFORCE:
+                    safe_action = NavigationAction(name="stop_for_user")
+                    safety_status = "replaced_with_safe_action"
+                    safety_reason = "navigation extension verifier failed closed"
+                    procedure_fast_path_used = False
+        confidence = proposal.confidence if safe_action == proposal.action else 1.0
+        consulted_rules = (
+            ()
+            if self.agent_rules is None
+            else self.agent_rules.consult(
+                None if query.goal is None else query.goal.goal_id,
+                screen_terms=(
+                    effective_screen.window_title,
+                    effective_screen.activity_name,
+                    *(candidate.label for candidate in effective_screen.candidates),
+                ),
+            )
+        )
+        safety_context = _build_shadow_safety_context(
+            action=safe_action,
+            proposed_action=proposal.action,
+            plan_stage=plan.stage,
+            planner_provider=planner_provider,
+            confidence=confidence,
+            consulted_rule_ids=tuple(rule.rule_id for rule in consulted_rules),
+            candidates=effective_screen.candidates,
+            policy_blocked=(
+                policy_decision is not None and policy_decision.verdict.value != "allow"
+            ),
+        )
         self.store.upsert_session(
             session_id=session_id,
             request_id=request.request_id,
-            app_package=request.app_package,
+            app_package=request.origin_app_package,
             app_version=request.app_version,
             locale=request.locale,
             goal_text=request.goal_text,
             goal_id=None if query.goal is None else query.goal.goal_id,
+            origin_app_package=request.origin_app_package,
+            current_app_package=request.current_app_package,
+            previous_app_package=request.previous_app_package,
+            transition_reason=request.transition_reason,
+            collection_run=request.collection_run,
+            task_context=request.task_context,
         )
         evidence_case_ids = [evidence.case_id for evidence in query.evidence]
         evidence_case_ids.extend(
             f"public:{evidence.evidence_id}" for evidence in query.public_prior_evidence
+        )
+        retrieval_rows = [
+            {
+                "evidence_id": evidence.case_id,
+                "source_type": evidence.source_type,
+                "rank": rank,
+                "score": evidence.score,
+                "used": evidence.case_id in evidence_case_ids,
+                "metadata": {
+                    "verification_count": evidence.verification_count,
+                    "provenance_validated": evidence.provenance_validated,
+                    "source_app_package": evidence.source_app_package,
+                },
+            }
+            for rank, evidence in enumerate(query.evidence, start=1)
+        ]
+        retrieval_rows.extend(
+            {
+                "evidence_id": f"public:{evidence.evidence_id}",
+                "source_type": "public_prior",
+                "rank": len(retrieval_rows) + rank,
+                "score": getattr(evidence, "score", None),
+                "used": True,
+                "metadata": {},
+            }
+            for rank, evidence in enumerate(query.public_prior_evidence, start=1)
         )
         self.store.record_decision(
             decision_id=decision_id,
@@ -562,6 +947,7 @@ class NavigationRuntime:
             screen=effective_screen,
             goal_id=None if query.goal is None else query.goal.goal_id,
             plan=plan,
+            proposed_action=proposal.action,
             action=safe_action,
             confidence=confidence,
             score_margin=score_margin,
@@ -575,7 +961,66 @@ class NavigationRuntime:
             destination_match_before=query.destination_match,
             evidence_case_ids=evidence_case_ids,
             candidate_values=candidate_values,
+            retrieval_hits=retrieval_rows,
+            decision_provenance={
+                "perception_provider": perception.provider,
+                "planner_provider": planner_provider,
+                "verifier_provider": verifier_provider,
+                "planner_fallback_used": (
+                    goal_resolution.fallback_used
+                    or planner_fallback
+                    or proposal.fallback_used
+                ),
+                "prompt_contract_version": "navigation-runtime-v5",
+                "profile_gate_resolution": {
+                    "goal_id": resolved_query_goal_id,
+                    "raw_candidate_count": len(request.screen.candidates),
+                    "effective_candidate_count": len(effective_screen.candidates),
+                    "raw_title_has_profile": "프로필"
+                    in request.screen.window_title.casefold(),
+                    "effective_title_has_profile": "프로필"
+                    in effective_screen.window_title.casefold(),
+                    "recent_step_count": len(recent_history),
+                    "forbidden_candidate_ids": sorted(forbidden)[:5],
+                    "raw_candidate_id": raw_profile_gate_candidate_id,
+                    "raw_guarded_candidate_id": raw_guarded_profile_gate_candidate_id,
+                    "effective_candidate_id": effective_profile_gate_candidate_id,
+                },
+                "app_context": {
+                    "origin_app_package": request.origin_app_package,
+                    "current_app_package": request.current_app_package,
+                    "previous_app_package": request.previous_app_package,
+                    "transition_reason": request.transition_reason,
+                },
+                "operator_command": {
+                    "source": request.operator_source,
+                    "command_id": request.operator_command_id,
+                    "requested_action": (
+                        None
+                        if request.operator_action is None
+                        else request.operator_action.model_dump(mode="json")
+                    ),
+                },
+                "safety_context": safety_context.model_dump(mode="json"),
+            },
+            screenshot_data_url=(
+                request.raw_screenshot_data_url or request.screenshot_data_url
+            ),
         )
+        if self.extension is not None:
+            try:
+                self.extension.record_memory_retrievals(
+                    session_id=session_id,
+                    decision_id=decision_id,
+                    task_run_id=None,
+                    rows=retrieval_rows,
+                )
+            except (OSError, ValueError, sqlite3.Error) as error:
+                LOGGER.warning(
+                    "navigation_extension_retrieval_log_skipped failure_class=%s detail=%s",
+                    type(error).__name__,
+                    str(error)[:500],
+                )
         return DecideResponse(
             request_id=request.request_id,
             session_id=session_id,
@@ -598,6 +1043,16 @@ class NavigationRuntime:
             visual_reobserve_required=bool(visual_reobserve_reason),
             visual_reobserve_reason=visual_reobserve_reason,
             vlm_recommended_candidate_id=perception.recommended_candidate_id,
+            procedure_id=procedure_hint.procedure_id if procedure_hint else None,
+            procedure_step_ordinal=procedure_hint.step_ordinal if procedure_hint else None,
+            procedure_fast_path_eligible=(
+                procedure_hint.fast_path_eligible if procedure_hint else False
+            ),
+            procedure_fast_path_used=procedure_fast_path_used,
+            policy_verdict=(policy_decision.verdict.value if policy_decision else None),
+            policy_rule_ids=(list(policy_decision.rule_ids) if policy_decision else []),
+            confirmation_id=(policy_decision.confirmation_id if policy_decision else None),
+            safety_context=safety_context,
         )
 
     def _resolve_goal(
@@ -629,6 +1084,24 @@ class NavigationRuntime:
             return cached_goal, _goal_resolution(
                 cached_goal,
                 provider="session_cached_goal",
+                validated_against_db=True,
+                fallback_used=False,
+            )
+
+        phrase_goal = self.memory.normalize_goal(goal_text, locale=locale)
+        if (
+            phrase_goal is not None
+            and phrase_goal.confidence >= self.goal_fast_path_confidence
+            and _unambiguous_db_goal_phrase(
+                memory=self.memory,
+                goal_text=goal_text,
+                locale=locale,
+                goal_id=phrase_goal.goal_id,
+            )
+        ):
+            return phrase_goal, _goal_resolution(
+                phrase_goal,
+                provider="python_high_confidence_goal_phrase",
                 validated_against_db=True,
                 fallback_used=False,
             )
@@ -675,11 +1148,10 @@ class NavigationRuntime:
         else:
             fallback_used = True
 
-        fallback_goal = self.memory.normalize_goal(goal_text, locale=locale)
-        return fallback_goal, _goal_resolution(
-            fallback_goal,
+        return phrase_goal, _goal_resolution(
+            phrase_goal,
             provider="python_phrase_fallback",
-            validated_against_db=fallback_goal is not None,
+            validated_against_db=phrase_goal is not None,
             fallback_used=fallback_used,
         )
 
@@ -696,6 +1168,7 @@ class NavigationRuntime:
             )
         before_match = float(decision["destination_match_before"])
         effective_next_screen = None
+        next_query = None
         if request.connectivity_status != "observed":
             verified = VerifiedTransition(
                 outcome_type="unknown",
@@ -911,6 +1384,22 @@ class NavigationRuntime:
                 )
             elif (
                 str(decision["screen_fingerprint"]) != next_fingerprint
+                and _is_profile_gate_entry_progress(
+                    action_name=str(decision["action_name"]),
+                    previous_screen=decision.get("screen_payload", {}),
+                    next_screen=effective_next_screen,
+                )
+            ):
+                verified = VerifiedTransition(
+                    outcome_type="navigated",
+                    state_changed=True,
+                    progress_label="advanced",
+                    destination_match_after=next_query.destination_match,
+                    failure_class="",
+                    recovery_action=None,
+                )
+            elif (
+                str(decision["screen_fingerprint"]) != next_fingerprint
                 and next_query.destination_match < _destination_threshold(next_query)
                 and _semantic_fast_path_grounded_progress(
                     planner_provider=str(decision["planner_provider"]),
@@ -945,6 +1434,11 @@ class NavigationRuntime:
                 request.execution_succeeded is False
                 and str(decision["action_name"]) in {"click", "scroll", "back"}
             ):
+                # An Accessibility action can be rejected even though the
+                # observed screen remains safe and usable. Keep that failure as
+                # runtime evidence, then let the next decision re-observe and
+                # choose another action instead of turning it into a human
+                # safety handoff.
                 verified = VerifiedTransition(
                     outcome_type="blocked",
                     state_changed=(
@@ -953,8 +1447,27 @@ class NavigationRuntime:
                     progress_label="unknown",
                     destination_match_after=next_query.destination_match,
                     failure_class="executor_action_not_executed",
-                    recovery_action=NavigationAction(name="stop_for_user"),
+                    recovery_action=None,
                 )
+        if (
+            str(decision["planner_provider"]) == "codex_operator"
+            and str(decision["action_name"]) != "stop_for_user"
+            and verified.outcome_type == "destination_reached"
+        ):
+            # During supervised collection, a destination-signature score is
+            # evidence for the operator, not permission to terminate the
+            # episode. Intermediate pages often repeat the goal text (for
+            # example, a cancellation request page before the final CTA).
+            # Only an explicit operator handoff may end that path.
+            screen_changed = str(decision["screen_fingerprint"]) != next_fingerprint
+            verified = VerifiedTransition(
+                outcome_type="navigated",
+                state_changed=screen_changed,
+                progress_label="advanced" if screen_changed else "unknown",
+                destination_match_after=next_query.destination_match,
+                failure_class="",
+                recovery_action=None,
+            )
         candidate_forbidden = False
         knowledge_revision_queued = False
         candidate_id = decision.get("candidate_id")
@@ -980,10 +1493,30 @@ class NavigationRuntime:
         session_status = None
         if verified.outcome_type == "destination_reached":
             session_status = "reached"
-        elif verified.outcome_type == "blocked" or decision["action_name"] == "stop_for_user":
+        elif (
+            verified.outcome_type == "blocked"
+            and verified.failure_class != "executor_action_not_executed"
+        ) or decision["action_name"] == "stop_for_user":
             session_status = "stopped"
+        terminal_reason = request.terminal_reason
+        if terminal_reason is None:
+            if verified.outcome_type == "destination_reached":
+                terminal_reason = "destination_reached"
+            elif decision["action_name"] == "stop_for_user":
+                terminal_reason = "safe_user_handoff"
+            elif request.observed_signal == "login_required":
+                terminal_reason = "login_required"
+            elif request.observed_signal == "network_error":
+                terminal_reason = "network_error"
+            elif request.connectivity_status == "device_disconnected":
+                terminal_reason = "device_disconnected"
+            elif request.connectivity_status == "transport_error":
+                terminal_reason = "transport_error"
+            elif session_status == "stopped":
+                terminal_reason = "safe_user_handoff"
         observation_id = self.store.record_observation(
             observation_id=f"navo_{uuid.uuid4().hex}",
+            request_id=request.request_id,
             decision_id=request.decision_id,
             connectivity_status=request.connectivity_status,
             next_screen_fingerprint=next_fingerprint,
@@ -995,7 +1528,42 @@ class NavigationRuntime:
             failure_class=verified.failure_class,
             next_screen=effective_next_screen,
             session_status=session_status,
+            terminal_reason=terminal_reason,
+            handoff_reason=request.handoff_reason,
+            outcome_judge=request.outcome_judge,
+            evaluator_id=request.evaluator_id,
+            evaluator_version=request.evaluator_version,
+            after_screenshot_data_url=(
+                request.after_raw_screenshot_data_url
+                or request.after_screenshot_data_url
+            ),
         )
+        procedure_observation = None
+        if self.extension is not None and next_query is not None:
+            procedure_facts = {
+                "screen": build_procedure_screen_facts(
+                    next_query,
+                    destination_threshold=_destination_threshold(next_query),
+                ),
+                "outcome": {
+                    "type": verified.outcome_type,
+                    "progress": verified.progress_label,
+                    "state_changed": verified.state_changed,
+                },
+            }
+            try:
+                procedure_observation = self.extension.observe_procedure(
+                    session_id=str(decision["session_id"]),
+                    decision_id=request.decision_id,
+                    observation_id=observation_id,
+                    facts=procedure_facts,
+                )
+            except (OSError, ValueError, sqlite3.Error) as error:
+                LOGGER.warning(
+                    "navigation_procedure_observation_skipped failure_class=%s detail=%s",
+                    type(error).__name__,
+                    str(error)[:500],
+                )
         if candidate_forbidden:
             recent_history = self.store.recent_history(str(decision["session_id"]), limit=20)
             failure_steps = [
@@ -1095,14 +1663,20 @@ class NavigationRuntime:
                     reflection_result = None
             if reflection_result is not None:
                 reflection_reason = f"{reflection_reason}; {reflection_result.reason}"[:1000]
-                if reflection_result.recovery_hint != "reselect":
+                recovery_hint = _validated_reflection_recovery_hint(
+                    reflection_result.recovery_hint,
+                    outcome_type=verified.outcome_type,
+                    decision_action_name=str(decision["action_name"]),
+                    terminal_reason=terminal_reason,
+                )
+                if recovery_hint is not None:
                     verified = VerifiedTransition(
                         verified.outcome_type,
                         verified.state_changed,
                         verified.progress_label,
                         verified.destination_match_after,
                         verified.failure_class,
-                        NavigationAction(name=reflection_result.recovery_hint),
+                        NavigationAction(name=recovery_hint),
                     )
         final_session_status = session_status or "active"
         if (
@@ -1112,8 +1686,16 @@ class NavigationRuntime:
             and final_session_status != "reached"
         ):
             final_session_status = "stopped"
-            self.store.set_session_status(str(decision["session_id"]), final_session_status)
+            terminal_reason = terminal_reason or "safe_user_handoff"
+            self.store.set_session_status(
+                str(decision["session_id"]),
+                final_session_status,
+                terminal_reason=terminal_reason,
+                handoff_reason=request.handoff_reason,
+                append_event=False,
+            )
         self.store.record_execution_details(
+            request_id=request.request_id,
             decision_id=request.decision_id,
             observation_id=observation_id,
             connectivity_status=request.connectivity_status,
@@ -1123,6 +1705,7 @@ class NavigationRuntime:
             candidate_forbidden=candidate_forbidden,
             reflection_level=reflection_level,
             reflection_reason=reflection_reason,
+            execution_report=request.execution_report,
         )
         return ObserveResponse(
             request_id=request.request_id,
@@ -1153,7 +1736,47 @@ class NavigationRuntime:
                 else None
             ),
             connection_error=request.connectivity_status != "observed",
+            procedure_id=(
+                procedure_observation.procedure_id if procedure_observation else None
+            ),
+            procedure_step_ordinal=(
+                procedure_observation.current_step_ordinal if procedure_observation else None
+            ),
+            procedure_completed=(
+                procedure_observation.procedure_completed if procedure_observation else False
+            ),
         )
+
+
+def _unambiguous_db_goal_phrase(
+    *,
+    memory: NavigationDecisionMemory,
+    goal_text: str,
+    locale: str,
+    goal_id: str,
+) -> bool:
+    normalized_text = normalize_text(goal_text)
+    if not normalized_text:
+        return False
+    matched_goal_ids: set[str] = set()
+    selected_negative_hit = False
+    for item in memory.goal_catalog(locale=locale):
+        item_goal_id = str(item.get("goal_id", ""))
+        positive_phrases = item.get("positive_phrases", [])
+        negative_phrases = item.get("negative_phrases", [])
+        if isinstance(positive_phrases, list) and any(
+            (normalized_phrase := normalize_text(str(phrase)))
+            and normalized_phrase in normalized_text
+            for phrase in positive_phrases
+        ):
+            matched_goal_ids.add(item_goal_id)
+        if item_goal_id == goal_id and isinstance(negative_phrases, list):
+            selected_negative_hit = any(
+                (normalized_phrase := normalize_text(str(phrase)))
+                and normalized_phrase in normalized_text
+                for phrase in negative_phrases
+            )
+    return matched_goal_ids == {goal_id} and not selected_negative_hit
 
 
 def _can_request_visual_reobserve(
@@ -1220,7 +1843,7 @@ def _transient_navigation_control_waits(
 
     A model must not turn the absence of forward controls into confidence that
     a generic Up/Back icon is the next forward action.  We allow two bounded
-    observations (the first can request VLM context), then stop for the user.
+    observations (the first can request VLM context), then navigate back.
     """
 
     # Accessibility trees for WebView/loading surfaces can contain many
@@ -1262,12 +1885,87 @@ def _transient_navigation_control_waits(
     )
 
 
+def _empty_candidate_screen_waits(
+    *,
+    screen: ScreenObservation,
+    screen_fingerprint: str,
+    recent_history: Sequence[dict[str, object]],
+) -> int | None:
+    if screen.candidates:
+        return None
+    return sum(
+        str(item.get("screen_fingerprint", "")) == screen_fingerprint
+        and str(item.get("action_name", "")) == "wait_and_observe"
+        for item in recent_history
+    )
+
+
+def _dismissible_modal_fast_path_candidate_id(
+    screen: ScreenObservation,
+) -> str | None:
+    title = " ".join((screen.window_title, screen.activity_name)).casefold()
+    title_confirms_modal = any(
+        marker in title
+        for marker in ("팝업", "대화상자", "popup", "modal", "dialog", "overlay")
+    )
+    candidate_semantics = " ".join(
+        " ".join(
+            (
+                candidate.label,
+                candidate.icon_semantics,
+                candidate.visual_role,
+                candidate.parent_semantics,
+            )
+        ).casefold()
+        for candidate in screen.candidates
+    )
+    feedback_overlay = any(
+        marker in candidate_semantics
+        for marker in (
+            "사용자 피드백 입력",
+            "추천/비추천 버튼 그룹",
+            "recommendation feedback",
+            "rating feedback",
+        )
+    ) or (
+        any(marker in candidate_semantics for marker in ("맘에 안 들어요", "비추천", "dislike"))
+        and any(marker in candidate_semantics for marker in ("좋아요", "최고예요", "like"))
+    )
+    private_input_detour = any(node.private_input for node in screen.nodes) and any(
+        candidate.risk_level == "blocked" for candidate in screen.candidates
+    )
+    if not (title_confirms_modal or feedback_overlay or private_input_detour):
+        return None
+    dismiss_labels = {
+        "닫기",
+        "나중에",
+        "뒤로",
+        "back",
+        "close",
+        "dismiss",
+        "not now",
+        "maybe later",
+    }
+    dismiss_candidates = [
+        candidate
+        for candidate in screen.candidates
+        if " ".join(candidate.label.casefold().split()) in dismiss_labels
+        and candidate.clickable
+        and candidate.enabled
+        and not candidate.selected
+        and candidate.risk_level == "low"
+    ]
+    if len(dismiss_candidates) != 1:
+        return None
+    return dismiss_candidates[0].candidate_id
+
+
 def _interleaved_repeat_guard(
     action: NavigationAction,
     *,
     recent_history: Sequence[Mapping[str, object]],
 ) -> NavigationAction | None:
-    """Block click -> visual wait -> same click loops without observed progress."""
+    """Break click -> visual wait -> same click loops without a false handoff."""
 
     if action.name != "click" or not action.candidate_id:
         return None
@@ -1292,9 +1990,10 @@ def _interleaved_repeat_guard(
         str(item.get("action_name", "")) == "wait_and_observe"
         for item in recent_history[prior_index + 1 :]
     )
-    return NavigationAction(
-        name="stop_for_user" if waits_since >= 2 else "wait_and_observe"
-    )
+    # Repeated non-progress is a navigation problem, not proof of a dangerous
+    # user boundary. After one visual re-observation, back out and let the
+    # planner try another grounded route while the collector stays active.
+    return NavigationAction(name="back" if waits_since >= 2 else "wait_and_observe")
 
 
 def _selected_reverse_navigation_guard(
@@ -1363,7 +2062,49 @@ def _selected_reverse_navigation_guard(
         and str(item.get("action_name", "")) == "wait_and_observe"
         for item in recent_history[-5:]
     )
-    return NavigationAction(name="stop_for_user" if waits >= 2 else "wait_and_observe")
+    # A repeated reverse-control proposal proves a navigation stall, not a
+    # dangerous user boundary. Back out after bounded re-observation so the
+    # collector can continue from another grounded route.
+    return NavigationAction(name="back" if waits >= 2 else "wait_and_observe")
+
+
+def _safe_alternate_after_reverse_selection(
+    action: NavigationAction,
+    *,
+    candidates: Sequence[NavigationCandidate],
+    candidate_values: Sequence[CandidateValue],
+    forbidden_candidate_ids: set[str],
+) -> CandidateValue | None:
+    """Reuse existing scores to avoid a reverse-control wait loop without another model call."""
+
+    if action.name != "click" or not action.candidate_id:
+        return None
+    candidates_by_id = {candidate.candidate_id: candidate for candidate in candidates}
+    ranked = sorted(
+        candidate_values,
+        key=lambda value: (-value.final_score, value.candidate_id),
+    )
+    for value in ranked:
+        candidate = candidates_by_id.get(value.candidate_id)
+        if (
+            candidate is None
+            or value.candidate_id == action.candidate_id
+            or value.candidate_id in forbidden_candidate_ids
+            or value.forbidden
+            or value.final_score < 0.55
+            or value.risk_level != "low"
+            or candidate.risk_level != "low"
+            or not candidate.clickable
+            or not candidate.enabled
+            or candidate.selected
+            or _is_reverse_navigation_candidate(candidate)
+            or not " ".join(
+                (candidate.label, candidate.icon_semantics, candidate.visual_role)
+            ).strip()
+        ):
+            continue
+        return value
+    return None
 
 
 def _safe_ranked_values(
@@ -1433,6 +2174,26 @@ def _db_solar_conflict_visual_reason(
     if selected_id != memory_best.candidate_id:
         return "db_solar_candidate_conflict"
     return ""
+
+
+def _validated_reflection_recovery_hint(
+    recovery_hint: str,
+    *,
+    outcome_type: str,
+    decision_action_name: str,
+    terminal_reason: str | None,
+) -> str | None:
+    """Keep model reflection advisory unless a user boundary is already proven."""
+
+    if recovery_hint == "reselect":
+        return None
+    if recovery_hint != "stop_for_user":
+        return recovery_hint
+    if decision_action_name == "stop_for_user" or terminal_reason:
+        return "stop_for_user"
+    if outcome_type in {"destination_reached", "login_required"}:
+        return "stop_for_user"
+    return None
 
 
 def verify_transition(
@@ -1615,6 +2376,281 @@ def _semantic_fast_path_grounded_progress(
     return False
 
 
+def _is_profile_gate_entry_progress(
+    *,
+    action_name: str,
+    previous_screen: Mapping[str, object],
+    next_screen: ScreenObservation,
+) -> bool:
+    """Treat profile selection into an app home as entry, not regression."""
+
+    if action_name != "click":
+        return False
+    previous_candidates = previous_screen.get("candidates", [])
+    previous_text = " ".join(
+        (
+            str(previous_screen.get("window_title") or ""),
+            str(previous_screen.get("activity_name") or ""),
+            *(
+                " ".join(
+                    str(candidate.get(field) or "")
+                    for field in ("label", "icon_semantics", "nearby_text")
+                )
+                for candidate in previous_candidates
+                if isinstance(candidate, Mapping)
+            ),
+        )
+    ).casefold()
+    profile_gate_markers = (
+        "프로필을 선택",
+        "시청할 프로필",
+        "choose a profile",
+        "select profile",
+        "who's watching",
+    )
+    if not any(marker in previous_text for marker in profile_gate_markers):
+        return False
+    next_text = " ".join(
+        (
+            next_screen.window_title,
+            next_screen.activity_name,
+            *(
+                " ".join((candidate.label, candidate.icon_semantics, candidate.nearby_text))
+                for candidate in next_screen.candidates
+            ),
+        )
+    ).casefold()
+    home_markers = ("홈", "home")
+    navigation_markers = ("검색", "search", "나의", "my ", "browse")
+    return any(marker in next_text for marker in home_markers) and any(
+        marker in next_text for marker in navigation_markers
+    )
+
+
+def _build_shadow_safety_context(
+    *,
+    action: NavigationAction,
+    proposed_action: NavigationAction,
+    plan_stage: str,
+    planner_provider: str,
+    confidence: float,
+    consulted_rule_ids: Sequence[str],
+    candidates: Sequence[NavigationCandidate],
+    policy_blocked: bool,
+) -> SafetyContext:
+    boundary_evidence = "none"
+    boundary_candidate_id = None
+    if action.name == "stop_for_user":
+        effect_class = (
+            "goal_reached"
+            if "goal_already_satisfied" in planner_provider
+            else "user_handoff"
+        )
+        boundary = True
+        confirmation_required = effect_class != "goal_reached"
+        if proposed_action.name == "click" and proposed_action.candidate_id:
+            boundary_evidence = "dangerous_candidate"
+            boundary_candidate_id = proposed_action.candidate_id
+        elif policy_blocked:
+            boundary_evidence = "policy_block"
+        elif "authentication_boundary" in planner_provider:
+            boundary_evidence = "authentication_boundary"
+        elif (
+            plan_stage == "terminal_boundary"
+            or "goal_already_satisfied" in planner_provider
+            or "terminal_boundary" in planner_provider
+        ):
+            dangerous = [
+                candidate.candidate_id
+                for candidate in candidates
+                if candidate.risk_level in {"high", "blocked"}
+                or is_state_changing_action_label(candidate.label)
+                or normalize_text(candidate.label)
+                in {
+                    "가입하기",
+                    "계정 만들기",
+                    "sign up",
+                    "create account",
+                    "register",
+                }
+                or is_dangerous_final_candidate(
+                    " ".join(
+                        (
+                            candidate.label,
+                            candidate.icon_semantics,
+                            candidate.nearby_text,
+                            candidate.parent_semantics,
+                        )
+                    )
+                )
+            ]
+            if len(dangerous) == 1:
+                boundary_evidence = "dangerous_candidate"
+                boundary_candidate_id = dangerous[0]
+            else:
+                boundary_evidence = "destination_signature"
+    elif plan_stage == "selective_recovery":
+        effect_class = "automatic_recovery"
+        boundary = False
+        confirmation_required = False
+    elif action.name == "wait_and_observe":
+        effect_class = "observe_only"
+        boundary = False
+        confirmation_required = False
+    else:
+        effect_class = "navigate_only"
+        boundary = False
+        confirmation_required = False
+    return SafetyContext(
+        policy_version="boundary-v2-shadow",
+        procedure_stage=plan_stage or "unknown",
+        effect_class=effect_class,
+        boundary=boundary,
+        confirmation_required=confirmation_required,
+        boundary_evidence=boundary_evidence,
+        boundary_candidate_id=boundary_candidate_id,
+        target_confidence=round(max(0.0, min(1.0, confidence)), 4),
+        reason_code=planner_provider[:300],
+        consulted_rule_ids=list(consulted_rule_ids)[:10],
+        rule_conflict=False,
+        pending_revision=False,
+        shadow_mode=True,
+    )
+
+
+def _planner_stop_has_grounded_boundary(*, planner_provider: str, plan_stage: str) -> bool:
+    return plan_stage == "terminal_boundary" or planner_provider.startswith(
+        (
+            "python_goal_gate",
+            "python_terminal_boundary",
+            "python_goal_already_satisfied",
+            "python_authentication_boundary",
+            "python_state_change_boundary",
+        )
+    )
+
+
+def _automatic_recovery_forbidden_candidates(
+    *,
+    screen_fingerprint: str,
+    candidates: Sequence[NavigationCandidate],
+    recent_history: Sequence[Mapping[str, object]],
+    goal_id: str | None,
+) -> set[str]:
+    """Suppress no-op navigation targets while preserving other safe choices."""
+
+    forbidden = {
+        candidate.candidate_id
+        for candidate in candidates
+        if candidate.selected and candidate.clickable and candidate.enabled
+    }
+    for item in recent_history:
+        if (
+            screen_fingerprint
+            and str(item.get("screen_fingerprint", "")) == screen_fingerprint
+            and str(item.get("action_name", "")) == "click"
+        ):
+            candidate_id = str(item.get("candidate_id", "")).strip()
+            if candidate_id:
+                forbidden.add(candidate_id)
+
+    def semantic_signature(
+        candidate_id: object,
+        label: object,
+        icon_semantics: object,
+        nearby_text: object,
+        parent_semantics: object,
+        child_semantics: object,
+    ) -> tuple[str, str, str, str, str, str]:
+        return tuple(
+            " ".join(str(value or "").casefold().split())
+            for value in (
+                candidate_id,
+                label,
+                icon_semantics,
+                nearby_text,
+                parent_semantics,
+                child_semantics,
+            )
+        )
+
+    repeated_semantic_clicks: dict[tuple[str, str, str, str, str, str], int] = {}
+    for item in recent_history:
+        if (
+            str(item.get("connectivity_status", "")) != "observed"
+            or str(item.get("action_name", "")) != "click"
+        ):
+            continue
+        signature = semantic_signature(
+            item.get("candidate_id"),
+            item.get("selected_candidate_label"),
+            item.get("selected_candidate_icon_semantics"),
+            item.get("selected_candidate_nearby_text"),
+            item.get("selected_candidate_parent_semantics"),
+            item.get("selected_candidate_child_semantics"),
+        )
+        # Dynamic counters and banners can continuously change the full-screen
+        # fingerprint. A stable candidate plus stable local context is a better
+        # signal that a persistent navigation control is being re-clicked.
+        if signature[0] and (signature[1] or signature[2]) and any(signature[3:]):
+            repeated_semantic_clicks[signature] = (
+                repeated_semantic_clicks.get(signature, 0) + 1
+            )
+    for candidate in candidates:
+        signature = semantic_signature(
+            candidate.candidate_id,
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.nearby_text,
+            candidate.parent_semantics,
+            candidate.child_semantics,
+        )
+        if repeated_semantic_clicks.get(signature, 0) >= 3:
+            forbidden.add(candidate.candidate_id)
+
+    if goal_id == "account.delete" or str(goal_id or "").startswith("membership."):
+        settings_markers = ("설정", "setting", "계정 관리", "account management")
+        has_settings_entry = any(
+            any(marker in _candidate_direct_text(candidate) for marker in settings_markers)
+            for candidate in candidates
+        )
+        if has_settings_entry:
+            profile_markers = (
+                "마이쿠팡",
+                "마이페이지",
+                "내 페이지",
+                "my page",
+                "profile",
+            )
+            for candidate in candidates:
+                is_bottom_navigation = (
+                    candidate.position_bucket == "bottom"
+                    or "bottom" in candidate.visual_region.casefold()
+                    or "navigation" in candidate.visual_role.casefold()
+                )
+                if is_bottom_navigation and any(
+                    marker in _candidate_text(candidate) for marker in profile_markers
+                ):
+                    forbidden.add(candidate.candidate_id)
+    return forbidden
+
+
+def _candidate_text(candidate: NavigationCandidate) -> str:
+    return " ".join(
+        (
+            candidate.label,
+            candidate.icon_semantics,
+            candidate.nearby_text,
+            candidate.parent_semantics,
+            candidate.child_semantics,
+        )
+    ).casefold()
+
+
+def _candidate_direct_text(candidate: NavigationCandidate) -> str:
+    return " ".join((candidate.label, candidate.icon_semantics)).casefold()
+
+
 def _is_non_plan_payment_method_screen(
     goal_id: str | None,
     screen_tokens: Sequence[str],
@@ -1728,10 +2764,30 @@ def _goal_already_satisfied(query: DecisionMemoryQuery) -> bool:
 
     if query.goal is None or query.goal.goal_id != "membership.join":
         return False
-    visible_tokens = set(query.screen.tokens)
+
+    # Keep the evidence local to one visible semantic field. A screen-wide token
+    # bag can combine unrelated phrases such as "currently playing" and a
+    # separate "membership information" navigation label into a false
+    # "current membership" match.
+    evidence_surfaces = [query.screen.title]
+    for candidate in query.screen.candidate_payloads:
+        evidence_surfaces.extend(
+            str(candidate.get(field, ""))
+            for field in (
+                "label",
+                "icon_semantics",
+                "nearby_text",
+                "parent_semantics",
+                "child_semantics",
+                "visual_role",
+            )
+        )
+    surface_token_sets = [set(tokenize(surface)) for surface in evidence_surfaces if surface]
     return any(
-        set(tokenize(feature)).issubset(visible_tokens)
+        feature_tokens.issubset(surface_tokens)
         for feature in _ACTIVE_MEMBERSHIP_FEATURES
+        if (feature_tokens := set(tokenize(feature)))
+        for surface_tokens in surface_token_sets
     )
 
 
@@ -1751,9 +2807,51 @@ def _is_authentication_boundary(
     # platform package/activity identity therefore provide the grounding.
     if screen is not None and _is_device_credential_prompt(screen):
         return True
+    if (
+        screen is not None
+        and _requires_authenticated_account(goal.goal_id)
+        and _is_web_authentication_surface(screen)
+    ):
+        return True
     if auth_state == "reauthentication":
         return True
     return _requires_authenticated_account(goal.goal_id) and auth_state == "logged_out"
+
+
+def _is_web_authentication_surface(screen: ScreenObservation) -> bool:
+    """Recognize grounded browser login/reauthentication surfaces."""
+
+    identity = " ".join(
+        (
+            screen.window_title,
+            screen.activity_name,
+            *(candidate.label for candidate in screen.candidates),
+            *(candidate.icon_semantics for candidate in screen.candidates),
+            *(candidate.nearby_text for candidate in screen.candidates),
+            *(node.view_id for node in screen.nodes),
+            *(node.text for node in screen.nodes),
+            *(node.content_description for node in screen.nodes),
+        )
+    ).casefold()
+    if any(
+        marker in identity
+        for marker in (
+            "login.",
+            "signin.",
+            "/login",
+            "/signin",
+            "비밀번호 확인",
+            "비밀번호를 입력",
+            "password confirmation",
+            "confirm password",
+            "sign in to continue",
+        )
+    ):
+        return True
+    return any(node.private_input for node in screen.nodes) and any(
+        marker in identity
+        for marker in ("로그인", "비밀번호", "password", "sign in", "signin")
+    )
 
 
 def _is_device_credential_prompt(screen: ScreenObservation) -> bool:

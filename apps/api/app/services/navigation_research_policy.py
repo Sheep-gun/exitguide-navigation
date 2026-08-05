@@ -773,11 +773,9 @@ def _profile_gate_existing_entry_candidate_id(
 ) -> str | None:
     """Return the sole existing profile on an explicit profile-selection gate."""
 
-    if not str(goal_id or "").startswith("membership.") or _history_requires_planner(
-        recent_history
-    ):
+    if not str(goal_id or "").startswith("membership."):
         return None
-    explicit_profile_gate = any(
+    title_profile_gate = any(
         marker in screen_title.casefold()
         for marker in (
             "프로필을 선택",
@@ -799,11 +797,31 @@ def _profile_gate_existing_entry_candidate_id(
         and candidate.enabled
         and not candidate.selected
         and candidate.risk_level == "low"
-        and candidate.candidate_id not in forbidden
     ]
+    structural_profile_gate = bool(mutations) and len(existing) == 1 and all(
+        candidate in mutations
+        or any(
+            marker in _candidate_primary_semantic_text(candidate)
+            for marker in ("프로필", "profile", "아바타", "avatar")
+        )
+        for candidate in candidates
+    )
+    explicit_profile_gate = title_profile_gate or structural_profile_gate
+    if _history_requires_planner(recent_history) and not explicit_profile_gate:
+        return None
     if not mutations or len(existing) != 1:
         return None
     existing_candidate_id = existing[0].candidate_id
+    failed_in_current_session = any(
+        str(item.get("candidate_id") or "") == existing_candidate_id
+        and str(item.get("outcome_type") or "")
+        in {"no_change", "wrong_destination", "blocked"}
+        for item in recent_history
+    )
+    if failed_in_current_session:
+        return None
+    if existing_candidate_id in forbidden and not explicit_profile_gate:
+        return None
     if explicit_profile_gate or visually_recommended_candidate_id == existing_candidate_id:
         return existing_candidate_id
     return None
@@ -862,7 +880,8 @@ SEMANTIC_FAST_PATH_ROLE_FLOOR = 0.95
 SEMANTIC_FAST_PATH_LABEL_MAX_CHARS = 48
 DESTINATION_SCROLL_MATCH_FLOOR = 0.30
 DESTINATION_SCROLL_LIMIT = 4
-MODEL_RETRY_CLICK_LIMIT = 6
+MODEL_RETRY_CLICK_LIMIT = 3
+MODEL_PRIMARY_CLICK_LIMIT = 4
 SAFE_INTERMEDIATE_FAST_PATH_ROLES = frozenset(
     {
         "account.hub",
@@ -922,6 +941,7 @@ class AndroidWorldResearchPolicy:
         planner_mode: str = "selective",
         planner_score_threshold: float = STRICT_FAST_PATH_SCORE_FLOOR,
         planner_margin_threshold: float = STRICT_FAST_PATH_MARGIN_FLOOR,
+        planner_schema_retry_enabled: bool = False,
         vlm_mode: str = "selective",
     ) -> None:
         self.planner_model = planner_model
@@ -941,6 +961,7 @@ class AndroidWorldResearchPolicy:
         self.planner_margin_threshold = max(
             STRICT_FAST_PATH_MARGIN_FLOOR, planner_margin_threshold
         )
+        self.planner_schema_retry_enabled = planner_schema_retry_enabled
         self.vlm_mode = _validated_mode(vlm_mode, "vlm_mode")
         self.fallback_planner = HierarchicalPlanBuilder()
         self.prior_scorer = CandidateValueScorer()
@@ -1008,6 +1029,7 @@ class AndroidWorldResearchPolicy:
         candidates: Sequence[NavigationCandidate],
         forbidden_candidate_ids: set[str],
         recent_history: Sequence[Mapping[str, object]],
+        screen_scrollable: bool = True,
     ) -> ResearchDecision:
         prior_values = self.prior_scorer.score(
             query,
@@ -1087,20 +1109,13 @@ class AndroidWorldResearchPolicy:
             for item in recent_history
         )
         if prior_visits >= 2:
-            provider = "python_screen_visit_guard"
-            proposal = PlannerProposal(
-                NavigationAction(name="stop_for_user"),
-                1.0,
-                provider,
-                False,
-            )
-            return ResearchDecision(
-                plan=plan,
-                proposal=proposal,
-                candidate_values=tuple(prior_values),
-                verifier_provider=provider,
-                score_margin=1.0,
-                reflection_on_demand=True,
+            plan = plan.model_copy(
+                update={
+                    "stage": "selective_recovery",
+                    "immediate_subgoal": "반복한 경로를 제외하고 다른 안전 경로를 찾는다.",
+                    "expected_outcome": "같은 화면 반복을 벗어나 다음 화면으로 진행한다.",
+                    "completion_rule": "이전 후보를 반복하지 않고 화면 의미가 달라진다.",
+                }
             )
         enumerated = self._enumerate_actions(
             candidates=candidates,
@@ -1108,6 +1123,7 @@ class AndroidWorldResearchPolicy:
             plan=plan,
             recent_history=recent_history,
             screen_text=query.screen.title,
+            screen_scrollable=screen_scrollable,
         )
         structural_continuation_candidate_id = (
             self._structural_continuation_fast_path_candidate(
@@ -1304,6 +1320,15 @@ class AndroidWorldResearchPolicy:
                     else value
                     for value in updated_values
                 ]
+        if plan.stage == "selective_recovery" and model_plan.stage != "selective_recovery":
+            model_plan = model_plan.model_copy(
+                update={
+                    "stage": plan.stage,
+                    "immediate_subgoal": plan.immediate_subgoal,
+                    "expected_outcome": plan.expected_outcome,
+                    "completion_rule": plan.completion_rule,
+                }
+            )
         fallback_semantically_resolved = False
         if fallback_used:
             resolved_key = self._resolve_structural_direct_candidate(
@@ -1510,22 +1535,31 @@ class AndroidWorldResearchPolicy:
         list[tuple[float, EnumeratedAction]],
         list[CandidateValue],
     ]:
+        primary_enumerated = self._compact_model_actions(
+            enumerated,
+            click_limit=MODEL_PRIMARY_CLICK_LIMIT,
+        )
         try:
             return self._plan_and_verify_actions(
                 query=query,
                 plan=plan,
                 recent_history=recent_history,
-                enumerated=enumerated,
+                enumerated=primary_enumerated,
                 prior_values=prior_values,
             )
         except (KeyError, TypeError, ValueError) as error:
-            retry_enumerated = self._compact_model_retry_actions(enumerated)
+            if not self.planner_schema_retry_enabled:
+                raise
+            retry_enumerated = self._compact_model_actions(
+                primary_enumerated,
+                click_limit=max(2, MODEL_RETRY_CLICK_LIMIT // 2),
+            )
             LOGGER.warning(
                 "planner_model_output_retry provider=%s failure_class=%s "
                 "original_actions=%s retry_actions=%s detail=%s",
                 self.planner_model.name,
                 type(error).__name__,
-                len(enumerated),
+                len(primary_enumerated),
                 len(retry_enumerated),
                 str(error)[:500],
             )
@@ -1538,16 +1572,29 @@ class AndroidWorldResearchPolicy:
             )
 
     @staticmethod
-    def _compact_model_retry_actions(
+    def _compact_model_actions(
         enumerated: Sequence[EnumeratedAction],
+        *,
+        click_limit: int,
     ) -> tuple[EnumeratedAction, ...]:
         """Bound a malformed-output retry while retaining all safe controls."""
 
         clicks = [
             item for item in enumerated if item.action.name == "click"
-        ][:MODEL_RETRY_CLICK_LIMIT]
+        ][: max(1, click_limit)]
         controls = [item for item in enumerated if item.action.name != "click"]
         return tuple((*clicks, *controls))
+
+    @staticmethod
+    def _compact_model_retry_actions(
+        enumerated: Sequence[EnumeratedAction],
+    ) -> tuple[EnumeratedAction, ...]:
+        """Compatibility alias for the original bounded retry inventory."""
+
+        return AndroidWorldResearchPolicy._compact_model_actions(
+            enumerated,
+            click_limit=MODEL_RETRY_CLICK_LIMIT,
+        )
 
     def _should_invoke_planner(
         self,
@@ -1906,6 +1953,7 @@ class AndroidWorldResearchPolicy:
         plan: HierarchicalPlan,
         recent_history: Sequence[Mapping[str, object]],
         screen_text: str = "",
+        screen_scrollable: bool = True,
     ) -> list[EnumeratedAction]:
         candidate_by_id = {candidate.candidate_id: candidate for candidate in candidates}
         click_values = [
@@ -1925,9 +1973,12 @@ class AndroidWorldResearchPolicy:
             )
             for value in click_values
         ]
+        if screen_scrollable:
+            actions.append(
+                EnumeratedAction(NavigationAction(name="scroll", direction="down"), 0.18, None)
+            )
         actions.extend(
             (
-                EnumeratedAction(NavigationAction(name="scroll", direction="down"), 0.18, None),
                 EnumeratedAction(NavigationAction(name="wait_and_observe"), 0.12, None),
                 EnumeratedAction(NavigationAction(name="stop_for_user"), 0.05, None),
             )
@@ -1984,6 +2035,9 @@ class AndroidWorldResearchPolicy:
             fallback_plan=plan.model_dump(mode="json"),
             actions=batch_actions,
         )
+        model_ranked_keys = {
+            key for key, output in outputs.items() if output.model_ranked
+        }
         scores = {
             key: (output.helpful_probability, output.reason)
             for key, output in outputs.items()
@@ -2062,12 +2116,18 @@ class AndroidWorldResearchPolicy:
             if result is None:
                 updated_values.append(value)
                 continue
+            action_key = f"click:{value.candidate_id}"
+            model_ranked = action_key in model_ranked_keys
             updated_values.append(
                 value.model_copy(
                     update={
-                        "verifier_score": round(result[0], 4),
+                        "verifier_score": round(result[0], 4) if model_ranked else None,
                         "final_score": round(result[0], 4),
-                        "score_source": "planner_model_verifier",
+                        "score_source": (
+                            "planner_model_verifier"
+                            if model_ranked
+                            else "decision_memory_fallback"
+                        ),
                         "verifier_reason": result[1],
                     }
                 )

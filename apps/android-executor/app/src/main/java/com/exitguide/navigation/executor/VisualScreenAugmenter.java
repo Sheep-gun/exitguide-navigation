@@ -337,6 +337,7 @@ final class VisualScreenAugmenter implements AutoCloseable {
                 String currentLabel = clean(candidate.optString("label", ""));
                 if (currentLabel.isEmpty()) {
                     put(candidate, "label", truncate(label, MAX_TEXT_LENGTH));
+                    put(candidate, "candidate_source", "merged");
                     merged++;
                     continue;
                 }
@@ -349,6 +350,7 @@ final class VisualScreenAugmenter implements AutoCloseable {
                             "nearby_text",
                             truncate((nearby + " " + label).trim(), MAX_TEXT_LENGTH)
                     );
+                    put(candidate, "candidate_source", "merged");
                     merged++;
                 }
             }

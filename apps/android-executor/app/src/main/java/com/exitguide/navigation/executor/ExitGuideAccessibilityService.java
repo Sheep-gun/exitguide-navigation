@@ -2,7 +2,6 @@ package com.exitguide.navigation.executor;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
-import android.accessibilityservice.GestureDescription;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -11,7 +10,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
@@ -46,40 +44,49 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private static final long MAX_OBSERVATION_SETTLE_MS = 3_500;
     private static final int MAX_ACTIONS = 15;
     private static final long MAX_EPISODE_DURATION_MS = 10 * 60 * 1_000L;
-    private static final long SCROLL_GESTURE_DURATION_MS = 350L;
-    private static final long MAX_ADB_HEARTBEAT_AGE_MS = 15_000L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final NavigationApiClient apiClient = new NavigationApiClient();
     private final EpisodeGenerationGuard episodeGuard = new EpisodeGenerationGuard();
     private final DecisionDebounceWindow decisionDebounceWindow =
             new DecisionDebounceWindow(MAX_EVENT_DEBOUNCE_MS);
+    private final CollectorContinuationGate continuationGate = new CollectorContinuationGate();
+    private final ForegroundAppSessionTracker foregroundAppTracker =
+            new ForegroundAppSessionTracker();
     private final VisualScreenAugmenter visualAugmenter = new VisualScreenAugmenter();
 
     private AccessibilityScreenReader screenReader;
+    private NavigationOverlayController overlayController;
     private boolean inFlight;
     private int stepOrdinal;
     private String sessionId = "";
-    private String sessionAppPackage = "";
     private String lastActivityName = "";
     private Runnable pendingDecision;
     private PowerManager.WakeLock screenWakeLock;
     private long episodeStartedAtElapsed;
     private long lastRelevantEventElapsed;
     private boolean forceVisualNextDecision;
+    private long frameSequence;
+    private String collectionRunId = "";
+    private String collectionBatchId = "";
+    private String collectionStartedAt = "";
 
     private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String previousSessionId = sessionId;
             resetSession();
+            // Configuration changes can replace an active goal while its last
+            // callback is still in flight. Close the previous server session
+            // before scheduling the replacement so one device never leaves an
+            // orphaned active episode behind.
+            requestSessionStop(previousSessionId);
             if (ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
                 holdScreenAwake();
                 verifyApiAndSchedule();
             } else {
                 cancelPending();
                 releaseScreenAwake();
-                requestSessionStop(previousSessionId);
             }
         }
     };
@@ -91,6 +98,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     text(intent.getStringExtra("request_id")),
                     text(intent.getStringExtra("api_base_url"))
             );
+        }
+    };
+
+    private final BroadcastReceiver statusReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (overlayController != null) {
+                overlayController.showStatus(text(intent.getStringExtra("status")));
+            }
         }
     };
 
@@ -111,9 +127,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             setServiceInfo(serviceInfo);
         }
         screenReader = new AccessibilityScreenReader(getResources().getDisplayMetrics());
+        overlayController = new NavigationOverlayController(this);
         IntentFilter filter = new IntentFilter(ExecutorPreferences.ACTION_CONFIGURATION_CHANGED);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(configurationReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            registerReceiver(
+                    statusReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_STATUS_CHANGED),
+                    Context.RECEIVER_NOT_EXPORTED
+            );
             registerReceiver(
                     diagnosticReceiver,
                     new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL),
@@ -121,6 +143,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             );
         } else {
             registerReceiver(configurationReceiver, filter);
+            registerReceiver(
+                    statusReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_STATUS_CHANGED)
+            );
             registerReceiver(
                     diagnosticReceiver,
                     new IntentFilter(ExecutorPreferences.ACTION_DIAGNOSTIC_INTERNAL)
@@ -145,6 +171,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         lastActivityName = text(event.getClassName());
         lastRelevantEventElapsed = SystemClock.elapsedRealtime();
         if (inFlight) {
+            return;
+        }
+        if (continuationGate.isWaitingForUser()) {
+            resumeIfUserChangedScreen();
             return;
         }
         scheduleDecision(EVENT_DEBOUNCE_MS);
@@ -191,6 +221,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         } catch (IllegalArgumentException ignored) {
             // Service startup did not finish.
         }
+        try {
+            unregisterReceiver(statusReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Service startup did not finish.
+        }
+        if (overlayController != null) {
+            overlayController.close();
+            overlayController = null;
+        }
         visualAugmenter.close();
         apiClient.close();
         super.onDestroy();
@@ -198,6 +237,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void runInstallationDiagnostic(String requestId, String requestedApiBaseUrl) {
         String safeRequestId = requestId.isEmpty() ? UUID.randomUUID().toString() : requestId;
+        publish("현재 화면을 분석하는 중입니다.");
         AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
         int nodeCount = 0;
         int candidateCount = 0;
@@ -264,7 +304,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                             return;
                         }
                         if (!response.optBoolean("ready", false)) {
-                            stop("Navigation API가 준비되지 않았습니다.");
+                            publish("Navigation API가 아직 준비되지 않았습니다. 잠시 후 재확인합니다.");
+                            scheduleDecision(2_000);
                             return;
                         }
                         publish("Navigation API 연결됨: " + response.optString("serving_mode", "unknown"));
@@ -284,7 +325,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void scheduleDecision(long delayMs) {
-        if (!ExecutorPreferences.active(this) || inFlight) {
+        if (!ExecutorPreferences.active(this)
+                || inFlight
+                || continuationGate.isWaitingForUser()) {
             return;
         }
         long boundedDelayMs = decisionDebounceWindow.boundedDelay(
@@ -312,24 +355,31 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         if (!ExecutorPreferences.active(this) || inFlight) {
             return;
         }
-        if (!ensureAdbLease()) {
-            return;
-        }
-        if (episodeStartedAtElapsed == 0L) {
-            episodeStartedAtElapsed = SystemClock.elapsedRealtime();
-        }
-        if (stepOrdinal >= MAX_ACTIONS) {
-            stop("안전 한도 15회에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
-            return;
-        }
-        if (SystemClock.elapsedRealtime() - episodeStartedAtElapsed >= MAX_EPISODE_DURATION_MS) {
-            stop("안전 시간 한도 10분에 도달했습니다. 현재 화면을 사용자가 확인해야 합니다.");
-            return;
-        }
         AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
         if (snapshot == null) {
             publish("현재 화면의 접근성 구조를 읽지 못했습니다. 잠시 후 다시 관찰합니다.");
             scheduleDecision(1_000);
+            return;
+        }
+        ForegroundAppSessionTracker.Observation appObservation =
+                foregroundAppTracker.observe(snapshot.appPackage);
+        if (appObservation.waitForAppChange) {
+            awaitForegroundAppChange(snapshot);
+            return;
+        }
+        if (appObservation.startsNewSession) {
+            startNewAppSession();
+        }
+        if (episodeStartedAtElapsed == 0L) {
+            episodeStartedAtElapsed = SystemClock.elapsedRealtime();
+        }
+        ensureCollectionRun();
+        if (stepOrdinal >= MAX_ACTIONS) {
+            pauseEpisodeAtStepLimit(snapshot);
+            return;
+        }
+        if (SystemClock.elapsedRealtime() - episodeStartedAtElapsed >= MAX_EPISODE_DURATION_MS) {
+            rolloverEpisode("10분 탐색 기록을 저장했습니다.");
             return;
         }
         Log.i(
@@ -352,13 +402,17 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             }
             if (visualReasoningRequired && dataUrl.isEmpty()) {
                 inFlight = false;
-                stop("시각 판단이 필요한 화면의 안전한 스크린샷을 만들지 못해 중지했습니다.");
+                awaitUserScreenChange(
+                        snapshot,
+                        "시각 판단이 어려운 화면입니다. 직접 조작해 화면을 바꾸면 자동 재개합니다."
+                );
                 return;
             }
             postDecision(
                     snapshot,
                     emptyToNull(dataUrl),
                     visualReasoningRequired,
+                    appObservation,
                     generation
             );
         });
@@ -368,6 +422,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             AccessibilityScreenReader.ScreenSnapshot snapshot,
             String screenshotDataUrl,
             boolean visualReasoningRequired,
+            ForegroundAppSessionTracker.Observation appObservation,
             long generation
     ) {
         if (!acceptsCallback(generation)) {
@@ -379,15 +434,26 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             if (!sessionId.isEmpty()) {
                 request.put("session_id", sessionId);
             }
-            if (sessionAppPackage.isEmpty()) {
-                sessionAppPackage = snapshot.appPackage;
-            }
-            request.put("app_package", sessionAppPackage);
-            request.put("app_version", packageVersion(sessionAppPackage));
+            request.put("app_package", appObservation.currentAppPackage);
+            request.put("origin_app_package", appObservation.originAppPackage);
+            request.put("current_app_package", appObservation.currentAppPackage);
+            request.put("previous_app_package", appObservation.previousAppPackage);
+            request.put("transition_reason", appObservation.transitionReason);
+            request.put("app_version", packageVersion(appObservation.currentAppPackage));
             request.put("locale", Locale.getDefault().toLanguageTag());
             request.put("goal_text", ExecutorPreferences.goal(this));
             request.put("step_ordinal", stepOrdinal);
             request.put("visual_reasoning_required", visualReasoningRequired);
+            request.put(
+                    "collection_run",
+                    CollectionRunMetadata.build(
+                            this,
+                            collectionRunId,
+                            collectionBatchId,
+                            collectionStartedAt
+                    )
+            );
+            request.put("task_context", CollectionRunMetadata.taskContext());
             if (screenshotDataUrl != null) {
                 request.put("screenshot_data_url", screenshotDataUrl);
             }
@@ -413,7 +479,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                                 return;
                             }
                             inFlight = false;
-                            stop("판단 요청 실패(" + failureClass + "). 화면 탐색 실패로 기록하지 않았습니다.");
+                            if (isDatasetAccessDenied(failureClass, detail)) {
+                                foregroundAppTracker.markCurrentAppUnsupported();
+                                awaitForegroundAppChange(snapshot);
+                                return;
+                            }
+                            publish("판단 요청 실패(" + failureClass + "). 잠시 후 다시 시도합니다.");
+                            scheduleDecision(2_000);
                         }
                     }
             );
@@ -431,10 +503,6 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     ) {
         if (!acceptsCallback(generation)) {
             requestSessionStop(response.optString("session_id", ""));
-            return;
-        }
-        if (!ensureAdbLease()) {
-            requestSessionStop(response.optString("session_id", sessionId));
             return;
         }
         sessionId = response.optString("session_id", sessionId);
@@ -458,13 +526,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     beforeSnapshot,
                     beforeScreenshot,
                     generation,
-                    false,
-                    "blocked",
+                    new ActionExecution(false, "blocked", "허용되지 않은 행동을 차단했습니다."),
                     true,
-                    "허용되지 않은 행동을 차단했습니다: " + actionName
+                    "허용되지 않은 행동을 차단했습니다: " + actionName,
+                    "safe_user_handoff",
+                    "blocked_by_executor"
             );
             return;
         }
+        publishDecisionContext(response, action, beforeSnapshot);
         if (response.optBoolean("visual_reobserve_required", false)) {
             if (!"wait_and_observe".equals(actionName)) {
                 observeDecision(
@@ -472,10 +542,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         beforeSnapshot,
                         beforeScreenshot,
                         generation,
-                        false,
-                        "blocked",
+                        new ActionExecution(
+                                false,
+                                "blocked",
+                                "VLM 재관찰 요청과 실행 행동이 충돌했습니다."
+                        ),
                         true,
-                        "VLM 재관찰 요청이 클릭 행동과 함께 반환되어 안전하게 차단했습니다."
+                        "VLM 재관찰 요청이 클릭 행동과 함께 반환되어 안전하게 차단했습니다.",
+                        "safe_user_handoff",
+                        "blocked_by_executor"
                 );
                 return;
             }
@@ -484,15 +559,17 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     + response.optString("visual_reobserve_reason", "visual_context_required"));
         }
         if ("stop_for_user".equals(actionName)) {
+            publish("자동 행동을 잠시 멈춥니다. 직접 조작해 화면을 바꾸면 탐색을 재개합니다.");
             observeDecision(
                     decisionId,
                     beforeSnapshot,
                     beforeScreenshot,
                     generation,
-                    false,
-                    "blocked",
+                    new ActionExecution(false, "blocked", "사용자 확인이 필요합니다."),
                     true,
-                    "목적지 또는 위험한 최종 행동 앞에서 멈췄습니다. 사용자가 직접 확인하세요."
+                    "현재 화면은 사용자 조작이 필요합니다.",
+                    "safe_user_handoff",
+                    "confirmation_required"
             );
             return;
         }
@@ -547,9 +624,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 beforeSnapshot,
                 beforeScreenshot,
                 generation,
-                execution.succeeded,
-                execution.observedSignal,
+                execution,
                 false,
+                "",
+                "",
                 ""
         );
     }
@@ -558,20 +636,37 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             JSONObject action,
             AccessibilityScreenReader.ScreenSnapshot snapshot
     ) {
+        long startedAt = SystemClock.elapsedRealtime();
         String name = action.optString("name", "");
         switch (name) {
             case "click":
-                return clickCandidate(action.optString("candidate_id", ""), snapshot);
+                return clickCandidate(
+                        action.optString("candidate_id", ""), snapshot, startedAt
+                );
             case "scroll":
-                return scroll(action.optString("direction", "down"));
+                return scroll(action.optString("direction", "down"), startedAt);
             case "back":
                 return new ActionExecution(
                         performGlobalAction(GLOBAL_ACTION_BACK),
                         "none",
-                        "뒤로가기를 실행했습니다."
+                        "뒤로가기를 실행했습니다.",
+                        actionPayload("back", "", ""),
+                        "system_global_action",
+                        startedAt,
+                        SystemClock.elapsedRealtime(),
+                        ""
                 );
             case "wait_and_observe":
-                return new ActionExecution(true, "none", "화면 변화를 기다립니다.");
+                return new ActionExecution(
+                        true,
+                        "none",
+                        "화면 변화를 기다립니다.",
+                        actionPayload("wait_and_observe", "", ""),
+                        "wait",
+                        startedAt,
+                        SystemClock.elapsedRealtime(),
+                        ""
+                );
             default:
                 return new ActionExecution(false, "blocked", "허용되지 않은 행동을 차단했습니다.");
         }
@@ -579,7 +674,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private ActionExecution clickCandidate(
             String candidateId,
-            AccessibilityScreenReader.ScreenSnapshot snapshot
+            AccessibilityScreenReader.ScreenSnapshot snapshot,
+            long startedAt
     ) {
         AccessibilityScreenReader.CandidateBinding binding = snapshot.bindings.get(candidateId);
         if (binding == null) {
@@ -605,7 +701,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     || !"low".equals(NavigationSafetyPolicy.riskLevel(node, binding.semanticText))) {
                 return new ActionExecution(false, "blocked", "클릭 직전 안전 재검사에서 후보를 차단했습니다.");
             }
+            Rect clickBounds = new Rect();
+            node.getBoundsInScreen(clickBounds);
             boolean succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            if (succeeded && overlayController != null) {
+                overlayController.showTap(clickBounds);
+            }
             Log.i(
                     LOG_TAG,
                     "action_execution name=click candidate_id=" + candidateId
@@ -614,7 +715,12 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return new ActionExecution(
                     succeeded,
                     succeeded ? "none" : "blocked",
-                    succeeded ? "후보 ID를 안전하게 클릭했습니다." : "Accessibility 클릭이 거절되었습니다."
+                    succeeded ? "후보 ID를 안전하게 클릭했습니다." : "Accessibility 클릭이 거절되었습니다.",
+                    actionPayload("click", candidateId, ""),
+                    "accessibility_action",
+                    startedAt,
+                    SystemClock.elapsedRealtime(),
+                    succeeded ? "" : "accessibility_action_rejected"
             );
         } finally {
             if (node != null && !binding.path.isEmpty()) {
@@ -624,7 +730,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
     }
 
-    private ActionExecution scroll(String direction) {
+    private ActionExecution scroll(String direction, long startedAt) {
         AccessibilityNodeInfo root = activeRoot();
         AccessibilityNodeInfo scrollable = findScrollable(root);
         if (scrollable == null) {
@@ -634,47 +740,24 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return new ActionExecution(false, "blocked", "스크롤 가능한 영역을 찾지 못했습니다.");
         }
         try {
-            Rect bounds = new Rect();
-            scrollable.getBoundsInScreen(bounds);
-            ViewportScrollPlan plan = ViewportScrollPlan.create(
-                    bounds.left,
-                    bounds.top,
-                    bounds.right,
-                    bounds.bottom,
-                    getResources().getDisplayMetrics().widthPixels,
-                    getResources().getDisplayMetrics().heightPixels,
-                    "up".equals(direction)
-            );
-            if (plan == null) {
-                return new ActionExecution(
-                        false,
-                        "blocked",
-                        "스크롤 영역이 너무 작거나 화면 밖이어서 스크롤을 차단했습니다."
-                );
-            }
-            Path path = new Path();
-            path.moveTo(plan.startX, plan.startY);
-            path.lineTo(plan.endX, plan.endY);
-            GestureDescription gesture = new GestureDescription.Builder()
-                    .addStroke(new GestureDescription.StrokeDescription(
-                            path,
-                            0,
-                            SCROLL_GESTURE_DURATION_MS
-                    ))
-                    .build();
-            boolean succeeded = dispatchGesture(gesture, null, null);
+            int action = "up".equals(direction)
+                    ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                    : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
+            boolean succeeded = scrollable.performAction(action);
             Log.i(
                     LOG_TAG,
                     "action_execution name=scroll direction=" + direction
-                            + " viewport_fraction=" + plan.viewportFraction
                             + " executor_action_succeeded=" + succeeded
             );
             return new ActionExecution(
                     succeeded,
                     succeeded ? "none" : "blocked",
-                    succeeded
-                            ? "화면 높이의 90%를 이동하는 Accessibility 스크롤을 실행했습니다."
-                            : "Accessibility 90% 스크롤이 거절되었습니다."
+                    succeeded ? "Accessibility 스크롤을 실행했습니다." : "Accessibility 스크롤이 거절되었습니다.",
+                    actionPayload("scroll", "", direction),
+                    "accessibility_action",
+                    startedAt,
+                    SystemClock.elapsedRealtime(),
+                    succeeded ? "" : "accessibility_action_rejected"
             );
         } finally {
             if (scrollable != root) {
@@ -715,10 +798,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             AccessibilityScreenReader.ScreenSnapshot beforeSnapshot,
             String beforeScreenshot,
             long generation,
-            boolean executionSucceeded,
-            String executionSignal,
+            ActionExecution execution,
             boolean stopAfterObserve,
-            String stopMessage
+            String stopMessage,
+            String terminalReason,
+            String handoffReason
     ) {
         if (!acceptsCallback(generation)) {
             return;
@@ -726,12 +810,18 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         AccessibilityScreenReader.ScreenSnapshot afterSnapshot = currentSnapshot();
         if (afterSnapshot == null) {
             postUnobservedOutcome(
-                    decisionId, generation, executionSucceeded, stopAfterObserve, stopMessage
+                    decisionId,
+                    generation,
+                    execution,
+                    stopAfterObserve,
+                    stopMessage,
+                    terminalReason,
+                    handoffReason
             );
             return;
         }
         String detectedSignal = ObservationSignalDetector.detect(
-                executionSignal,
+                execution.observedSignal,
                 beforeSnapshot.appPackage,
                 afterSnapshot.appPackage,
                 afterSnapshot.payload.toString()
@@ -743,7 +833,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 : detectedSignal;
         Log.i(
                 LOG_TAG,
-                "post_action_observation executor_action_succeeded=" + executionSucceeded
+                "post_action_observation executor_action_succeeded=" + execution.succeeded
                         + " screen_changed="
                         + !beforeSnapshot.payload.toString().equals(afterSnapshot.payload.toString())
                         + " observed_signal=" + observedSignal
@@ -761,7 +851,19 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 request.put("decision_id", decisionId);
                 request.put("connectivity_status", "observed");
                 request.put("observed_signal", observedSignal);
-                request.put("execution_succeeded", executionSucceeded);
+                request.put("execution_succeeded", execution.succeeded);
+                request.put(
+                        "execution_report",
+                        execution.report(
+                                Math.max(0L, SystemClock.elapsedRealtime() - execution.finishedAt),
+                                "ui_quiet_window",
+                                afterSnapshot.appPackage
+                        )
+                );
+                if (!terminalReason.isEmpty()) {
+                    request.put("terminal_reason", terminalReason);
+                    request.put("handoff_reason", handoffReason);
+                }
                 if (beforeScreenshot != null) {
                     request.put("before_screenshot_data_url", beforeScreenshot);
                 }
@@ -769,7 +871,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     request.put("after_screenshot_data_url", afterScreenshot);
                 }
                 request.put("next_screen", afterSnapshot.payload);
-                postObservation(request, generation, stopAfterObserve, stopMessage);
+                postObservation(
+                        request,
+                        generation,
+                        stopAfterObserve,
+                        stopMessage,
+                        afterSnapshot
+                );
             } catch (JSONException error) {
                 inFlight = false;
                 stop("관찰 요청을 만들 수 없습니다: " + error.getMessage());
@@ -780,9 +888,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private void postUnobservedOutcome(
             String decisionId,
             long generation,
-            boolean executionSucceeded,
+            ActionExecution execution,
             boolean stopAfterObserve,
-            String stopMessage
+            String stopMessage,
+            String terminalReason,
+            String handoffReason
     ) {
         if (!acceptsCallback(generation)) {
             return;
@@ -793,8 +903,19 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             request.put("decision_id", decisionId);
             request.put("connectivity_status", "device_disconnected");
             request.put("observed_signal", "none");
-            request.put("execution_succeeded", executionSucceeded);
-            postObservation(request, generation, stopAfterObserve, stopMessage);
+            request.put("execution_succeeded", execution.succeeded);
+            request.put(
+                    "execution_report",
+                    execution.report(null, "screen_unavailable", "")
+            );
+            request.put(
+                    "terminal_reason",
+                    terminalReason.isEmpty() ? "device_disconnected" : terminalReason
+            );
+            if (!handoffReason.isEmpty()) {
+                request.put("handoff_reason", handoffReason);
+            }
+            postObservation(request, generation, stopAfterObserve, stopMessage, null);
         } catch (JSONException error) {
             inFlight = false;
             stop("기기 관찰 오류를 기록하지 못했습니다.");
@@ -805,7 +926,8 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             JSONObject request,
             long generation,
             boolean stopAfterObserve,
-            String stopMessage
+            String stopMessage,
+            AccessibilityScreenReader.ScreenSnapshot continuationBaseline
     ) {
         if (!acceptsCallback(generation)) {
             return;
@@ -857,7 +979,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                                         ? "안전 경계가 감지되어 사용자의 확인이 필요합니다."
                                         : "목적지에 도달했습니다. 최종 행동은 사용자가 직접 수행하세요.";
                             }
-                            stop(terminalMessage);
+                            awaitUserScreenChange(continuationBaseline, terminalMessage);
                             return;
                         }
                         JSONObject recovery = response.optJSONObject("recovery_action");
@@ -875,7 +997,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                             return;
                         }
                         inFlight = false;
-                        stop("관찰 전송 실패(" + failureClass + "). UI 탐색 실패로 오인하지 않고 중지했습니다.");
+                        awaitUserScreenChange(
+                                continuationBaseline,
+                                "관찰 전송 실패(" + failureClass
+                                        + "). 직접 조작 후 새 실행으로 다시 이어갑니다."
+                        );
                     }
                 }
         );
@@ -887,7 +1013,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             return null;
         }
         try {
-            return screenReader.read(root, lastActivityName, hasMultipleApplicationWindows());
+            AccessibilityScreenReader.ScreenSnapshot snapshot = screenReader.read(
+                    root, lastActivityName, hasMultipleApplicationWindows()
+            );
+            snapshot.payload.put("frame_sequence_no", frameSequence++);
+            return snapshot;
         } catch (JSONException error) {
             publish("접근성 화면 구조화 실패: " + error.getMessage());
             return null;
@@ -966,6 +1096,20 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             callback.onReady("", false);
             return;
         }
+        if (overlayController != null) {
+            overlayController.hideForCapture();
+        }
+        handler.postDelayed(
+                () -> takeVisualScreenshot(snapshot, visualReasoningRequired, callback),
+                NavigationOverlayController.CAPTURE_HIDE_DELAY_MS
+        );
+    }
+
+    private void takeVisualScreenshot(
+            AccessibilityScreenReader.ScreenSnapshot snapshot,
+            boolean visualReasoningRequired,
+            VisualContextCallback callback
+    ) {
         try {
             takeScreenshot(
                     Display.DEFAULT_DISPLAY,
@@ -973,6 +1117,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     new TakeScreenshotCallback() {
                         @Override
                         public void onSuccess(ScreenshotResult screenshot) {
+                            restoreOverlayAfterCapture();
                             Bitmap bitmap = toSoftwareBitmap(screenshot);
                             if (bitmap == null) {
                                 callback.onReady("", visualReasoningRequired);
@@ -981,6 +1126,20 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                             visualAugmenter.augment(bitmap, snapshot, (dataUrl, mergedOcrLines) -> {
                                 bitmap.recycle();
                                 VisualScreenAugmenter.redactSnapshotInPlace(snapshot);
+                                put(
+                                        snapshot.payload,
+                                        "screenshot_tree_delta_ms",
+                                        Math.max(
+                                                0L,
+                                                SystemClock.elapsedRealtime()
+                                                        - snapshot.payload.optLong(
+                                                                "captured_device_monotonic_ms",
+                                                                SystemClock.elapsedRealtime()
+                                                        )
+                                        )
+                                );
+                                addCaptureCapability(snapshot.payload, "screenshot");
+                                addCaptureCapability(snapshot.payload, "ocr");
                                 Log.i(
                                         LOG_TAG,
                                         "visual_context ready required=" + visualReasoningRequired
@@ -993,16 +1152,57 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
                         @Override
                         public void onFailure(int errorCode) {
+                            restoreOverlayAfterCapture();
                             Log.w(LOG_TAG, "screenshot failed code=" + errorCode);
                             VisualScreenAugmenter.redactSnapshotInPlace(snapshot);
+                            addMissingPart(snapshot.payload, "screenshot_unavailable");
                             callback.onReady("", visualReasoningRequired);
                         }
                     }
             );
         } catch (IllegalStateException | SecurityException error) {
+            restoreOverlayAfterCapture();
             Log.w(LOG_TAG, "screenshot unavailable=" + error.getClass().getSimpleName());
             VisualScreenAugmenter.redactSnapshotInPlace(snapshot);
+            addMissingPart(snapshot.payload, "screenshot_unavailable");
             callback.onReady("", visualReasoningRequired);
+        }
+    }
+
+    private void restoreOverlayAfterCapture() {
+        if (overlayController != null) {
+            overlayController.restoreAfterCapture();
+        }
+    }
+
+    private static void addCaptureCapability(JSONObject screen, String capability) {
+        org.json.JSONArray capabilities = screen.optJSONArray("capture_capabilities");
+        if (capabilities == null) {
+            capabilities = new org.json.JSONArray();
+            put(screen, "capture_capabilities", capabilities);
+        }
+        for (int index = 0; index < capabilities.length(); index++) {
+            if (capability.equals(capabilities.optString(index))) {
+                return;
+            }
+        }
+        capabilities.put(capability);
+    }
+
+    private static void addMissingPart(JSONObject screen, String missingPart) {
+        org.json.JSONArray missing = screen.optJSONArray("missing_parts");
+        if (missing == null) {
+            missing = new org.json.JSONArray();
+            put(screen, "missing_parts", missing);
+        }
+        missing.put(missingPart);
+    }
+
+    private static void put(JSONObject target, String key, Object value) {
+        try {
+            target.put(key, value);
+        } catch (JSONException impossible) {
+            throw new IllegalStateException(impossible);
         }
     }
 
@@ -1044,13 +1244,201 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void resetSession() {
+        resetEpisodeForContinuation();
+        foregroundAppTracker.reset();
+        collectionBatchId = "";
+    }
+
+    private void ensureCollectionRun() {
+        if (!collectionRunId.isEmpty()) {
+            return;
+        }
+        collectionRunId = CollectionRunMetadata.newRunId();
+        if (collectionBatchId.isEmpty()) {
+            collectionBatchId = collectionRunId;
+        }
+        collectionStartedAt = CollectionRunMetadata.now();
+    }
+
+    private void awaitUserScreenChange(
+            AccessibilityScreenReader.ScreenSnapshot baseline,
+            String message
+    ) {
+        inFlight = false;
+        cancelPending();
+        requestSessionStop(sessionId);
+        continuationGate.awaitUserScreenChange(
+                baseline == null ? "" : baseline.appPackage,
+                baseline == null ? "" : baseline.screenFingerprint
+        );
+        releaseScreenAwake();
+        publish(message + " 화면이나 앱이 바뀌면 자동으로 다시 시작합니다.");
+        resumeIfUserChangedScreen();
+    }
+
+    private void rolloverEpisode(String message) {
+        inFlight = false;
+        cancelPending();
+        String previousSessionId = sessionId;
+        resetEpisodeForContinuation();
+        requestSessionStop(previousSessionId);
+        holdScreenAwake();
+        publish(message + " 새 세션으로 자동 탐색을 계속합니다.");
+        scheduleDecision(300);
+    }
+
+    private void pauseEpisodeAtStepLimit(
+            AccessibilityScreenReader.ScreenSnapshot baseline
+    ) {
+        inFlight = false;
+        cancelPending();
+        requestSessionStop(
+                sessionId,
+                "step_limit",
+                "maximum_action_count_reached"
+        );
+        continuationGate.awaitUserScreenChange(
+                baseline == null ? "" : baseline.appPackage,
+                baseline == null ? "" : baseline.screenFingerprint
+        );
+        releaseScreenAwake();
+        publish("15개 행동 한도에 도달해 자동 탐색을 멈췄습니다. "
+                + "화면이나 앱이 바뀌면 새 세션으로 다시 시작합니다.");
+    }
+
+    private void resumeIfUserChangedScreen() {
+        if (!continuationGate.isWaitingForUser()) {
+            return;
+        }
+        AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
+        if (snapshot == null || !continuationGate.consumeIfScreenChanged(
+                snapshot.appPackage,
+                snapshot.screenFingerprint
+        )) {
+            return;
+        }
+        resetEpisodeForUserResume();
+        holdScreenAwake();
+        publish("화면 변화를 확인했습니다. 안전 탐색을 자동 재개합니다.");
+        scheduleDecision(300);
+    }
+
+    private void resetEpisodeForUserResume() {
+        resetEpisodeForContinuation();
+    }
+
+    private void startNewAppSession() {
+        String previousSessionId = sessionId;
+        resetEpisodeForContinuation();
+        requestSessionStop(previousSessionId);
+        publish("현재 앱이 바뀌어 새 수집 세션으로 이어갑니다.");
+    }
+
+    private void resetEpisodeForContinuation() {
         episodeGuard.reset();
         sessionId = "";
-        sessionAppPackage = "";
         stepOrdinal = 0;
         episodeStartedAtElapsed = 0L;
         inFlight = false;
+        continuationGate.reset();
         forceVisualNextDecision = false;
+        frameSequence = 0L;
+        collectionRunId = "";
+        collectionStartedAt = "";
+    }
+
+    private void awaitForegroundAppChange(AccessibilityScreenReader.ScreenSnapshot baseline) {
+        inFlight = false;
+        cancelPending();
+        requestSessionStop(sessionId);
+        continuationGate.awaitAppChange(baseline == null ? "" : baseline.appPackage);
+        releaseScreenAwake();
+        publish("현재 화면은 수집하지 않습니다. 다른 앱으로 전환하면 자동으로 다시 시작합니다.");
+        resumeIfUserChangedScreen();
+    }
+
+    private static boolean isDatasetAccessDenied(String failureClass, String detail) {
+        return "http_error".equals(failureClass)
+                && detail != null
+                && detail.startsWith("HTTP 403:")
+                && (detail.contains("app_package_not_assigned_to_dataset_split")
+                || detail.contains("locked_holdout_access_denied"));
+    }
+
+    private void publishDecisionContext(
+            JSONObject response,
+            JSONObject action,
+            AccessibilityScreenReader.ScreenSnapshot snapshot
+    ) {
+        JSONObject context = response.optJSONObject("safety_context");
+        if (context == null) {
+            return;
+        }
+        String actionName = action.optString("name", "");
+        String actionLabel = actionName;
+        if ("click".equals(actionName)) {
+            AccessibilityScreenReader.CandidateBinding binding = snapshot.bindings.get(
+                    action.optString("candidate_id", "")
+            );
+            actionLabel = binding == null || binding.label.isEmpty() ? "항목 선택" : binding.label;
+        } else if ("scroll".equals(actionName)) {
+            actionLabel = "up".equals(action.optString("direction", "down"))
+                    ? "위로 스크롤" : "아래로 스크롤";
+        } else if ("back".equals(actionName)) {
+            actionLabel = "뒤로 이동";
+        } else if ("wait_and_observe".equals(actionName)) {
+            actionLabel = "화면 변화 대기";
+        } else if ("stop_for_user".equals(actionName)) {
+            actionLabel = "사용자에게 넘기기";
+        }
+        String stage = humanizeProcedureStage(context.optString("procedure_stage", "unknown"));
+        String effect = humanizeEffect(context.optString("effect_class", "unknown"));
+        String safety = context.optBoolean("boundary", false)
+                ? "사용자 확인" : "자동 진행";
+        publish("다음 행동: " + compactStatusPart(actionLabel)
+                + " | 단계: " + stage
+                + " | 예상: " + effect
+                + " | " + safety);
+    }
+
+    private static String humanizeProcedureStage(String value) {
+        switch (value) {
+            case "terminal_boundary":
+                return "최종 확인 단계";
+            case "review_before_commit":
+                return "최종 실행 전 검토";
+            case "goal_disambiguation":
+                return "목적 확인";
+            case "selective_recovery":
+                return "경로 복구";
+            case "unknown":
+            case "":
+                return "화면 판단";
+            default:
+                return compactStatusPart(value.replace('_', ' '));
+        }
+    }
+
+    private static String humanizeEffect(String value) {
+        switch (value) {
+            case "navigate_only":
+                return "화면만 이동";
+            case "observe_only":
+                return "변화 관찰";
+            case "user_handoff":
+                return "사용자 조작 필요";
+            case "goal_reached":
+                return "목적 달성";
+            case "automatic_recovery":
+                return "자동 경로 복구";
+            default:
+                return "결과 확인 필요";
+        }
+    }
+
+    private static String compactStatusPart(String value) {
+        String safe = value == null ? "" : value.trim().replaceAll("\\s+", " ");
+        return safe.length() <= 45 ? safe : safe.substring(0, 42) + "...";
     }
 
     private boolean acceptsCallback(long generation) {
@@ -1058,6 +1446,14 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void requestSessionStop(String stoppingSessionId) {
+        requestSessionStop(stoppingSessionId, "manual_stop", "");
+    }
+
+    private void requestSessionStop(
+            String stoppingSessionId,
+            String terminalReason,
+            String handoffReason
+    ) {
         if (stoppingSessionId == null
                 || !stoppingSessionId.matches("[A-Za-z0-9_-]{1,200}")) {
             return;
@@ -1065,6 +1461,10 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         try {
             JSONObject request = new JSONObject();
             request.put("request_id", UUID.randomUUID().toString());
+            request.put("terminal_reason", terminalReason);
+            if (handoffReason != null && !handoffReason.isEmpty()) {
+                request.put("handoff_reason", handoffReason);
+            }
             apiClient.post(
                     ExecutorPreferences.apiBaseUrl(this),
                     "/v1/navigation/sessions/" + stoppingSessionId + "/stop",
@@ -1093,15 +1493,6 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         publish(message);
     }
 
-    private boolean ensureAdbLease() {
-        if (ExecutorPreferences.adbLeaseValid(this, MAX_ADB_HEARTBEAT_AGE_MS)) {
-            return true;
-        }
-        inFlight = false;
-        stop("ADB 기기 연결이 끊겨 탐색과 DB 수집을 자동으로 일시중지했습니다.");
-        return false;
-    }
-
     @SuppressWarnings("deprecation")
     private void holdScreenAwake() {
         if (screenWakeLock == null) {
@@ -1127,6 +1518,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private void publish(String message) {
         ExecutorPreferences.publishStatus(this, message);
+        if (overlayController != null) {
+            overlayController.showStatus(message);
+        }
     }
 
     private static String emptyToNull(String value) {
@@ -1137,15 +1531,80 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         return value == null ? "" : value.toString();
     }
 
+    private static JSONObject actionPayload(String name, String candidateId, String direction) {
+        JSONObject payload = new JSONObject();
+        put(payload, "name", name);
+        put(payload, "candidate_id", candidateId.isEmpty() ? JSONObject.NULL : candidateId);
+        put(payload, "direction", direction.isEmpty() ? JSONObject.NULL : direction);
+        return payload;
+    }
+
     private static final class ActionExecution {
         final boolean succeeded;
         final String observedSignal;
         final String message;
+        final JSONObject actualAction;
+        final String executorMethod;
+        final long startedAt;
+        final long finishedAt;
+        final String failureCode;
 
         ActionExecution(boolean succeeded, String observedSignal, String message) {
+            this(
+                    succeeded,
+                    observedSignal,
+                    message,
+                    null,
+                    "not_executed",
+                    SystemClock.elapsedRealtime(),
+                    SystemClock.elapsedRealtime(),
+                    succeeded ? "" : observedSignal
+            );
+        }
+
+        ActionExecution(
+                boolean succeeded,
+                String observedSignal,
+                String message,
+                JSONObject actualAction,
+                String executorMethod,
+                long startedAt,
+                long finishedAt,
+                String failureCode
+        ) {
             this.succeeded = succeeded;
             this.observedSignal = observedSignal;
             this.message = message;
+            this.actualAction = actualAction;
+            this.executorMethod = executorMethod;
+            this.startedAt = startedAt;
+            this.finishedAt = finishedAt;
+            this.failureCode = failureCode;
+        }
+
+        JSONObject report(
+                Long settleDurationMs,
+                String settleReason,
+                String externalPackage
+        ) throws JSONException {
+            JSONObject report = new JSONObject();
+            report.put(
+                    "actual_action",
+                    actualAction == null ? JSONObject.NULL : actualAction
+            );
+            report.put("executor_method", executorMethod);
+            report.put("attempt_no", 1);
+            report.put("execution_started_device_monotonic_ms", startedAt);
+            report.put("execution_finished_device_monotonic_ms", finishedAt);
+            report.put("failure_code", failureCode);
+            report.put(
+                    "settle_duration_ms",
+                    settleDurationMs == null ? JSONObject.NULL : settleDurationMs
+            );
+            report.put("settle_reason", settleReason);
+            report.put("external_package", externalPackage);
+            report.put("human_intervention", false);
+            return report;
         }
     }
 }

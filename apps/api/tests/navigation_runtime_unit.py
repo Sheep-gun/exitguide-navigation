@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+from contextlib import closing
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -20,13 +21,18 @@ if str(API_ROOT) not in sys.path:
 from app.config import get_settings  # noqa: E402
 from app.navigation_contracts import (  # noqa: E402
     AccessibilityNodeSummary,
+    CandidateValue,
+    CollectionRunContext,
     DecideRequest,
     NavigationAction,
     NavigationCandidate,
     ObserveRequest,
     ScreenObservation,
 )
-from app.services.navigation_decision_memory import NavigationDecisionMemory  # noqa: E402
+from app.services.navigation_decision_memory import (  # noqa: E402
+    NavigationDecisionMemory,
+    NormalizedGoal,
+)
 from app.services.navigation_dataset_split import (  # noqa: E402
     DatasetSplitAccessError,
     NavigationDatasetSplitManifest,
@@ -39,12 +45,19 @@ from app.services.navigation_model_clients import (  # noqa: E402
 from app.services.navigation_research_policy import AndroidWorldResearchPolicy  # noqa: E402
 from app.services.navigation_runtime import (  # noqa: E402
     NavigationRuntime,
+    _automatic_recovery_forbidden_candidates,
     _contextualize_membership_cancellation_safety,
+    _dismissible_modal_fast_path_candidate_id,
     _interleaved_repeat_guard,
+    _is_authentication_boundary,
     _is_non_plan_payment_method_screen,
+    _is_profile_gate_entry_progress,
+    _planner_stop_has_grounded_boundary,
+    _safe_alternate_after_reverse_selection,
     _semantic_fast_path_grounded_progress,
     _selected_reverse_navigation_guard,
     _successful_back_recovery,
+    _validated_reflection_recovery_hint,
     verify_transition,
 )
 from app.services.navigation_runtime_store import NavigationRuntimeStore  # noqa: E402
@@ -105,6 +118,226 @@ def _account_screen() -> ScreenObservation:
 
 
 def main() -> None:
+    assert _is_profile_gate_entry_progress(
+        action_name="click",
+        previous_screen={
+            "window_title": "시청할 프로필을 선택하세요",
+            "candidates": [{"label": "기본 프로필"}],
+        },
+        next_screen=ScreenObservation(
+            window_title="홈",
+            candidates=[
+                NavigationCandidate(candidate_id="search", label="검색", role="button"),
+                NavigationCandidate(candidate_id="mine", label="나의 서비스", role="button"),
+            ],
+        ),
+    )
+    assert not _is_profile_gate_entry_progress(
+        action_name="click",
+        previous_screen={"window_title": "프로필 관리"},
+        next_screen=ScreenObservation(window_title="홈"),
+    )
+    assert not _planner_stop_has_grounded_boundary(
+        planner_provider="solar_pro4_step_evaluator",
+        plan_stage="hub_discovery",
+    )
+    assert _planner_stop_has_grounded_boundary(
+        planner_provider="python_terminal_boundary",
+        plan_stage="terminal_boundary",
+    )
+    assert _dismissible_modal_fast_path_candidate_id(
+        ScreenObservation(
+            window_title="Account recovery",
+            activity_name="android.view.View",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="close",
+                    text="닫기",
+                    role="button",
+                    clickable=True,
+                ),
+                AccessibilityNodeSummary(
+                    node_id="identity-input",
+                    role="input",
+                    private_input=True,
+                )
+            ],
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="close",
+                    label="닫기",
+                    role="button",
+                    risk_level="low",
+                ),
+                NavigationCandidate(
+                    candidate_id="identity-input",
+                    label="[redacted]",
+                    role="input",
+                    risk_level="blocked",
+                ),
+            ],
+        )
+    ) == "close"
+
+    account_delete_goal = NormalizedGoal(
+        goal_id="account.delete",
+        family="account",
+        operation="delete",
+        confidence=1.0,
+        matched_phrase="test",
+        terminal_action_policy="stop_before_commit",
+    )
+    assert _is_authentication_boundary(
+        account_delete_goal,
+        "unknown",
+        screen=ScreenObservation(
+            app_package="com.android.chrome",
+            window_title="Chrome",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="login-host",
+                    label="login.example.com",
+                    role="clickable",
+                )
+            ],
+        ),
+    )
+    assert not _is_authentication_boundary(
+        account_delete_goal,
+        "unknown",
+        screen=ScreenObservation(
+            app_package="com.android.chrome",
+            window_title="Help",
+            activity_name="android.webkit.WebView",
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="account-help",
+                    label="Account help",
+                    role="clickable",
+                )
+            ],
+        ),
+    )
+    assert _validated_reflection_recovery_hint(
+        "stop_for_user",
+        outcome_type="navigated",
+        decision_action_name="wait_and_observe",
+        terminal_reason=None,
+    ) is None
+    assert _validated_reflection_recovery_hint(
+        "stop_for_user",
+        outcome_type="destination_reached",
+        decision_action_name="wait_and_observe",
+        terminal_reason=None,
+    ) == "stop_for_user"
+    assert _validated_reflection_recovery_hint(
+        "stop_for_user",
+        outcome_type="blocked",
+        decision_action_name="scroll",
+        terminal_reason=None,
+    ) is None
+    assert _validated_reflection_recovery_hint(
+        "back",
+        outcome_type="wrong_destination",
+        decision_action_name="click",
+        terminal_reason=None,
+    ) == "back"
+
+    legacy_app_request = DecideRequest(
+        request_id="legacy-app-context",
+        app_package="com.sec.android.app.launcher",
+        goal_text="회원 탈퇴 메뉴를 찾아줘",
+        screen=ScreenObservation(app_package="com.coupang.mobile"),
+    )
+    assert legacy_app_request.app_package == "com.coupang.mobile"
+    assert legacy_app_request.current_app_package == "com.coupang.mobile"
+    assert legacy_app_request.origin_app_package == "com.coupang.mobile"
+
+    handoff_request = DecideRequest(
+        request_id="explicit-app-context",
+        app_package="com.android.settings",
+        origin_app_package="com.coupang.mobile",
+        current_app_package="com.android.settings",
+        previous_app_package="com.coupang.mobile",
+        transition_reason="expected_handoff",
+        goal_text="회원 탈퇴 메뉴를 찾아줘",
+        screen=ScreenObservation(app_package="com.android.settings"),
+    )
+    assert handoff_request.origin_app_package == "com.coupang.mobile"
+    assert handoff_request.current_app_package == "com.android.settings"
+
+    recovery_candidates = [
+        NavigationCandidate(
+            candidate_id="my-coupang",
+            label="마이쿠팡",
+            position_bucket="bottom",
+        ),
+        NavigationCandidate(candidate_id="settings", label="설정"),
+    ]
+    assert _automatic_recovery_forbidden_candidates(
+        screen_fingerprint="my-coupang-screen",
+        candidates=recovery_candidates,
+        recent_history=(),
+        goal_id="account.delete",
+    ) == {"my-coupang"}
+    assert _automatic_recovery_forbidden_candidates(
+        screen_fingerprint="my-coupang-screen",
+        candidates=recovery_candidates,
+        recent_history=(
+            {
+                "screen_fingerprint": "my-coupang-screen",
+                "action_name": "click",
+                "candidate_id": "my-coupang",
+            },
+        ),
+        goal_id="account.delete",
+    ) == {"my-coupang"}
+
+    persistent_navigation = [
+        NavigationCandidate(
+            candidate_id="my-page",
+            label="마이페이지",
+            nearby_text="홈 검색 장바구니",
+            position_bucket="bottom",
+        ),
+        NavigationCandidate(candidate_id="settings", label="설정"),
+    ]
+    persistent_history = tuple(
+        {
+            "screen_fingerprint": f"dynamic-screen-{step}",
+            "action_name": "click",
+            "candidate_id": "my-page",
+            "connectivity_status": "observed",
+            "progress_label": "advanced",
+            "selected_candidate_label": "마이페이지",
+            "selected_candidate_icon_semantics": "",
+            "selected_candidate_nearby_text": "홈 검색 장바구니",
+            "selected_candidate_parent_semantics": "",
+            "selected_candidate_child_semantics": "",
+        }
+        for step in range(3)
+    )
+    assert _automatic_recovery_forbidden_candidates(
+        screen_fingerprint="dynamic-screen-current",
+        candidates=persistent_navigation,
+        recent_history=persistent_history,
+        goal_id="account.signup",
+    ) == {"my-page"}
+    changing_context_history = tuple(
+        {
+            **item,
+            "selected_candidate_nearby_text": f"가입 단계 {step}",
+        }
+        for step, item in enumerate(persistent_history)
+    )
+    assert _automatic_recovery_forbidden_candidates(
+        screen_fingerprint="dynamic-screen-current",
+        candidates=persistent_navigation,
+        recent_history=changing_context_history,
+        goal_id="account.signup",
+    ) == set()
+
     assert _is_non_plan_payment_method_screen(
         "membership.change",
         ("기본", "결제", "수단", "업데이트", "카드", "추가"),
@@ -229,6 +462,24 @@ def main() -> None:
     )
     assert sparse_reverse_guard is not None
     assert sparse_reverse_guard.name == "wait_and_observe"
+    stalled_reverse_guard = _selected_reverse_navigation_guard(
+        NavigationAction(name="click", candidate_id="navigate-up"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="navigate-up",
+                label="뒤로가기",
+                role="icon_button",
+            )
+        ],
+        nodes=[],
+        screen_fingerprint="external-loading",
+        recent_history=[
+            {"screen_fingerprint": "external-loading", "action_name": "wait_and_observe"},
+            {"screen_fingerprint": "external-loading", "action_name": "wait_and_observe"},
+        ],
+    )
+    assert stalled_reverse_guard is not None
+    assert stalled_reverse_guard.name == "back"
     unlabeled_structural_reverse = _selected_reverse_navigation_guard(
         NavigationAction(name="click", candidate_id="unknown-top-icon"),
         candidates=[
@@ -245,6 +496,43 @@ def main() -> None:
     )
     assert unlabeled_structural_reverse is not None
     assert unlabeled_structural_reverse.name == "wait_and_observe"
+    reverse_alternate = _safe_alternate_after_reverse_selection(
+        NavigationAction(name="click", candidate_id="navigate-up"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="navigate-up",
+                label="뒤로가기",
+                role="icon_button",
+            ),
+            NavigationCandidate(
+                candidate_id="member-edit",
+                label="회원정보 수정",
+                role="button",
+            ),
+            NavigationCandidate(
+                candidate_id="cart",
+                label="장바구니",
+                role="button",
+            ),
+        ],
+        candidate_values=[
+            CandidateValue(
+                candidate_id="navigate-up", value=1.0, memory_score=0.0,
+                role_score=1.0, final_score=1.0, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="member-edit", value=0.68, memory_score=0.2,
+                role_score=0.8, final_score=0.68, forbidden=False, risk_level="low",
+            ),
+            CandidateValue(
+                candidate_id="cart", value=0.31, memory_score=0.0,
+                role_score=0.1, final_score=0.31, forbidden=False, risk_level="low",
+            ),
+        ],
+        forbidden_candidate_ids=set(),
+    )
+    assert reverse_alternate is not None
+    assert reverse_alternate.candidate_id == "member-edit"
 
     repeated_after_visual_wait = _interleaved_repeat_guard(
         NavigationAction(name="click", candidate_id="account-url"),
@@ -274,7 +562,7 @@ def main() -> None:
         ],
     )
     assert repeated_after_two_waits is not None
-    assert repeated_after_two_waits.name == "stop_for_user"
+    assert repeated_after_two_waits.name == "back"
 
     external_destination_collision = verify_transition(
         action_name="back",
@@ -366,6 +654,82 @@ def main() -> None:
             store=NavigationRuntimeStore(runtime_db),
             policy=_policy(),
         )
+        device_session_store = NavigationRuntimeStore(
+            temporary_path / "device-session-runtime.sqlite"
+        )
+        for session_id, run_id in (("device-old", "run-old"), ("device-new", "run-new")):
+            device_session_store.upsert_session(
+                session_id=session_id,
+                request_id=f"request-{session_id}",
+                app_package="evaluation.device.app",
+                app_version="1.0.0",
+                locale="ko-KR",
+                goal_text="회원 탈퇴",
+                goal_id="account.delete",
+                collection_run=CollectionRunContext(
+                    run_id=run_id,
+                    collection_batch_id="device-batch",
+                    collector_alias="unit-test",
+                    device_instance_id="device-one",
+                ),
+            )
+        assert device_session_store.session("device-old")["status"] == "stopped"
+        assert (
+            device_session_store.session("device-old")["handoff_reason"]
+            == "superseded_by_new_device_session"
+        )
+        assert device_session_store.session("device-new")["status"] == "active"
+        recovery_store = NavigationRuntimeStore(
+            temporary_path / "cross-session-recovery-runtime.sqlite"
+        )
+        for session_id, goal_id in (
+            ("prior-a", "membership.change"),
+            ("prior-b", "membership.change"),
+            ("current", "membership.change"),
+            ("other-goal", "membership.cancel"),
+        ):
+            recovery_store.upsert_session(
+                session_id=session_id,
+                request_id=f"request-{session_id}",
+                app_package="evaluation.membership.app",
+                app_version="1.0.0",
+                locale="ko-KR",
+                goal_text=goal_id,
+                goal_id=goal_id,
+            )
+        for session_id in ("prior-a", "prior-b"):
+            recovery_store.remember_failure(
+                session_id=session_id,
+                screen_fingerprint=f"dynamic-{session_id}",
+                candidate_id="repeated-across-sessions",
+                failure_signature="semantic_distance_increased",
+                recovery_action="back",
+            )
+        recovery_store.remember_failure(
+            session_id="prior-a",
+            screen_fingerprint="one-off-prior",
+            candidate_id="one-off-prior",
+            failure_signature="semantic_distance_increased",
+            recovery_action="back",
+        )
+        recovery_store.remember_failure(
+            session_id="current",
+            screen_fingerprint="current-screen",
+            candidate_id="current-session-failure",
+            failure_signature="semantic_distance_increased",
+            recovery_action="back",
+        )
+        recovery_store.remember_failure(
+            session_id="other-goal",
+            screen_fingerprint="other-goal-screen",
+            candidate_id="repeated-across-sessions",
+            failure_signature="semantic_distance_increased",
+            recovery_action="back",
+        )
+        assert recovery_store.forbidden_candidates("current", "current-screen") == {
+            "current-session-failure",
+            "repeated-across-sessions",
+        }
         first = runtime.decide(
             DecideRequest(
                 request_id="request-1",
@@ -377,6 +741,72 @@ def main() -> None:
         assert first.goal.status == "recognized"
         assert first.action.name == "click" and first.action.candidate_id == "profile"
         assert first.evidence_case_ids == []
+
+        operator_runtime_db = temporary_path / "operator-runtime.sqlite"
+        operator_artifact_dir = temporary_path / "operator-artifacts"
+        operator_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(
+                operator_runtime_db,
+                screen_artifact_dir=operator_artifact_dir,
+            ),
+            policy=_policy(),
+        )
+        operator_decision = operator_runtime.decide(
+            DecideRequest(
+                request_id="request-codex-operator",
+                app_package="evaluation.operator.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                collection_run=CollectionRunContext(
+                    run_id="operator-run",
+                    collector_alias="codex",
+                    artifact_policy="raw_full_capture",
+                    test_account=False,
+                ),
+                raw_screenshot_data_url=(
+                    "data:image/png;base64,"
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwC"
+                    "AAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+                ),
+                operator_action=NavigationAction(name="click", candidate_id="search"),
+                operator_source="codex",
+                operator_command_id="codex-command-1",
+                screen=_account_screen(),
+            )
+        )
+        assert operator_decision.action == NavigationAction(
+            name="click", candidate_id="search"
+        )
+        assert operator_decision.planner_provider == "codex_operator"
+        assert operator_runtime.store.status()["screen_artifacts"] == 1
+        operator_progress = operator_runtime.observe(
+            ObserveRequest(
+                request_id="request-codex-operator-observe",
+                decision_id=operator_decision.decision_id,
+                connectivity_status="observed",
+                execution_succeeded=True,
+                next_screen=ScreenObservation(
+                    app_package="evaluation.operator.app",
+                    window_title="회원 탈퇴 신청",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="final-delete",
+                            label="회원 탈퇴하기",
+                            role="button",
+                            risk_level="high",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert operator_progress.outcome_type == "navigated"
+        assert operator_progress.progress_label == "advanced"
+        assert operator_progress.session_status == "active"
+        with closing(sqlite3.connect(operator_runtime_db)) as operator_connection:
+            artifact_row = operator_connection.execute(
+                "SELECT redaction_status, retention_class FROM navigation_screen_artifacts"
+            ).fetchone()
+        assert artifact_row == ("raw", "raw_full_capture")
 
         profile_gate_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
@@ -932,6 +1362,94 @@ def main() -> None:
         assert first_transient.action.name == "wait_and_observe"
         assert first_transient.planner_provider == "python_visual_reobserve_gate"
         assert first_transient.visual_reobserve_required is True
+        empty_loading_screen = ScreenObservation(
+            app_package="evaluation.empty.loading.app",
+            window_title="Loading",
+            activity_name="android.widget.FrameLayout",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="loading-root",
+                    text="Loading account page",
+                    clickable=False,
+                )
+            ],
+            candidates=[],
+        )
+        empty_loading = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-empty-loading-1",
+                app_package="evaluation.empty.loading.app",
+                goal_text="change membership",
+                visual_reasoning_required=True,
+                screen=empty_loading_screen,
+            )
+        )
+        assert empty_loading.action.name == "wait_and_observe"
+        assert empty_loading.planner_provider == "python_empty_candidate_wait_gate"
+        assert empty_loading.action.name != "stop_for_user"
+        dismissible_popup = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-dismissible-popup-1",
+                app_package="evaluation.dismissible.popup.app",
+                goal_text="join membership",
+                visual_reasoning_required=True,
+                screen=ScreenObservation(
+                    app_package="evaluation.dismissible.popup.app",
+                    window_title="팝업 창",
+                    activity_name="androidx.recyclerview.widget.RecyclerView",
+                    nodes=[],
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="close-popup",
+                            label="닫기",
+                            role="button",
+                            risk_level="low",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert dismissible_popup.action.name == "click"
+        assert dismissible_popup.action.candidate_id == "close-popup"
+        assert dismissible_popup.planner_provider == "semantic_modal_dismiss_fast_path"
+        feedback_overlay = transient_runtime.decide(
+            DecideRequest(
+                request_id="request-feedback-overlay-1",
+                app_package="evaluation.dismissible.popup.app",
+                goal_text="join membership",
+                screen=ScreenObservation(
+                    app_package="evaluation.dismissible.popup.app",
+                    window_title="",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="feedback-group",
+                            label="비추천 맘에 안 들어요 추천 좋아요 뒤로",
+                            role="clickable",
+                            visual_role="사용자 피드백 입력",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="dislike",
+                            label="비추천",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="like",
+                            label="추천",
+                            role="button",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="close-feedback",
+                            label="뒤로",
+                            role="button",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert feedback_overlay.action.name == "click", feedback_overlay.model_dump(mode="json")
+        assert feedback_overlay.action.candidate_id == "close-feedback"
+        assert feedback_overlay.planner_provider == "semantic_modal_dismiss_fast_path"
         transient_runtime.observe(
             ObserveRequest(
                 request_id="request-transient-nav-observe-1",
@@ -973,8 +1491,8 @@ def main() -> None:
                 screen=transient_screen,
             )
         )
-        assert stalled_transient.action.name == "stop_for_user"
-        assert stalled_transient.planner_provider == "python_transient_navigation_stall_guard"
+        assert stalled_transient.action.name == "back"
+        assert stalled_transient.planner_provider == "python_transient_navigation_back_guard"
 
         execution_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
@@ -1011,7 +1529,7 @@ def main() -> None:
         assert not_executed_observation.connection_error is False
         assert not_executed_observation.candidate_forbidden is False
         assert not_executed_observation.knowledge_revision_queued is False
-        assert not_executed_observation.session_status == "stopped"
+        assert not_executed_observation.session_status == "active"
 
         dangerous = runtime.decide(
             DecideRequest(
@@ -1205,6 +1723,8 @@ def main() -> None:
         assert signup_terminal.action.name == "stop_for_user"
         assert signup_terminal.planner_provider == "python_terminal_boundary"
         assert signup_terminal.perception_provider == "structured_input_terminal_boundary"
+        assert signup_terminal.safety_context.boundary_evidence == "dangerous_candidate"
+        assert signup_terminal.safety_context.boundary_candidate_id == "create"
 
         signup_auth_runtime = NavigationRuntime(
             memory=NavigationDecisionMemory(decision_db),
@@ -1324,6 +1844,33 @@ def main() -> None:
         )
         assert already_member.action.name == "stop_for_user"
         assert already_member.planner_provider == "python_goal_already_satisfied"
+
+        unrelated_membership_tokens = auth_transition_runtime.decide(
+            DecideRequest(
+                request_id="request-unrelated-membership-tokens",
+                app_package="evaluation.membership.app",
+                goal_text="유료 멤버십에 가입하고 싶어",
+                screen=ScreenObservation(
+                    window_title="클립 영상",
+                    activity_name="android.view.View",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="currently-playing",
+                            label="콘텐츠 상세 정보",
+                            role="button",
+                            visual_role="현재 재생 중인 콘텐츠 정보",
+                        ),
+                        NavigationCandidate(
+                            candidate_id="my-profile",
+                            label="나의 서비스",
+                            role="button",
+                            visual_role="개인 계정 및 멤버십 정보 접근",
+                        ),
+                    ],
+                ),
+            )
+        )
+        assert unrelated_membership_tokens.planner_provider != "python_goal_already_satisfied"
         already_member_observation = auth_transition_runtime.observe(
             ObserveRequest(
                 request_id="request-already-member-observe",
@@ -1437,7 +1984,7 @@ def main() -> None:
         assert tving is not None
         assert tving.split == "validation"
         assert tving.existing_decision_cases == 0
-        assert split_runtime.store.status()["schema_version"] == 4
+        assert split_runtime.store.status()["schema_version"] == 5
         assert len(split_runtime.store.dataset_split_manifest()) == len(split_manifest.entries)
         try:
             split_runtime.decide(
@@ -1479,7 +2026,7 @@ def main() -> None:
         finally:
             connection.close()
         upgraded_store = NavigationRuntimeStore(legacy_runtime_path)
-        assert upgraded_store.status()["schema_version"] == 4
+        assert upgraded_store.status()["schema_version"] == 5
         upgraded_session = upgraded_store.session("legacy-session")
         assert upgraded_session is not None
         assert upgraded_session["app_version"] == ""

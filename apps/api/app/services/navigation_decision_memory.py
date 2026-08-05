@@ -23,6 +23,9 @@ ALLOWED_ACTIONS = (
     "stop_for_user",
 )
 TOKEN_PATTERN = re.compile(r"[0-9A-Za-z가-힣]+")
+VOLATILE_CLOCK_PATTERN = re.compile(
+    r"(?<!\d)(?:\d{1,3}:)?[0-5]?\d:[0-5]\d(?!\d)"
+)
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 USER_HANDLE_PATTERN = re.compile(r"(?<![\w@])@[0-9A-Za-z._-]{2,64}\b")
 ACCOUNT_CONTEXT_PATTERN = re.compile(
@@ -194,9 +197,14 @@ STATE_CHANGING_ACTION_LABELS = frozenset(
         "구독 해지",
         "구독 취소",
         "이용권 해지",
+        "해지 신청 완료하기",
         "cancel membership",
         "cancel subscription",
         "unsubscribe",
+        # A bare deactivation CTA is the final mutation button. Longer menu
+        # descriptions remain navigable because matching is exact.
+        "비활성화",
+        "deactivate",
         # Renewal/resubscription CTAs can immediately restore a paid state.
         # Keep these exact so read-only text such as "갱신일: 9월 3일" remains
         # usable as current-plan evidence.
@@ -693,6 +701,7 @@ class NavigationDecisionMemory:
         activity = normalize_text(activity_name)
         candidate_payloads: list[dict[str, object]] = []
         screen_tokens: set[str] = set(tokenize(title))
+        fingerprint_tokens: set[str] = set(_fingerprint_tokens(title))
         role_counts: dict[str, int] = {}
         labels: list[str] = []
         for index, candidate in enumerate(candidates):
@@ -764,6 +773,8 @@ class NavigationDecisionMemory:
             labels.append(label)
             screen_tokens.update(tokenize(semantic_context))
             screen_tokens.update(inferred_roles)
+            fingerprint_tokens.update(_fingerprint_tokens(semantic_context))
+            fingerprint_tokens.update(inferred_roles)
             role_counts[role] = role_counts.get(role, 0) + 1
             candidate_payloads.append(
                 {
@@ -795,13 +806,13 @@ class NavigationDecisionMemory:
                 }
             )
         joined = " ".join((title, *labels)).casefold()
+        explicit_logged_out_affordance = any(
+            _is_explicit_logged_out_affordance(label) for label in labels
+        )
         auth_state = "unknown"
         if any(token in joined for token in ("다시 로그인", "세션 만료", "reauth", "session expired")):
             auth_state = "reauthentication"
-        elif any(
-            token in joined
-            for token in ("로그인", "회원가입", "sign in", "log in", "sign up")
-        ):
+        elif explicit_logged_out_affordance:
             # A generic My Page tab is commonly visible while logged out. An
             # explicit login/signup affordance is therefore stronger evidence.
             auth_state = "logged_out"
@@ -817,10 +828,10 @@ class NavigationDecisionMemory:
             "surface_type": surface_type,
             "navigation_depth": navigation_depth,
             "role_counts": role_counts,
-            "tokens": sorted(screen_tokens),
+            "tokens": sorted(fingerprint_tokens),
             "candidate_states": sorted(
                 (
-                    normalize_text(str(item["label"])),
+                    _normalize_fingerprint_text(str(item["label"])),
                     bool(item["selected"]),
                     item["checked"],
                 )
@@ -840,7 +851,6 @@ class NavigationDecisionMemory:
             tokens=tuple(sorted(screen_tokens)),
             candidate_payloads=tuple(candidate_payloads),
         )
-
     def retrieve(
         self,
         *,
@@ -1322,6 +1332,30 @@ class NavigationDecisionMemory:
         return "wait_and_observe", None, None, 0.15
 
 
+def _is_explicit_logged_out_affordance(label: str) -> bool:
+    normalized = " ".join(normalize_text(label).casefold().split())
+    if not normalized:
+        return False
+    exact_labels = {
+        "로그인",
+        "로그인하기",
+        "회원가입",
+        "회원 가입",
+        "회원가입하기",
+        "로그인 또는 회원가입",
+        "계정 만들기",
+        "sign in",
+        "log in",
+        "sign up",
+        "create account",
+    }
+    if normalized in exact_labels:
+        return True
+    if len(normalized) > 32:
+        return False
+    return normalized.startswith(("로그인 ", "회원가입 ", "sign in ", "log in ", "sign up "))
+
+
 def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value or "").translate(ZERO_WIDTH)
     return " ".join(normalized.casefold().split())
@@ -1440,6 +1474,16 @@ def is_contextual_membership_cancellation_action(
 
 def tokenize(value: str) -> tuple[str, ...]:
     return tuple(_stem_token(token) for token in TOKEN_PATTERN.findall(normalize_text(value)))
+
+
+def _normalize_fingerprint_text(value: str) -> str:
+    """Remove clock/countdown drift only from structural screen identity."""
+
+    return normalize_text(VOLATILE_CLOCK_PATTERN.sub(" [time] ", value or ""))
+
+
+def _fingerprint_tokens(value: str) -> tuple[str, ...]:
+    return tokenize(_normalize_fingerprint_text(value))
 
 
 def _stem_token(token: str) -> str:

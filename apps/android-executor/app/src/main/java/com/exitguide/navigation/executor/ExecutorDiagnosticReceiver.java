@@ -21,6 +21,7 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
         if (ExecutorPreferences.ACTION_ADB_START_NAVIGATION.equals(action)) {
             String goal = value(intent.getStringExtra("goal"));
             String apiBaseUrl = value(intent.getStringExtra("api_base_url"));
+            String collectorAlias = value(intent.getStringExtra("collector_alias"));
             if (goal.isEmpty()) {
                 Log.w(LOG_TAG, "adb_control start_rejected reason=empty_goal");
                 return;
@@ -28,16 +29,18 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             if (apiBaseUrl.isEmpty()) {
                 apiBaseUrl = ExecutorPreferences.apiBaseUrl(context);
             }
-            ExecutorPreferences.startAdbLease(context);
-            ExecutorPreferences.configure(context, apiBaseUrl, goal, true);
-            Log.i(LOG_TAG, "adb_control started goal_chars=" + goal.length());
-            return;
-        }
-        if (ExecutorPreferences.ACTION_ADB_HEARTBEAT.equals(action)) {
-            if (ExecutorPreferences.active(context)) {
-                ExecutorPreferences.refreshAdbLease(context);
-                Log.d(LOG_TAG, "adb_control heartbeat");
+            if (collectorAlias.isEmpty()) {
+                collectorAlias = ExecutorPreferences.collectorAlias(context);
             }
+            ExecutorPreferences.configure(
+                    context,
+                    apiBaseUrl,
+                    goal,
+                    collectorAlias,
+                    ExecutorPreferences.testAccount(context),
+                    true
+            );
+            Log.i(LOG_TAG, "adb_control started goal_chars=" + goal.length());
             return;
         }
         if (ExecutorPreferences.ACTION_ADB_STOP_NAVIGATION.equals(action)) {

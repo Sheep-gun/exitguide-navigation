@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
@@ -29,6 +30,7 @@ class VerifierOutput:
     helpful_probability: float
     expected_progress: str
     reason: str
+    model_ranked: bool = True
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,8 @@ class OpenAICompatibleChatClient:
         team: str = "",
         timeout_seconds: float = 30.0,
         chat_template_kwargs: Mapping[str, object] | None = None,
+        reasoning_effort: str = "",
+        telemetry_name: str = "",
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -70,6 +74,8 @@ class OpenAICompatibleChatClient:
         self.team = team
         self.timeout_seconds = timeout_seconds
         self.chat_template_kwargs = dict(chat_template_kwargs or {})
+        self.reasoning_effort = reasoning_effort.strip()
+        self.telemetry_name = telemetry_name.strip() or model
 
     @property
     def configured(self) -> bool:
@@ -97,6 +103,8 @@ class OpenAICompatibleChatClient:
         }
         if self.chat_template_kwargs:
             payload["chat_template_kwargs"] = self.chat_template_kwargs
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
         if top_p is not None:
             payload["top_p"] = top_p
         if presence_penalty is not None:
@@ -110,14 +118,52 @@ class OpenAICompatibleChatClient:
             headers["Authorization"] = f"Bearer {self.api_key}"
         if self.team:
             headers["X-Friendli-Team"] = self.team
-        response = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=self.timeout_seconds,
+        operation = "chat"
+        if isinstance(tool_choice, Mapping):
+            function = tool_choice.get("function")
+            if isinstance(function, Mapping):
+                operation = str(function.get("name", operation))
+        started = time.perf_counter()
+        try:
+            response = httpx.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+            result = response.json()
+        except (httpx.HTTPError, ValueError):
+            LOGGER.warning(
+                "navigation_model_call_failed provider=%s model=%s operation=%s "
+                "elapsed_ms=%.1f timeout_seconds=%.1f",
+                self.telemetry_name,
+                self.model,
+                operation,
+                (time.perf_counter() - started) * 1000,
+                self.timeout_seconds,
+            )
+            raise
+        usage = result.get("usage", {}) if isinstance(result, Mapping) else {}
+        choices = result.get("choices", []) if isinstance(result, Mapping) else []
+        finish_reason = (
+            choices[0].get("finish_reason", "unknown")
+            if isinstance(choices, list) and choices and isinstance(choices[0], Mapping)
+            else "unknown"
         )
-        response.raise_for_status()
-        return response.json()
+        LOGGER.info(
+            "navigation_model_call provider=%s model=%s operation=%s elapsed_ms=%.1f "
+            "prompt_tokens=%s completion_tokens=%s finish_reason=%s reasoning_effort=%s",
+            self.telemetry_name,
+            self.model,
+            operation,
+            (time.perf_counter() - started) * 1000,
+            usage.get("prompt_tokens", "unknown") if isinstance(usage, Mapping) else "unknown",
+            usage.get("completion_tokens", "unknown") if isinstance(usage, Mapping) else "unknown",
+            finish_reason,
+            self.reasoning_effort or "provider_default",
+        )
+        return result
 
 
 class NavigationPlannerResearchClient:
@@ -132,9 +178,11 @@ class NavigationPlannerResearchClient:
         client: OpenAICompatibleChatClient,
         *,
         provider_name: str = "solar_pro4",
+        step_evaluation_max_tokens: int = 400,
     ) -> None:
         self.client = client
         self.name = provider_name.strip() or "planner_model"
+        self.step_evaluation_max_tokens = max(240, min(600, step_evaluation_max_tokens))
 
     @property
     def configured(self) -> bool:
@@ -184,7 +232,7 @@ class NavigationPlannerResearchClient:
                 },
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
-            max_tokens=220,
+            max_tokens=120,
             temperature=0.0,
             tools=[
                 {
@@ -285,8 +333,14 @@ class NavigationPlannerResearchClient:
                                         "selective_recovery",
                                     ],
                                 },
-                                "immediate_subgoal": {"type": "string"},
-                                "expected_outcome": {"type": "string"},
+                                "immediate_subgoal": {
+                                    "type": "string",
+                                    "maxLength": 60,
+                                },
+                                "expected_outcome": {
+                                    "type": "string",
+                                    "maxLength": 60,
+                                },
                                 "target_roles": {
                                     "type": "array",
                                     "items": {"type": "string"},
@@ -525,7 +579,12 @@ class NavigationPlannerResearchClient:
         fallback_plan: Mapping[str, object],
         actions: Sequence[Mapping[str, object]],
     ) -> tuple[PlannerOutput, dict[str, VerifierOutput]]:
-        """Return a K2-style subgoal and V-Droid-style values in one inference."""
+        """Return one bounded subgoal and the model's top-two actions in one inference.
+
+        Python retains the complete action inventory. Non-ranked actions keep a
+        capped deterministic prior so safety guards can still inspect every
+        action without making Solar serialize a score for each candidate.
+        """
 
         packet = {
             "goal": goal,
@@ -544,31 +603,19 @@ class NavigationPlannerResearchClient:
                 {
                     "role": "system",
                     "content": (
-                        "You are the combined K2-style planner and V-Droid-style batch verifier "
-                        "of an Android navigation agent. First form one immediately verifiable "
-                        "semantic subgoal, then score every supplied candidate_action independently "
-                        "for that subgoal. This is multi-step navigation: a profile, account, or "
-                        "settings hub can be highly helpful even when it is not the final destination "
-                        "button. Weight each candidate's own label and icon above parent or nearby "
-                        "text. A direct semantic match in the candidate itself must outrank an "
-                        "unrelated candidate supported only by surrounding text, unless observed "
-                        "failure evidence forbids it. Evidence marked unverified_public_prior is "
-                        "weaker than verified decision memory: use it only as a planning hint, "
-                        "never replay it as a route, and ignore it when it conflicts with current "
-                        "candidates, local failure memory, or a safety rule. Assign one unique "
-                        "best_action_key; use "
-                        "stop_for_user as the best "
-                        "action only when no safe progress action exists. Do not execute an action. Never invent an "
-                        "action_key, candidate ID, coordinate, or app-specific route. Keep every "
-                        "action_key unchanged and return exactly one score for each supplied key. "
-                        "The unique best action must have helpful_probability at least 0.5. "
-                        "Keep expected_progress under 60 characters and reason under 100 "
-                        "characters for every action so the complete allowlist fits in one call."
+                        "Choose one safe intermediate action for an Android navigation agent. "
+                        "Form one immediately verifiable semantic subgoal, then return the best "
+                        "and runner-up action keys only. Prefer a candidate's own label and icon "
+                        "over nearby text. A profile, account, or settings hub may be useful before "
+                        "the final destination. Treat unverified_public_prior only as a weak hint. "
+                        "Never invent or execute an action, coordinate, candidate ID, or route. "
+                        "Use stop_for_user only when no safe progress action exists. The best key "
+                        "must be unique, have probability at least 0.5, and exceed the runner-up."
                     ),
                 },
                 {"role": "user", "content": json.dumps(packet, ensure_ascii=False)},
             ],
-            max_tokens=2_000,
+            max_tokens=self.step_evaluation_max_tokens,
             temperature=0.0,
             tools=[
                 {
@@ -597,45 +644,33 @@ class NavigationPlannerResearchClient:
                                 "target_roles": {
                                     "type": "array",
                                     "items": {"type": "string"},
-                                    "maxItems": 8,
+                                    "maxItems": 4,
                                 },
                                 "best_action_key": {
                                     "type": "string",
                                     "enum": expected_action_keys,
                                 },
-                                "scores": {
-                                    "type": "array",
-                                    "minItems": len(expected_action_keys),
-                                    "maxItems": len(expected_action_keys),
-                                    "items": {
-                                        "type": "object",
-                                        "additionalProperties": False,
-                                        "properties": {
-                                            "action_key": {
-                                                "type": "string",
-                                                "enum": expected_action_keys,
-                                            },
-                                            "helpful_probability": {
-                                                "type": "number",
-                                                "minimum": 0.0,
-                                                "maximum": 1.0,
-                                            },
-                                            "expected_progress": {
-                                                "type": "string",
-                                                "maxLength": 60,
-                                            },
-                                            "reason": {
-                                                "type": "string",
-                                                "maxLength": 100,
-                                            },
-                                        },
-                                        "required": [
-                                            "action_key",
-                                            "helpful_probability",
-                                            "expected_progress",
-                                            "reason",
-                                        ],
-                                    },
+                                "best_probability": {
+                                    "type": "number",
+                                    "minimum": 0.0,
+                                    "maximum": 1.0,
+                                },
+                                "runner_up_action_key": {
+                                    "type": "string",
+                                    "enum": expected_action_keys,
+                                },
+                                "runner_up_probability": {
+                                    "type": "number",
+                                    "minimum": 0.0,
+                                    "maximum": 1.0,
+                                },
+                                "expected_progress": {
+                                    "type": "string",
+                                    "maxLength": 60,
+                                },
+                                "decision_reason": {
+                                    "type": "string",
+                                    "maxLength": 100,
                                 },
                             },
                             "required": [
@@ -644,7 +679,11 @@ class NavigationPlannerResearchClient:
                                 "expected_outcome",
                                 "target_roles",
                                 "best_action_key",
-                                "scores",
+                                "best_probability",
+                                "runner_up_action_key",
+                                "runner_up_probability",
+                                "expected_progress",
+                                "decision_reason",
                             ],
                         },
                     },
@@ -676,7 +715,12 @@ class NavigationPlannerResearchClient:
             expected_outcome=str(payload.get("expected_outcome", ""))[:500],
             target_roles=tuple(str(role)[:120] for role in roles[:8]),
         )
-        outputs = _parse_batch_scores(payload.get("scores"), actions)
+        outputs = _parse_top_two_scores(
+            payload,
+            actions,
+            expected_progress=str(payload.get("expected_progress", "unknown"))[:120],
+            reason=str(payload.get("decision_reason", ""))[:500],
+        )
         best_action_key = str(payload.get("best_action_key", ""))
         ranked = sorted(
             outputs.items(),
@@ -1028,9 +1072,13 @@ class FallbackNavigationPlannerResearchClient:
         *,
         primary: NavigationPlannerResearchClient,
         fallback: NavigationPlannerResearchClient | None,
+        failover_on_timeout: bool = False,
+        failover_on_invalid_output: bool = False,
     ) -> None:
         self.primary = primary
         self.fallback = fallback
+        self.failover_on_timeout = failover_on_timeout
+        self.failover_on_invalid_output = failover_on_invalid_output
         self.name = primary.name
         self._active_name: ContextVar[str] = ContextVar(
             "navigation_planner_active_name", default=primary.name
@@ -1059,6 +1107,10 @@ class FallbackNavigationPlannerResearchClient:
                 self._active_name.set(self.primary.name)
                 return result
             except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+                if isinstance(error, httpx.TimeoutException) and not self.failover_on_timeout:
+                    raise
+                if isinstance(error, (KeyError, TypeError, ValueError)) and not self.failover_on_invalid_output:
+                    raise
                 if self.fallback is None or not self.fallback.configured:
                     raise
                 LOGGER.warning(
@@ -1179,4 +1231,59 @@ def _parse_batch_scores(
         )
     if set(outputs) != expected_keys:
         raise ValueError("batch verifier omitted or invented action keys")
+    return outputs
+
+
+def _parse_top_two_scores(
+    payload: Mapping[str, object],
+    actions: Sequence[Mapping[str, object]],
+    *,
+    expected_progress: str,
+    reason: str,
+) -> dict[str, VerifierOutput]:
+    action_by_key = {
+        str(item.get("action_key", "")): item
+        for item in actions
+        if str(item.get("action_key", ""))
+    }
+    best_key = str(payload.get("best_action_key", ""))
+    runner_up_key = str(payload.get("runner_up_action_key", ""))
+    if (
+        best_key not in action_by_key
+        or runner_up_key not in action_by_key
+        or best_key == runner_up_key
+    ):
+        raise ValueError("step evaluator returned invalid top-two action keys")
+    best_probability = max(0.0, min(1.0, float(payload.get("best_probability", 0.0))))
+    runner_up_probability = max(
+        0.0,
+        min(1.0, float(payload.get("runner_up_probability", 0.0))),
+    )
+    if best_probability < 0.5 or best_probability - runner_up_probability < 0.02:
+        raise ValueError("step evaluator returned an uninformative top-two ranking")
+
+    outputs: dict[str, VerifierOutput] = {}
+    prior_ceiling = max(0.0, runner_up_probability - 0.03)
+    for action_key, action in action_by_key.items():
+        if action_key == best_key:
+            probability = best_probability
+            ranked_reason = reason or "model_best_action"
+            model_ranked = True
+        elif action_key == runner_up_key:
+            probability = runner_up_probability
+            ranked_reason = "model_runner_up"
+            model_ranked = True
+        else:
+            probability = min(
+                max(0.0, min(1.0, float(action.get("memory_prior", 0.0)))),
+                prior_ceiling,
+            )
+            ranked_reason = "deterministic_prior_capped_below_model_top_two"
+            model_ranked = False
+        outputs[action_key] = VerifierOutput(
+            helpful_probability=probability,
+            expected_progress=expected_progress or "unknown",
+            reason=ranked_reason,
+            model_ranked=model_ranked,
+        )
     return outputs

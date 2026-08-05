@@ -2,6 +2,9 @@ plugins {
     id "com.android.application"
 }
 
+def exitGuideKeystore = System.getenv("EXITGUIDE_ANDROID_KEYSTORE")
+def exitGuideKeystorePassword = System.getenv("EXITGUIDE_ANDROID_KEYSTORE_PASSWORD")
+
 android {
     namespace "com.exitguide.navigation.executor"
     compileSdk 36
@@ -10,14 +13,24 @@ android {
         applicationId "com.exitguide.navigation.executor"
         minSdk 30
         targetSdk 36
-        versionCode 1
-        versionName "0.1.0"
+        versionCode 8
+        versionName "0.5.3"
 
         buildConfigField "String", "DEFAULT_NAVIGATION_API", '"http://100.77.172.25:8100"'
+        buildConfigField "String", "COLLECTOR_BUILD_ID", '"navigation-runtime-v5-serialized-goal-switch"'
         testInstrumentationRunner "android.app.InstrumentationTestRunner"
     }
 
     buildTypes {
+        debug {
+            if (exitGuideKeystore) {
+                signingConfig signingConfigs.debug
+                signingConfig.storeFile = file(exitGuideKeystore)
+                signingConfig.storePassword = exitGuideKeystorePassword ?: "android"
+                signingConfig.keyAlias = "androiddebugkey"
+                signingConfig.keyPassword = exitGuideKeystorePassword ?: "android"
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"

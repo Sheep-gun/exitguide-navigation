@@ -7,6 +7,9 @@ import sys
 import tempfile
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
+
+import httpx
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -35,6 +38,7 @@ from app.services.navigation_model_clients import (  # noqa: E402
     Exaone45VisionClient,
     FallbackNavigationPlannerResearchClient,
     NavigationPlannerResearchClient,
+    OpenAICompatibleChatClient,
 )
 from app.services.navigation_planner import (  # noqa: E402
     ActionSafetyGate,
@@ -105,8 +109,8 @@ class ScriptedPlannerClient:
                     "reason": "scripted exact goal classification",
                 },
             )
-        if "combined K2-style planner and V-Droid-style batch verifier" in system:
-            assert _kwargs["max_tokens"] == 2_000
+        if "Choose one safe intermediate action" in system:
+            assert _kwargs["max_tokens"] == 400
             assert (
                 _kwargs["tools"][0]["function"]["name"]
                 == "submit_navigation_step_evaluation"
@@ -116,11 +120,10 @@ class ScriptedPlannerClient:
             self.last_step_packet = packet
             expected_keys = [item["action_key"] for item in packet["candidate_actions"]]
             assert parameters["properties"]["best_action_key"]["enum"] == expected_keys
-            score_schema = parameters["properties"]["scores"]
-            assert score_schema["minItems"] == len(expected_keys)
-            assert score_schema["maxItems"] == len(expected_keys)
-            assert score_schema["items"]["properties"]["action_key"]["enum"] == expected_keys
+            assert parameters["properties"]["runner_up_action_key"]["enum"] == expected_keys
+            assert "scores" not in parameters["properties"]
             self.plan_calls += 1
+            self.verifier_actions.extend(expected_keys)
             if self.fail_first_step_evaluation and self.plan_calls == 1:
                 return _tool_response(
                     "submit_navigation_step_evaluation",
@@ -130,29 +133,14 @@ class ScriptedPlannerClient:
                         "expected_outcome": "account entries appear",
                         "target_roles": ["account_hub"],
                         "best_action_key": "click:profile",
-                        "scores": [],
+                        "best_probability": 0.93,
+                        "runner_up_action_key": "click:profile",
+                        "runner_up_probability": 0.2,
+                        "expected_progress": "account hub",
+                        "decision_reason": "malformed duplicate top-two keys",
                     },
                 )
             assert "app_package" not in packet
-            scores = {
-                "click:profile": 0.93,
-                "click:search": 0.04,
-                "scroll:down": 0.12,
-                "wait_and_observe": 0.08,
-                "stop_for_user": 0.02,
-            }
-            output_scores = []
-            for item in packet["candidate_actions"]:
-                key = item["action_key"]
-                self.verifier_actions.append(key)
-                output_scores.append(
-                    {
-                        "action_key": key,
-                        "helpful_probability": scores[key],
-                        "expected_progress": "account hub" if key == "click:profile" else "unlikely",
-                        "reason": f"scripted score for {key}",
-                    }
-                )
             return _tool_response(
                 "submit_navigation_step_evaluation",
                 {
@@ -161,7 +149,11 @@ class ScriptedPlannerClient:
                     "expected_outcome": "account management entries become visible",
                     "target_roles": ["account_hub", "profile_hub"],
                     "best_action_key": "click:profile",
-                    "scores": output_scores,
+                    "best_probability": 0.93,
+                    "runner_up_action_key": "click:search",
+                    "runner_up_probability": 0.35,
+                    "expected_progress": "account hub",
+                    "decision_reason": "profile is the strongest safe account entry",
                 },
             )
         if "high-level planner" in system:
@@ -275,8 +267,62 @@ class StablePlannerDelegate:
     configured = True
     name = "solar_pro3"
 
+    def __init__(self) -> None:
+        self.calls = 0
+
     def plan_and_verify_actions(self, **_kwargs):
+        self.calls += 1
         return "fallback-plan", {"wait_and_observe": "fallback-score"}
+
+
+class TimeoutPlannerDelegate:
+    configured = True
+    name = "solar_pro4"
+
+    def plan_and_verify_actions(self, **_kwargs):
+        raise httpx.ReadTimeout("slow primary")
+
+
+class StubHttpResponse:
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return {
+            "choices": [{"finish_reason": "tool_calls", "message": {"content": "{}"}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+        }
+
+
+def assert_fast_chat_disables_reasoning_and_bounds_budget() -> None:
+    captured: dict[str, object] = {}
+
+    def fake_post(*_args, **kwargs):
+        captured.update(kwargs)
+        return StubHttpResponse()
+
+    client = OpenAICompatibleChatClient(
+        api_key="test-only",
+        base_url="https://example.invalid/v1",
+        model="solar-pro4",
+        timeout_seconds=8.0,
+        reasoning_effort="none",
+        telemetry_name="solar_pro4",
+    )
+    with patch("app.services.navigation_model_clients.httpx.post", side_effect=fake_post):
+        client.complete(
+            messages=[{"role": "user", "content": "bounded"}],
+            max_tokens=400,
+            tools=[{"type": "function", "function": {"name": "bounded_step"}}],
+            tool_choice={"type": "function", "function": {"name": "bounded_step"}},
+        )
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    assert payload["reasoning_effort"] == "none"
+    assert payload["max_tokens"] == 400
+    assert captured["timeout"] == 8.0
 
 
 def _load_migration_module():
@@ -309,12 +355,29 @@ def _screen() -> ScreenObservation:
 
 
 def main() -> None:
+    assert_fast_chat_disables_reasoning_and_bounds_budget()
+    timeout_fallback = StablePlannerDelegate()
+    latency_bounded_planner = FallbackNavigationPlannerResearchClient(
+        primary=TimeoutPlannerDelegate(),
+        fallback=timeout_fallback,
+    )
+    try:
+        latency_bounded_planner.plan_and_verify_actions(actions=[])
+    except httpx.ReadTimeout:
+        pass
+    else:
+        raise AssertionError("timeout unexpectedly triggered a second provider call")
+    assert timeout_fallback.calls == 0
+
+    invalid_fallback = StablePlannerDelegate()
     resilient_planner = FallbackNavigationPlannerResearchClient(
         primary=FailingPlannerDelegate(),
-        fallback=StablePlannerDelegate(),
+        fallback=invalid_fallback,
+        failover_on_invalid_output=True,
     )
     resilient_result = resilient_planner.plan_and_verify_actions(actions=[])
     assert resilient_result[0] == "fallback-plan"
+    assert invalid_fallback.calls == 1
     assert resilient_planner.active_name == "solar_pro3"
     assert resilient_planner.fallback_configured is True
 
@@ -529,6 +592,33 @@ def main() -> None:
     assert _profile_gate_existing_entry_candidate_id(
         candidates=profile_gate_candidates,
         goal_id="membership.cancel",
+        screen_title="넷플릭스를 시청할 프로필을 선택하세요.",
+        recent_history=[
+            {
+                "action_name": "wait_and_observe",
+                "outcome_type": "navigated",
+                "progress_label": "unknown",
+            }
+        ],
+        forbidden_candidate_ids=["existing-profile"],
+    ) == "existing-profile"
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
+        screen_title="넷플릭스를 시청할 프로필을 선택하세요.",
+        recent_history=[
+            {
+                "candidate_id": "existing-profile",
+                "action_name": "click",
+                "outcome_type": "no_change",
+                "progress_label": "unchanged",
+            }
+        ],
+        forbidden_candidate_ids=["existing-profile"],
+    ) is None
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
         screen_title="",
         recent_history=[],
         visually_recommended_candidate_id="existing-profile",
@@ -537,9 +627,22 @@ def main() -> None:
         candidates=profile_gate_candidates,
         goal_id="membership.cancel",
         screen_title="",
+        recent_history=[
+            {
+                "action_name": "wait_and_observe",
+                "outcome_type": "navigated",
+                "progress_label": "unknown",
+            }
+        ],
+        forbidden_candidate_ids=["existing-profile"],
+    ) == "existing-profile"
+    assert _profile_gate_existing_entry_candidate_id(
+        candidates=profile_gate_candidates,
+        goal_id="membership.cancel",
+        screen_title="",
         recent_history=[],
         visually_recommended_candidate_id="add-profile-gate",
-    ) is None
+    ) == "existing-profile"
     profile_gate_actions = policy._enumerate_actions(
         candidates=profile_gate_candidates,
         prior_values=profile_gate_values,
@@ -1407,7 +1510,7 @@ def main() -> None:
         assert decision.verifier_provider == "solar_pro3_step_evaluator"
         assert planner_transport.plan_calls == 1
         assert sorted(planner_transport.verifier_actions) == sorted(
-            ["click:profile", "click:search", "scroll:down", "wait_and_observe", "stop_for_user"]
+            ["click:profile", "click:search", "wait_and_observe", "stop_for_user"]
         )
 
         retry_transport = ScriptedPlannerClient(fail_first_step_evaluation=True)
@@ -1419,6 +1522,7 @@ def main() -> None:
             exaone_vlm=exaone_vlm,
             allow_model_fallback=False,
             planner_mode="always",
+            planner_schema_retry_enabled=True,
             vlm_mode="disabled",
         )
         retry_runtime = NavigationRuntime(
@@ -1777,6 +1881,14 @@ def main() -> None:
             for _ in range(4)
         ],
     ) is False
+    non_scrollable_actions = selective_policy._enumerate_actions(
+        candidates=[],
+        prior_values=[],
+        plan=destination_scroll_plan,
+        recent_history=[],
+        screen_scrollable=False,
+    )
+    assert all(action.action.name != "scroll" for action in non_scrollable_actions)
     join_entry_plan = HierarchicalPlan(
         goal_id="membership.join",
         stage="destination_entry",
@@ -1925,12 +2037,19 @@ def main() -> None:
         plan=fast_path_plan,
         candidates=[
             NavigationCandidate(
-                candidate_id="signup",
-                label="회원가입",
+                candidate_id="profile",
+                label="마이페이지",
                 role="button",
-                position_bucket="middle",
+                position_bucket="bottom",
                 risk_level="low",
-            )
+            ),
+            NavigationCandidate(
+                candidate_id="search",
+                label="검색",
+                role="button",
+                position_bucket="top",
+                risk_level="low",
+            ),
         ],
         forbidden_candidate_ids=set(),
         recent_history=[
@@ -1939,9 +2058,9 @@ def main() -> None:
             {"step_ordinal": 3, "screen_fingerprint": "screen-a"},
         ],
     )
-    assert loop_guarded.proposal.action.name == "stop_for_user"
-    assert loop_guarded.verifier_provider == "python_screen_visit_guard"
-    assert planner_transport.plan_calls == planner_calls_before_loop_guard
+    assert loop_guarded.proposal.action.name != "stop_for_user"
+    assert loop_guarded.plan.stage == "selective_recovery"
+    assert planner_transport.plan_calls > planner_calls_before_loop_guard
     planner_calls_before_recovery_gate = planner_transport.plan_calls
     wrong_destination_recovery = selective_policy.decide_action(
         query=fast_path_query,
@@ -2710,10 +2829,10 @@ def main() -> None:
             EnumeratedAction(NavigationAction(name="stop_for_user"), 0.05, None),
         ]
     )
-    assert [item.action.candidate_id for item in retry_inventory[:6]] == [
-        f"candidate-{index}" for index in range(6)
+    assert [item.action.candidate_id for item in retry_inventory[:3]] == [
+        f"candidate-{index}" for index in range(3)
     ]
-    assert [item.action.name for item in retry_inventory[6:]] == [
+    assert [item.action.name for item in retry_inventory[3:]] == [
         "scroll", "wait_and_observe", "stop_for_user"
     ]
     malformed_model_rescue = selective_policy._resolve_structural_direct_candidate(

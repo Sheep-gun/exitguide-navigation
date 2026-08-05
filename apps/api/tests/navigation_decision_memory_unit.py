@@ -30,6 +30,9 @@ def test_state_changing_action_labels_are_exact() -> None:
     assert is_state_changing_action_label("멤버십 해지") is True
     assert is_state_changing_action_label("Cancel subscription") is True
     assert is_state_changing_action_label("Unsubscribe") is True
+    assert is_state_changing_action_label("해지 신청 완료하기") is True
+    assert is_state_changing_action_label("비활성화") is True
+    assert is_state_changing_action_label("Deactivate") is True
     assert is_state_changing_action_label("갱신") is True
     assert is_state_changing_action_label("Renew subscription") is True
     assert is_state_changing_action_label("Resubscribe") is True
@@ -40,8 +43,12 @@ def test_state_changing_action_labels_are_exact() -> None:
     assert is_state_changing_action_label("변경 내역") is False
     assert is_state_changing_action_label("멤버십 관리") is False
     assert is_state_changing_action_label("해지 안내") is False
+    assert is_state_changing_action_label("와우 멤버십 해지 신청") is False
     assert is_state_changing_action_label("갱신일: 9월 3일") is False
     assert is_state_changing_action_label("멤버십 갱신 안내") is False
+    assert is_state_changing_action_label(
+        "계정 비활성화 계정을 비활성화하는 법을 알아보세요."
+    ) is False
     assert is_membership_renewal_action_label("갱신") is True
     assert is_membership_renewal_action_label("갱신일: 9월 3일") is False
 
@@ -188,6 +195,33 @@ def main() -> None:
         connection.commit()
 
         memory = NavigationDecisionMemory(database)
+        timed_cart_a = memory.semantic_screen_state(
+            window_title="쿠팡",
+            activity_name="android.widget.TextView",
+            candidates=[
+                {
+                    "candidate_id": "cart-a",
+                    "label": "장바구니 4 08:06:31",
+                    "role": "button",
+                },
+                {"candidate_id": "membership", "label": "와우 멤버십", "role": "button"},
+            ],
+        )
+        timed_cart_b = memory.semantic_screen_state(
+            window_title="쿠팡",
+            activity_name="android.widget.TextView",
+            candidates=[
+                {
+                    "candidate_id": "cart-b",
+                    "label": "장바구니 4 08:05:41",
+                    "role": "button",
+                },
+                {"candidate_id": "membership", "label": "와우 멤버십", "role": "button"},
+            ],
+        )
+        assert timed_cart_a.semantic_fingerprint == timed_cart_b.semantic_fingerprint
+        assert timed_cart_a.candidate_payloads[0]["label"] == "장바구니 4 08:06:31"
+        assert "08" in timed_cart_a.tokens
         assert memory.normalize_goal("이 앱에서 회원가입하고 싶어").goal_id == "account.signup"
         assert memory.normalize_goal("멤버쉽을 해지해 줘").goal_id == "membership.cancel"
         assert memory.normalize_goal("요금제를 변경하고 싶어").goal_id == "membership.change"
@@ -236,6 +270,23 @@ def main() -> None:
             ],
         )
         assert logged_out_state.auth_state == "logged_out"
+        authenticated_settings_state = memory.semantic_screen_state(
+            window_title="개인정보 및 보안",
+            activity_name="android.view.View",
+            candidates=[
+                {
+                    "candidate_id": "account-info",
+                    "label": "내 계정에 관한 정보",
+                    "role": "button",
+                },
+                {
+                    "candidate_id": "estimated-identity",
+                    "label": "로그인하는 데 사용하지 않은 기기의 활동을 바탕으로 맞춤 설정",
+                    "role": "button",
+                },
+            ],
+        )
+        assert authenticated_settings_state.auth_state == "logged_in"
         signup_gateway = memory.retrieve(
             goal_text="새 계정을 만들고 싶어",
             window_title="로그인",

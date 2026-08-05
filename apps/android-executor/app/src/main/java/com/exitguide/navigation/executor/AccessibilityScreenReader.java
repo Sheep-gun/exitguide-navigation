@@ -1,6 +1,7 @@
 package com.exitguide.navigation.executor;
 
 import android.graphics.Rect;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -17,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 final class AccessibilityScreenReader {
     private static final int MAX_NODES = 500;
@@ -56,6 +58,7 @@ final class AccessibilityScreenReader {
         final JSONObject payload;
         final Map<String, CandidateBinding> bindings;
         final String appPackage;
+        final String screenFingerprint;
         final boolean visualSurfaceAmbiguous;
         final boolean popupWindowAmbiguous;
 
@@ -63,23 +66,33 @@ final class AccessibilityScreenReader {
                 JSONObject payload,
                 Map<String, CandidateBinding> bindings,
                 String appPackage,
+                String screenFingerprint,
                 boolean visualSurfaceAmbiguous,
                 boolean popupWindowAmbiguous
         ) {
             this.payload = payload;
             this.bindings = Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
             this.appPackage = appPackage;
+            this.screenFingerprint = screenFingerprint;
             this.visualSurfaceAmbiguous = visualSurfaceAmbiguous;
             this.popupWindowAmbiguous = popupWindowAmbiguous;
         }
     }
 
+    private static final class TraversalStats {
+        int nodesTotal;
+        int candidatesTotal;
+        boolean depthTruncated;
+    }
+
     private final int screenWidth;
     private final int screenHeight;
+    private final int densityDpi;
 
     AccessibilityScreenReader(DisplayMetrics metrics) {
         this.screenWidth = Math.max(1, metrics.widthPixels);
         this.screenHeight = Math.max(1, metrics.heightPixels);
+        this.densityDpi = Math.max(1, metrics.densityDpi);
     }
 
     boolean needsVisualReasoning(ScreenSnapshot snapshot) {
@@ -134,20 +147,79 @@ final class AccessibilityScreenReader {
         JSONArray nodes = new JSONArray();
         JSONArray candidates = new JSONArray();
         Map<String, CandidateBinding> bindings = new LinkedHashMap<>();
+        TraversalStats stats = new TraversalStats();
         boolean visualSurfaceAmbiguous = containsVisualSurface(root, 0);
-        traverse(root, null, new ArrayList<>(), 0, nodes, candidates, bindings);
+        long capturedAt = SystemClock.elapsedRealtime();
+        traverse(root, null, new ArrayList<>(), 0, nodes, candidates, bindings, stats);
         applyContextualScreenSafety(nodes, candidates, bindings);
 
+        String appPackage = truncate(string(root.getPackageName()), 240);
+        String title = truncate(windowTitle(root), MAX_TEXT_LENGTH);
+        List<String> candidateSignatures = new ArrayList<>();
+        for (int index = 0; index < candidates.length(); index++) {
+            JSONObject candidate = candidates.getJSONObject(index);
+            candidateSignatures.add(String.join(
+                    "|",
+                    candidate.optString("role", "unknown"),
+                    candidate.optString("risk_level", "low"),
+                    candidate.optString("label", ""),
+                    candidate.optString("icon_semantics", ""),
+                    candidate.optString("nearby_text", ""),
+                    candidate.optString("parent_semantics", ""),
+                    candidate.optString("child_semantics", ""),
+                    candidate.optString("position_bucket", "unknown"),
+                    String.valueOf(candidate.opt("bounds_normalized")),
+                    String.valueOf(candidate.optBoolean("clickable", false)),
+                    String.valueOf(candidate.optBoolean("enabled", false)),
+                    String.valueOf(candidate.optBoolean("selected", false)),
+                    String.valueOf(candidate.opt("checked"))
+            ));
+        }
+        String screenFingerprint = StableScreenIdentity.fingerprint(
+                appPackage,
+                title,
+                activityName,
+                candidateSignatures
+        );
         JSONObject screen = new JSONObject();
-        screen.put("app_package", truncate(string(root.getPackageName()), 240));
-        screen.put("window_title", truncate(windowTitle(root), MAX_TEXT_LENGTH));
+        screen.put("frame_id", "navf_" + UUID.randomUUID().toString().replace("-", ""));
+        screen.put("captured_device_monotonic_ms", capturedAt);
+        screen.put("app_package", appPackage);
+        screen.put("window_title", title);
         screen.put("activity_name", truncate(activityName, MAX_TEXT_LENGTH));
+        screen.put("focused_window_id", root.getWindowId());
+        screen.put("window_type", windowType(root));
+        screen.put(
+                "surface_type",
+                activityName.toLowerCase(Locale.ROOT).contains("webview")
+                        ? "webview"
+                        : visualSurfaceAmbiguous ? "hybrid" : "native"
+        );
+        screen.put("screen_width_px", screenWidth);
+        screen.put("screen_height_px", screenHeight);
+        screen.put("density_dpi", densityDpi);
+        screen.put("orientation", screenHeight >= screenWidth ? "portrait" : "landscape");
+        screen.put("nodes_total", stats.nodesTotal);
+        screen.put("nodes_captured", nodes.length());
+        screen.put("nodes_truncated", stats.nodesTotal > nodes.length() || stats.depthTruncated);
+        screen.put("candidates_total", stats.candidatesTotal);
+        screen.put("candidates_captured", candidates.length());
+        screen.put("candidates_truncated", stats.candidatesTotal > candidates.length());
+        JSONArray capabilities = new JSONArray();
+        capabilities.put("accessibility");
+        screen.put("capture_capabilities", capabilities);
+        JSONArray missingParts = new JSONArray();
+        if (stats.depthTruncated) {
+            missingParts.put("tree_depth_limit");
+        }
+        screen.put("missing_parts", missingParts);
         screen.put("nodes", nodes);
         screen.put("candidates", candidates);
         return new ScreenSnapshot(
                 screen,
                 bindings,
-                truncate(string(root.getPackageName()), 240),
+                appPackage,
+                screenFingerprint,
                 visualSurfaceAmbiguous || popupWindowAmbiguous,
                 popupWindowAmbiguous
         );
@@ -216,19 +288,29 @@ final class AccessibilityScreenReader {
             int depth,
             JSONArray nodes,
             JSONArray candidates,
-            Map<String, CandidateBinding> bindings
+            Map<String, CandidateBinding> bindings,
+            TraversalStats stats
     ) throws JSONException {
-        if (node == null || depth > MAX_DEPTH || nodes.length() >= MAX_NODES) {
+        if (node == null) {
+            return "";
+        }
+        if (depth > MAX_DEPTH) {
+            stats.depthTruncated = true;
             return "";
         }
         boolean included = node.isVisibleToUser() && isOnScreen(node);
-        String nodeId = included ? stableNodeId(node, path) : "";
-        JSONArray childIds = new JSONArray();
         if (included) {
-            nodes.put(nodeSummary(node, nodeId, parentId, childIds));
-            if (node.isEnabled()
-                    && node.isClickable()
-                    && candidates.length() < MAX_CANDIDATES) {
+            stats.nodesTotal++;
+        }
+        boolean captured = included && nodes.length() < MAX_NODES;
+        String nodeId = captured ? stableNodeId(node, path) : "";
+        JSONArray childIds = new JSONArray();
+        if (captured) {
+            nodes.put(nodeSummary(node, nodeId, parentId, childIds, nodes.length()));
+        }
+        if (included && node.isEnabled() && node.isClickable()) {
+            stats.candidatesTotal++;
+            if (captured && candidates.length() < MAX_CANDIDATES) {
                 addCandidate(node, nodeId, path, candidates, bindings);
             }
         }
@@ -241,22 +323,20 @@ final class AccessibilityScreenReader {
             try {
                 String childId = traverse(
                         child,
-                        included ? nodeId : parentId,
+                        captured ? nodeId : parentId,
                         path,
                         depth + 1,
                         nodes,
                         candidates,
-                        bindings
+                        bindings,
+                        stats
                 );
-                if (included && !childId.isEmpty()) {
+                if (captured && !childId.isEmpty()) {
                     childIds.put(childId);
                 }
             } finally {
                 path.remove(path.size() - 1);
                 child.recycle();
-            }
-            if (nodes.length() >= MAX_NODES) {
-                break;
             }
         }
         return nodeId;
@@ -299,13 +379,17 @@ final class AccessibilityScreenReader {
         candidate.put("parent_semantics", truncate(parentSemantics, 300));
         candidate.put("child_semantics", truncate(childSemantics, MAX_TEXT_LENGTH));
         candidate.put("position_bucket", positionBucket(node));
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        candidate.put("bounds_normalized", normalizedBounds(bounds));
+        candidate.put("grounding_node_id", candidateId);
+        candidate.put("candidate_source", "accessibility");
+        candidate.put("candidate_generator_version", "android-accessibility-v5");
         candidate.put("clickable", node.isClickable());
         candidate.put("enabled", node.isEnabled());
         candidate.put("selected", node.isSelected());
         candidate.put("checked", node.isCheckable() ? node.isChecked() : JSONObject.NULL);
         candidates.put(candidate);
-        Rect bounds = new Rect();
-        node.getBoundsInScreen(bounds);
         bindings.put(
                 candidateId,
                 new CandidateBinding(
@@ -362,7 +446,8 @@ final class AccessibilityScreenReader {
             AccessibilityNodeInfo node,
             String nodeId,
             String parentId,
-            JSONArray childIds
+            JSONArray childIds,
+            int traversalIndex
     ) throws JSONException {
         boolean privateInput = node.isPassword() || node.isEditable();
         JSONObject summary = new JSONObject();
@@ -377,6 +462,22 @@ final class AccessibilityScreenReader {
         summary.put("view_id", truncate(string(node.getViewIdResourceName()), 300));
         summary.put("role", role(node));
         summary.put("position_bucket", positionBucket(node));
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        summary.put("bounds_normalized", normalizedBounds(bounds));
+        summary.put("window_id", node.getWindowId());
+        summary.put("traversal_index", traversalIndex);
+        summary.put("drawing_order", node.getDrawingOrder());
+        JSONArray supportedActions = new JSONArray();
+        for (AccessibilityNodeInfo.AccessibilityAction action : node.getActionList()) {
+            supportedActions.put("action_" + action.getId());
+        }
+        summary.put("supported_actions", supportedActions);
+        summary.put("capture_source", "accessibility");
+        summary.put(
+                "text_privacy_class",
+                node.isPassword() ? "password" : node.isEditable() ? "sensitive_input" : "general"
+        );
         summary.put("clickable", node.isClickable());
         summary.put("enabled", node.isEnabled());
         summary.put("visible", node.isVisibleToUser());
@@ -386,6 +487,19 @@ final class AccessibilityScreenReader {
         summary.put("checked", node.isCheckable() ? node.isChecked() : JSONObject.NULL);
         summary.put("private_input", privateInput);
         return summary;
+    }
+
+    private JSONArray normalizedBounds(Rect bounds) throws JSONException {
+        JSONArray values = new JSONArray();
+        values.put(clamp((double) bounds.left / screenWidth));
+        values.put(clamp((double) bounds.top / screenHeight));
+        values.put(clamp((double) bounds.right / screenWidth));
+        values.put(clamp((double) bounds.bottom / screenHeight));
+        return values;
+    }
+
+    private static double clamp(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
     }
 
     private boolean isOnScreen(AccessibilityNodeInfo node) {
@@ -517,6 +631,24 @@ final class AccessibilityScreenReader {
             return root.getWindow().getTitle().toString();
         }
         return preferredLabel(root);
+    }
+
+    private static String windowType(AccessibilityNodeInfo root) {
+        if (root.getWindow() == null) {
+            return "unknown";
+        }
+        switch (root.getWindow().getType()) {
+            case android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION:
+                return "application";
+            case android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD:
+                return "input_method";
+            case android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM:
+                return "system";
+            case android.view.accessibility.AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY:
+                return "accessibility_overlay";
+            default:
+                return "unknown";
+        }
     }
 
     private static String sha256(String value) {
