@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T19:31:00+09:00
+updated_at: 2026-08-06T20:00:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: Instagram account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: ChatGPT account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -516,6 +516,25 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/tving-membership-change-state-not-applicable-20260806.md`, `docs/evidence/tving-membership-cancel-state-not-applicable-20260806.md`
 
+## 2026-08-06 Instagram 5개 목표
+
+- app_version: `441.0.0.43.81+384710428`
+- account.signup: `state_not_applicable`, `blocking_issue=account_state`, session `navs_74761dca830a4290bbf92902443938d5`
+- account.delete: `safe_boundary_reached`, session `navs_a0a25a89ab754f7588232d63d9c07153`
+- membership.join: `safe_boundary_reached`, session `navs_2d1c636156b94550aa52f99c7bc9ce5c`
+- membership.change: `state_not_applicable`, `blocking_issue=account_state`, session `navs_561dbfc760df4d84912ee67c91992ed6`
+- membership.cancel: `state_not_applicable`, `blocking_issue=account_state`, session `navs_e447611ae40e4f028cd02a18b2746a88`
+- verified_path: 프로필 -> 실제 옵션 -> 계정 센터 -> 목표별 계정 관리·구독·상품 상태
+- failure/recovery: 해지 세션에서 Threads Google Play 외부 이동 1건, `back()` 복구 1건
+- Review DB: 29 / 29 decisions, 502 / 502 candidate labels
+- label distribution: best 23, acceptable 13, hard_negative 436, unsafe 7, unknown 23
+- connection_error: 0
+- account deletion, subscription, payment, change or cancellation execution: 0
+- collector_change: 없음; 후보 수집·candidate_id 클릭·화면 변화·실패·복구 기록 정상
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/instagram-account-signup-state-not-applicable-20260806.md`, `docs/evidence/instagram-account-delete-safe-boundary-20260806.md`, `docs/evidence/instagram-membership-join-safe-boundary-20260806.md`, `docs/evidence/instagram-membership-change-state-not-applicable-20260806.md`, `docs/evidence/instagram-membership-cancel-state-not-applicable-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -563,7 +582,7 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 45셀, 미완료 10셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 50셀, 미완료 5셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
