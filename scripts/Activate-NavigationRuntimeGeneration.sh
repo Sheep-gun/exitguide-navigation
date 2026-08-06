@@ -122,7 +122,17 @@ cp -p "$active_env" "$archive_dir/previous-active.env"
 install -o exitguide -g exitguide-admin -m 0640 "$generation_env" "$active_env"
 sudo systemctl start "$service"
 
-health_json="$(curl -fsS http://100.77.172.25:8100/health)"
+health_json=""
+for _ in $(seq 1 30); do
+  if health_json="$(curl -fsS http://100.77.172.25:8100/health 2>/dev/null)"; then
+    break
+  fi
+  sleep 1
+done
+[[ -n "$health_json" ]] || {
+  echo "Navigation API did not become healthy within 30 seconds" >&2
+  exit 4
+}
 status_json="$(curl -fsS http://100.77.172.25:8100/v1/navigation/status)"
 review_json="$(curl -fsS 'http://100.77.172.25:8100/v1/navigation/review/status?reviewer=codex-yanggeon')"
 python3 - "$health_json" "$status_json" "$review_json" <<'PY'
