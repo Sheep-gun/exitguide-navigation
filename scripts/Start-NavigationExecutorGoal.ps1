@@ -8,6 +8,29 @@ param(
 
     [string]$NavigationApiBaseUrl = "http://127.0.0.1:8100",
 
+    [string]$CollectorAlias = "codex-yanggeon",
+
+    [ValidateSet("logged_in", "logged_out", "unknown")]
+    [string]$AccountState = "unknown",
+
+    [ValidateSet("none", "trial", "active", "paused", "cancelled", "unknown")]
+    [string]$ServiceState = "unknown",
+
+    [string]$StartSurface = "app_home",
+
+    [ValidateSet("ready", "not_ready", "unknown")]
+    [string]$PreconditionStatus = "ready",
+
+    [string]$ResetMethod = "app_relaunch",
+
+    [bool]$ResetVerified = $true,
+
+    [ValidateSet("human", "codex", "system", "unknown")]
+    [string]$PreconditionSource = "human",
+
+    [ValidateRange(0.0, 1.0)]
+    [float]$PreconditionConfidence = 0.95,
+
     [string]$AdbPath = ""
 )
 
@@ -127,7 +150,16 @@ $broadcastCommand = @(
     "-a", $startAction,
     "-n", $receiver,
     "--es", "goal", (ConvertTo-AdbShellLiteral $Goal),
-    "--es", "api_base_url", (ConvertTo-AdbShellLiteral $NavigationApiBaseUrl)
+    "--es", "api_base_url", (ConvertTo-AdbShellLiteral $NavigationApiBaseUrl),
+    "--es", "collector_alias", (ConvertTo-AdbShellLiteral $CollectorAlias),
+    "--es", "account_state", (ConvertTo-AdbShellLiteral $AccountState),
+    "--es", "service_state", (ConvertTo-AdbShellLiteral $ServiceState),
+    "--es", "start_surface", (ConvertTo-AdbShellLiteral $StartSurface),
+    "--es", "precondition_status", (ConvertTo-AdbShellLiteral $PreconditionStatus),
+    "--es", "reset_method", (ConvertTo-AdbShellLiteral $ResetMethod),
+    "--ez", "reset_verified", $ResetVerified.ToString().ToLowerInvariant(),
+    "--es", "precondition_source", (ConvertTo-AdbShellLiteral $PreconditionSource),
+    "--ef", "precondition_confidence", $PreconditionConfidence.ToString([Globalization.CultureInfo]::InvariantCulture)
 ) -join " "
 Invoke-Adb @("shell", $broadcastCommand) | Out-Null
 
@@ -167,4 +199,13 @@ Start-Process -FilePath "powershell.exe" -ArgumentList $monitorArguments -Window
     adb_device_monitor = $true
     adb_auto_resume = $false
     monitor_state = $monitorStatePath
+    collector_alias = $CollectorAlias
+    account_state = $AccountState
+    service_state = $ServiceState
+    start_surface = $StartSurface
+    precondition_status = $PreconditionStatus
+    reset_method = $ResetMethod
+    reset_verified = $ResetVerified
+    precondition_source = $PreconditionSource
+    precondition_confidence = $PreconditionConfidence
 } | ConvertTo-Json

@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: implementation
-updated_at: 2026-08-06T21:08:07+09:00
-priority: 동결된 55셀 원료를 보존하면서 목표 원문에서 허용하지 않는 not_testable 3셀을 계정 상태별 새 세대로 보강
+phase: device_validation
+updated_at: 2026-08-06T22:23:08+09:00
+priority: 계정 상태 변경 후 확보한 6개 긍정 경로를 반영했고 사용자 지시에 따라 실기기 수집을 일시정지
 decision_db_collection: paused
-next_action: 사용자가 YouTube·Netflix·포스타입 중 하나에서 멤버십 변경 제어가 노출되는 계정을 준비하면 해당 앱의 membership.change를 새 Runtime·Review 세션으로 수집한다.
+next_action: 사용자 재개 지시 후 남은 긍정 경로 20개 중 Executor 실행 문제가 분리된 NH농협손해보험 account.delete부터 재검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -16,12 +16,12 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 
 ## 계정 상태 보강 Runtime·Review 세대
 
-- generation_status: active_empty_waiting_for_account_state
+- generation_status: active_paused_by_user
 - generation_id: `account-state-recollection-v1`
 - generation_path: `/srv/exitguide/runtime/navigation-collection-generations/account-state-recollection-v1`
 - base_snapshot: `training_snapshot_d983e65055f5427fdb8d3dbe`
-- active_runtime_schema/counts: v5, sessions 0, decisions 0, observations 0
-- active_review_schema/counts: v2, reviewed 0
+- active_runtime_schema/counts: v5, sessions 20, decisions 73, observations 73
+- active_review_schema/counts: v2, reviewed 21, remaining 52
 - frozen_previous_runtime: SHA-256 `7af6bd7b765d79c1c0a14f415765f651878b578f89f2fd62b1538caf63ffc4ea`, mode 0440
 - frozen_previous_review: SHA-256 `8ad8e3687188a4b340817f5e9fa6489b6baf2175245d23d3172afb48097a4c3a`, mode 0440
 - frozen_archive: `/srv/exitguide/runtime/collection-generations/frozen-20260806T120807Z`
