@@ -110,9 +110,9 @@
       "app_package": "com.postype.play",
       "app_name": "포스타입",
       "split": "collection",
-      "app_version": null,
+      "app_version": "3.90.1+1564",
       "goals": [
-        {"goal_id": "account.signup", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
+        {"goal_id": "account.signup", "status": "state_not_applicable", "display_status_ko": "현재 로그인 계정 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/postype-account-signup-state-not-applicable-20260806.md", "runtime:navs_991a98406a974db1993a1ba3e45de4c7"], "last_observed_at": "2026-08-06T18:42:00+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "광고 팝업을 닫고 홈의 마이메뉴를 candidate_id로 실행해 G Y 프로필과 계정·결제 메뉴가 표시된 로그인 상태를 관찰했다. 로그아웃이나 계정 상태 변경 없이 회원가입 목표를 state_not_applicable로 종료했다. 최초 시도에서 깊이 제한으로 본문 후보와 화면 변화가 누락되는 수집기 실패를 발견해, 노드·후보 수 상한은 유지하고 접근성 탐색 깊이만 40에서 80으로 보정한 뒤 새 세션으로 재수집했다. 3개 결정과 55개 전체 후보를 Review DB에서 검수했다."},
         {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.join", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},

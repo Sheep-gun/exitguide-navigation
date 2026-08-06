@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:27:00+09:00
+updated_at: 2026-08-06T18:44:40+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: 포스타입 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: 포스타입 account.delete를 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
 verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING 5개 목표
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
-deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
+deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
 
 ## 9개 파일럿 골든 라벨 게이트
 
@@ -28,6 +28,36 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - source_read_only: true
 - excluded_incomplete_transition: `navd_18e32b01411641d88471649fb705f912` (`/observe` schema 422); replacement real-device transition verified
 - evidence: `docs/evidence/pilot-golden-label-gate-audit-20260806.md`
+
+## 2026-08-06 포스타입 접근성 깊이 회귀 수정 및 회원가입 상태
+
+- goal_id: `account.signup`
+- first attempt failure: 광고 팝업 닫기 뒤 실제 클릭과 화면 전환은 성공했으나
+  `nodes_total=77`, `nodes_captured=77`, `nodes_truncated=true` 계약 모순으로 `/observe` 422;
+  유효 Runtime 세션 없음, 커버리지 근거에서 제외
+- second diagnostic: 계약 오류는 해소됐으나 깊이 40 제한으로 본문 메뉴가 누락돼 실제
+  `마이메뉴` 전환을 `no_change`로 오판
+- minimal collector fix: 누락 노드 총수 계약 보정, 접근성 깊이 40→80; 노드 500·후보 250
+  상한과 판단·안전·가중치 로직은 유지
+- Android Executor: v0.6.2, versionCode 11,
+  `COLLECTOR_BUILD_ID=navigation-runtime-v6-deep-tree-contract-fix`
+- source/deployed commit: `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`
+- APK SHA-256: `ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2`
+- build/unit tests: passed
+- scripted install: AccessibilityService enabled/bound, node collection, candidate ID generation,
+  Navigation API readiness passed
+- valid Runtime session: `navs_991a98406a974db1993a1ba3e45de4c7`
+- decisions: `navd_088f986950e24a02a65f79459627e6ac`,
+  `navd_024ba2d60a78447bb35b40aeba2dc3af`,
+  `navd_328690b46a7d4cc3a806df5d6d932904`
+- verified path: 광고 팝업 `닫기` -> 홈 `마이메뉴` -> 로그인 프로필·계정 메뉴 관찰
+- observation after fix: 홈 196/196 nodes·27 candidates, 마이메뉴 176/176 nodes·22 candidates,
+  `/observe` 422 재발 없음
+- result: `state_not_applicable`, `blocking_issue=account_state`
+- Review DB: 3 / 3 decisions, 55 / 55 candidate labels
+- label distribution: best 2, acceptable 1, hard_negative 36, unknown 16
+- logout, signup, personal-information input or dangerous action execution: 0
+- evidence: `docs/evidence/postype-account-signup-state-not-applicable-20260806.md`
 - bulk_collection: 운영 8100 split·안전 경계 배포 검증 완료, active
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
