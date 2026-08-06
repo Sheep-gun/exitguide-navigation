@@ -2108,6 +2108,29 @@ def main() -> None:
         else:
             raise AssertionError("coordinate fields were accepted")
 
+        collection_only_manifest = NavigationDatasetSplitManifest.load(
+            ROOT / "db" / "navigation_coverage_split_v1.json"
+        )
+        collection_only_status = collection_only_manifest.status(
+            allow_locked_holdout=False
+        )
+        assert collection_only_status["counts"] == {
+            "collection": 11,
+            "locked_holdout": 0,
+            "validation": 0,
+        }
+        collection_only_runtime = NavigationRuntime(
+            memory=NavigationDecisionMemory(decision_db),
+            store=NavigationRuntimeStore(
+                temporary_path / "collection-only-runtime.sqlite"
+            ),
+            policy=_policy(),
+            dataset_split_manifest=collection_only_manifest,
+        )
+        assert collection_only_runtime.store.status()["dataset_split_manifest"][
+            "counts"
+        ] == {"collection": 11}
+
         split_manifest = NavigationDatasetSplitManifest.load(
             ROOT / "db" / "navigation_dataset_split_v1.json"
         )

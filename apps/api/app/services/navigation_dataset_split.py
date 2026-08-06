@@ -94,8 +94,15 @@ class NavigationDatasetSplitManifest:
                 )
             )
             seen.add(app_package)
-        if sum(entry.split == "locked_holdout" for entry in entries) < 3:
-            raise ValueError("dataset split manifest requires at least three locked holdout apps")
+        holdout_count = sum(entry.split == "locked_holdout" for entry in entries)
+        # During supervised raw collection every currently installed app may be
+        # a collection source. Once a holdout cohort is introduced it must
+        # still contain at least three app-disjoint entries.
+        if 0 < holdout_count < 3:
+            raise ValueError(
+                "dataset split manifest requires either zero or at least three "
+                "locked holdout apps"
+            )
         return cls(
             manifest_version=manifest_version,
             digest=hashlib.sha256(raw).hexdigest(),

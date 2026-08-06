@@ -14,7 +14,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$expectedSplitSha256 = "a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5"
+$expectedSplitSha256 = "ae3b7e0a0ea9f5fd392f173c33d005e43263aabba3c70ad37d40619662a620b0"
 $bundleRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")).Path
 $artifactDirectory = Join-Path $bundleRoot ".artifacts"
 $tunnelStatePath = Join-Path $artifactDirectory "team-navigation-tunnel-$LocalForwardPort.json"
@@ -92,7 +92,12 @@ function Assert-NavigationStatus {
         throw "The fixed B runtime is not active: public_prior.enabled is not true."
     }
     if ($Status.dataset_split.sha256 -ne $expectedSplitSha256) {
-        throw "The N100 split manifest does not match the locked 7/3/1 coverage split."
+        throw "The N100 split manifest does not match the current 11-app collection split."
+    }
+    if ($Status.dataset_split.counts.collection -ne 11 `
+            -or $Status.dataset_split.counts.validation -ne 0 `
+            -or $Status.dataset_split.counts.locked_holdout -ne 0) {
+        throw "The N100 split counts are not collection=11, validation=0, locked_holdout=0."
     }
 }
 

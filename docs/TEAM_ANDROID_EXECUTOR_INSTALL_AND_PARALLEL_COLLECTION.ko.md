@@ -91,7 +91,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Setup-TeamNavigationExecutor.
 4. 기존 접근성 서비스 목록을 보존하면서 ExitGuide 서비스만 추가·복원한다.
 5. `dumpsys accessibility`에서 실제 바인딩을 확인한다.
 6. Accessibility 노드, candidate_id 후보, B 고정 Navigation API 연결을 진단한다.
-7. N100 split manifest가 고정값 `a26cb574...41142`인지 검사한다.
+7. N100 split manifest가 현재 11개 앱 collection 고정값
+   `ae3b7e0a...62a620b0`인지 검사한다.
 
 성공 출력에는 최소한 다음 값이 있어야 한다.
 
@@ -152,27 +153,25 @@ Runtime DB
 
 ## 6. 데이터 분리
 
-### collection: 수집 및 검증 후 승격 후보 가능
+### collection: 현재 11개 앱 모두 수집·검수 대상
 
+- Instagram: `com.instagram.android`
 - YouTube: `com.google.android.youtube`
 - Netflix: `com.netflix.mediaclient`
 - 제주항공: `com.parksmt.jejuair.android16`
 - X: `com.twitter.android`
 - 쿠팡: `com.coupang.mobile`
 - 배달의민족: 현재 manifest의 package 값을 사용
-- NH농협손해보험: `ni.mh.android.launcher`
-
-### locked_holdout: 수집 동결 전 접근·튜닝·승격 금지
-
-- Instagram: `com.instagram.android`
 - 포스타입: `com.postype.play`
+- NH농협손해보험: `ni.mh.android.launcher`
 - ChatGPT: `com.openai.chatgpt`
-
-### validation: 평가만 가능, 승격 금지
-
 - TVING: `net.cj.cjhv.gs.tving`
 
-팀원은 번들 안의 `config/navigation_coverage_split_v1.json`을 단일 분리 기준으로 사용한다. locked holdout은 collection 완료·동결 지시가 있기 전에는 실행하지 않는다.
+현재 설치된 앱을 validation 또는 holdout으로 재사용하지 않는다. 55셀과 학습용 불변
+스냅샷을 동결한 뒤 처음 설치하는 미관측 앱을 앱 단위 validation·holdout으로 지정한다.
+
+팀원은 번들 안의 `config/navigation_coverage_split_v1.json`을 현재 수집의 단일 분리
+기준으로 사용한다.
 
 ## 7. 결과 보고 형식
 
@@ -182,7 +181,7 @@ device: 제조사/모델/Android 버전
 app_package: 패키지명
 app_version: 버전
 goal_id: account.signup | account.delete | membership.join | membership.change | membership.cancel
-split: collection | validation | locked_holdout
+split: collection
 session_id: navs_...
 started_at: ISO-8601
 finished_at: ISO-8601
