@@ -1,18 +1,18 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: implementation
-updated_at: 2026-08-06T14:52:00+09:00
+phase: device_validation
+updated_at: 2026-08-06T15:14:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
-decision_db_collection: paused
-next_action: 파일럿 게이트를 통과한 변경의 전체 테스트를 실행하고 11개 앱 collection split과 안전 경계 코드를 N100 운영 8100에 배포한다.
+decision_db_collection: active
+next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 Netflix membership.change의 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
 verified_apps: YouTube·Netflix·배달의민족 파일럿 9셀; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`
-deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N100 API `e7901914719498560d4e2634ebc5dee4767f78e6` at `/srv/exitguide/runtime/navigation-api-code-e790191`
+integration_commit: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
+deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`; APK `/srv/exitguide/releases/navigation-executor/0dee4c8`
 
 ## 9개 파일럿 골든 라벨 게이트
 
@@ -28,7 +28,7 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 - source_read_only: true
 - excluded_incomplete_transition: `navd_18e32b01411641d88471649fb705f912` (`/observe` schema 422); replacement real-device transition verified
 - evidence: `docs/evidence/pilot-golden-label-gate-audit-20260806.md`
-- bulk_collection: 운영 8100 split·안전 경계 배포 검증 전까지 paused
+- bulk_collection: 운영 8100 split·안전 경계 배포 검증 완료, active
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
@@ -50,18 +50,18 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
-- N100_release: `/srv/exitguide/releases/navigation-executor/dbc14a9`
+- N100_release: `/srv/exitguide/releases/navigation-executor/0dee4c8`
 - N100_current_link: `/srv/exitguide/releases/navigation-executor/current`
-- bundle: `navigation-executor-dbc14a9-team.zip`
-- bundle_SHA256: `4B1E47792924B73268F23A7B67EF39BB1FD7702B550B854200F2A6FFDA1F6573`
-- APK_SHA256: `556F3AD1506713F3503DD7A969F8F4BBACF72A174B5D7D9707457C0702B59D0C`
-- implementation_commit: `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`
+- bundle: `navigation-executor-0dee4c8-team.zip`
+- bundle_SHA256: `76D529E3C724DDBD6DB8E542B7D67FFB3EB368AB523C5BC9C23493CD0CE51293`
+- APK_SHA256: `DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F`
+- implementation_commit: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
 - bundle_checksums: passed
 - bundle_zip_test: passed
 - PowerShell_parser: 5/5 passed
 - team_setup_dry_run: no ADB device -> stopped before SSH tunnel, no orphan tunnel
 - exact_APK_real_device_validation: passed on Samsung SM-G998N Android 15; scripted accessibility binding, candidate collection/click, 90% scroll, accepted heartbeat and automatic lease expiry pause
-- decision_db_collection: remains paused until the recorded device-validation next_action succeeds
+- decision_db_collection: active after pilot gate and N100 all-collection deployment
 - guide: `docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md`
 
 ## 고정 정책
@@ -103,23 +103,23 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-e790191`
-- deployed_git_head: `e7901914719498560d4e2634ebc5dee4767f78e6`
+- code: `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
+- deployed_git_head: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
-- coverage contract: 11 apps / 55 cells / terminal 10 / incomplete 45 / dangerous automatic action 0
-- deployment tests: Decision Memory, Runtime, research architecture, coverage contract and JSON Schema validator passed before atomic service switch
+- coverage contract: 11 apps / 55 cells / terminal 12 / incomplete 43 / dangerous automatic action 0
+- deployment tests: GitHub Actions API suite, coverage validator, Android unit/build and exact release tests passed
 - Decision DB: read-only patched immutable clone
-- Runtime DB: coverage 전용, sessions 45, decisions 225, observations 198
+- Runtime DB: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v2-ae3b7e0a.sqlite`, sessions 215, decisions 1,278, observations 1,225
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
-- deployed coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
-- deployed coverage split counts: collection 7, validation 1, locked_holdout 3 (새 11 collection 정책 배포 전)
-- repository target split: `navigation-coverage-split-v2-20260806-all-collection`, collection 11
-- target coverage Runtime: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite` (운영 8100 쓰기 대상)
+- deployed coverage split SHA-256: `ae3b7e0a0ea9f5fd392f173c33d005e43263aabba3c70ad37d40619662a620b0`
+- deployed coverage split counts: collection 11, validation 0, locked_holdout 0
+- previous Runtime preserved: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite`
 - planner: Solar Pro 4 selective, Solar Pro 3 fallback, EXAONE 4.5 selective
+- deployment evidence: `docs/evidence/n100-all-collection-deployment-20260806.md`
 
 ## Promotion pipeline v2
 

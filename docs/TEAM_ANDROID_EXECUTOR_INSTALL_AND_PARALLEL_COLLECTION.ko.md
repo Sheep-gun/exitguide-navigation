@@ -2,22 +2,26 @@
 
 ## 배포 상태
 
-- 이 배포본은 Android Executor 구현 커밋 `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`에서 빌드했다.
-- APK SHA-256은 `556F3AD1506713F3503DD7A969F8F4BBACF72A174B5D7D9707457C0702B59D0C`이다.
+- 이 배포본은 Android Executor 구현 커밋 `0dee4c8`에서 빌드했다.
+- APK SHA-256은 `DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F`이다.
 - Android 단위 테스트와 APK 빌드는 통과했다.
-- 90% 화면 스크롤과 ADB 연결 해제 시 자동 일시정지가 포함돼 있다.
-- 이 정확한 APK는 Samsung SM-G998N(Android 15)에서 설치·접근성 바인딩·후보 수집·candidate_id 클릭·90% 스크롤을 통과했다. heartbeat는 `result=73`으로 수락됐고, heartbeat 중단 약 15초 후 `connection_error=true`로 자동 일시중지되며 자동 재개하지 않는 것도 확인했다. 팀원 기기 검증 결과는 학습 성공 데이터로 자동 승격하지 않는다.
+- 90% 화면 스크롤, ADB 연결 해제 시 자동 일시정지와 명시적 계정 삭제 안전 경계가
+  포함돼 있다.
+- 이 정확한 APK는 Samsung SM-G998N(Android 15)에서 스크립트 설치·접근성 바인딩,
+  후보 수집·candidate_id 클릭·90% 스크롤과 `계정 삭제` high-risk 수집을 통과했다.
+  위험 후보는 실행하지 않고 `stop_for_user`로 넘겼다. 팀원 기기 검증 결과는 학습 성공
+  데이터로 자동 승격하지 않는다.
 
 N100 배포 위치:
 
 ```text
-/srv/exitguide/releases/navigation-executor/dbc14a9/
+/srv/exitguide/releases/navigation-executor/0dee4c8/
 ```
 
 ## 구성
 
 ```text
-navigation-executor-dbc14a9-team.zip
+navigation-executor-0dee4c8-team.zip
 ├─ navigation-executor-debug.apk
 ├─ README.ko.md
 ├─ SHA256SUMS.txt
@@ -52,18 +56,18 @@ PowerShell에서 명시적으로 Windows OpenSSH 실행 파일을 사용한다. 
 ```powershell
 & "$env:WINDIR\System32\OpenSSH\scp.exe" `
   -i <개인키경로> `
-  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/dbc14a9/navigation-executor-dbc14a9-team.zip `
+  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/0dee4c8/navigation-executor-0dee4c8-team.zip `
   .
 
-Expand-Archive .\navigation-executor-dbc14a9-team.zip -DestinationPath .\navigation-executor-dbc14a9
-Set-Location .\navigation-executor-dbc14a9
+Expand-Archive .\navigation-executor-0dee4c8-team.zip -DestinationPath .\navigation-executor-0dee4c8
+Set-Location .\navigation-executor-0dee4c8
 Get-FileHash -Algorithm SHA256 .\navigation-executor-debug.apk
 ```
 
 출력된 APK 해시는 반드시 다음과 같아야 한다.
 
 ```text
-556F3AD1506713F3503DD7A969F8F4BBACF72A174B5D7D9707457C0702B59D0C
+DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F
 ```
 
 ## 3. 연결·설치·접근성 복원
