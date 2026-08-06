@@ -2,11 +2,14 @@
 
 ## 배포 상태
 
-- 이 배포본은 Android Executor 구현 커밋 `0dee4c8`에서 빌드했다.
-- APK SHA-256은 `DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F`이다.
+- 이 배포본은 Android Executor 구현 커밋 `843a3c9`에서 빌드했다.
+- APK SHA-256은 `ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2`이다.
 - Android 단위 테스트와 APK 빌드는 통과했다.
 - 90% 화면 스크롤, ADB 연결 해제 시 자동 일시정지와 명시적 계정 삭제 안전 경계가
   포함돼 있다.
+- Compose/WebView 혼합 화면에서 깊은 본문 후보를 누락하지 않도록 접근성 탐색 깊이를
+  80으로 확장했고, 깊이 제한으로 생략된 노드 수를 API 계약에 맞게 보고한다. 노드 500개와
+  후보 250개 상한은 유지한다.
 - 이 정확한 APK는 Samsung SM-G998N(Android 15)에서 스크립트 설치·접근성 바인딩,
   후보 수집·candidate_id 클릭·90% 스크롤과 `계정 삭제` high-risk 수집을 통과했다.
   위험 후보는 실행하지 않고 `stop_for_user`로 넘겼다. 팀원 기기 검증 결과는 학습 성공
@@ -15,13 +18,13 @@
 N100 배포 위치:
 
 ```text
-/srv/exitguide/releases/navigation-executor/0dee4c8/
+/srv/exitguide/releases/navigation-executor/843a3c9/
 ```
 
 ## 구성
 
 ```text
-navigation-executor-0dee4c8-team.zip
+navigation-executor-843a3c9-team.zip
 ├─ navigation-executor-debug.apk
 ├─ README.ko.md
 ├─ SHA256SUMS.txt
@@ -56,18 +59,18 @@ PowerShell에서 명시적으로 Windows OpenSSH 실행 파일을 사용한다. 
 ```powershell
 & "$env:WINDIR\System32\OpenSSH\scp.exe" `
   -i <개인키경로> `
-  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/0dee4c8/navigation-executor-0dee4c8-team.zip `
+  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/843a3c9/navigation-executor-843a3c9-team.zip `
   .
 
-Expand-Archive .\navigation-executor-0dee4c8-team.zip -DestinationPath .\navigation-executor-0dee4c8
-Set-Location .\navigation-executor-0dee4c8
+Expand-Archive .\navigation-executor-843a3c9-team.zip -DestinationPath .\navigation-executor-843a3c9
+Set-Location .\navigation-executor-843a3c9
 Get-FileHash -Algorithm SHA256 .\navigation-executor-debug.apk
 ```
 
 출력된 APK 해시는 반드시 다음과 같아야 한다.
 
 ```text
-DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F
+ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2
 ```
 
 ## 3. 연결·설치·접근성 복원

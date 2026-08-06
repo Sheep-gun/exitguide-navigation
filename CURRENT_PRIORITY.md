@@ -2,7 +2,7 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:44:40+09:00
+updated_at: 2026-08-06T18:50:53+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
 next_action: 포스타입 account.delete를 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
@@ -399,17 +399,17 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
-- N100_release: `/srv/exitguide/releases/navigation-executor/0dee4c8`
+- N100_release: `/srv/exitguide/releases/navigation-executor/843a3c9`
 - N100_current_link: `/srv/exitguide/releases/navigation-executor/current`
-- bundle: `navigation-executor-0dee4c8-team.zip`
-- bundle_SHA256: `76D529E3C724DDBD6DB8E542B7D67FFB3EB368AB523C5BC9C23493CD0CE51293`
-- APK_SHA256: `DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F`
-- implementation_commit: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
+- bundle: `navigation-executor-843a3c9-team.zip`
+- bundle_SHA256: `91B35B15FC6E0BB372ECF7502D1B86112A09412755E7BB47FC9E87BA7BCF5536`
+- APK_SHA256: `ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2`
+- implementation_commit: `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`
 - bundle_checksums: passed
 - bundle_zip_test: passed
 - PowerShell_parser: 5/5 passed
 - team_setup_dry_run: no ADB device -> stopped before SSH tunnel, no orphan tunnel
-- exact_APK_real_device_validation: passed on Samsung SM-G998N Android 15; scripted accessibility binding, candidate collection/click, 90% scroll, accepted heartbeat and automatic lease expiry pause
+- exact_APK_real_device_validation: passed on Samsung SM-G998N Android 15; scripted accessibility binding, Postype 196-node deep-tree candidate collection, candidate_id clicks and screen-change recording; prior 90% scroll, accepted heartbeat and automatic lease expiry evidence retained because those modules did not change
 - decision_db_collection: active after pilot gate and N100 all-collection deployment
 - guide: `docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md`
 
