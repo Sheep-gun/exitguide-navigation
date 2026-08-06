@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T16:21:00+09:00",
+  "updated_at": "2026-08-06T16:30:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -71,12 +71,12 @@
       "app_package": "com.twitter.android",
       "app_name": "X",
       "split": "collection",
-      "app_version": "12.12.0-release.0+312120000",
+      "app_version": "12.13.0-release.0+312130000",
       "goals": [
         {"goal_id": "account.signup", "status": "destination_reached", "display_status_ko": "목적지 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/x-account-signup-destination-20260806.md", "runtime:navs_2c2acccc7d9448188046e77f1bff7478", "runtime:navs_b85b3a4af1704006b7fedef41da928d7"], "last_observed_at": "2026-08-06T16:08:05+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "탐색 서랍의 계정명 결합 기타 옵션을 눌러 프로필로 잘못 이동한 사례를 보존하고 back으로 복구했다. 독립 기타 옵션 후보를 선택해 새 계정 만들기와 기존 계정 추가하기 시트에 도달했다. 새 계정 만들기를 best로 검수하고 개인정보 입력 전 stop_for_user로 종료했다. 조기 종료 교정 세션까지 8개 결정과 166개 전체 후보를 Review DB에서 검수했다."},
         {"goal_id": "account.delete", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/x-account-delete-safe-boundary-20260806.md", "runtime:navs_266811c0a71c492f8836ea0f804a3e68"], "last_observed_at": "2026-08-06T16:14:58+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "탐색 서랍→설정 및 개인정보→내 계정→계정 비활성화를 candidate_id로 실행해 최종 비활성화 버튼이 있는 안내 화면에 도달했다. 최종 후보는 Runtime 원본에서 low로 관찰됐지만 Review에서 unsafe로 검수했고 Navigation API Python 안전 게이트가 low-risk 입력도 stop_for_user로 강제 변환함을 별도 확인했다. 최종 버튼은 클릭하지 않았다. 5개 결정과 59개 전체 후보를 검수했다."},
         {"goal_id": "membership.join", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/x-membership-join-safe-boundary-20260806.md", "runtime:navs_037a9dac04ad47b8aef1a66af85dbbba"], "last_observed_at": "2026-08-06T16:20:10+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "피드의 업그레이드 후보를 candidate_id로 실행해 X Premium과 Premium+ 탭, 월간·연간 결제 옵션이 표시된 가입 화면에 도달했다. 월간과 연간 결제 후보는 Runtime에서 blocked였고 Review에서도 unsafe로 검수했다. 결제 옵션을 클릭하지 않고 stop_for_user로 종료했다. 2개 결정과 43개 전체 후보를 검수했다."},
-        {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
+        {"goal_id": "membership.change", "status": "state_not_applicable", "display_status_ko": "현재 비구독 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/x-membership-change-state-not-applicable-20260806.md", "runtime:navs_9ef2202ccfc44abfb791deefbaaf7648"], "last_observed_at": "2026-08-06T16:27:04+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "피드의 업그레이드를 candidate_id로 실행해 X Premium 상품 화면을 관찰했다. 활성 구독 관리나 요금제 변경 후보는 없고 월간·연간 신규 결제 옵션만 있어 현재 계정은 Premium 비구독 상태로 판정했다. 구독 상태를 만들거나 결제하지 않고 stop_for_user로 종료했다. Runtime의 wrong_destination/regressed 및 blocked/unknown은 Review에서 올바른 상태 확인과 state_not_applicable 도달로 교정했다. 2개 결정과 45개 전체 후보를 검수했다."},
         {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
       ]
     },
