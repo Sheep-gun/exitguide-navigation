@@ -163,6 +163,7 @@ final class AccessibilityScreenReader {
             JSONObject candidate = candidates.getJSONObject(index);
             candidateSignatures.add(String.join(
                     "|",
+                    candidate.optString("candidate_id", ""),
                     candidate.optString("role", "unknown"),
                     candidate.optString("risk_level", "low"),
                     candidate.optString("label", ""),

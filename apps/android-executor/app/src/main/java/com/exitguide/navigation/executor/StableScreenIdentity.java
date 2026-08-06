@@ -21,13 +21,17 @@ final class StableScreenIdentity {
     static String fingerprint(
             String appPackage,
             String title,
-            String activityName,
+            String accessibilityRootClass,
             List<String> candidateSignatures
     ) {
         StringBuilder value = new StringBuilder();
         append(value, appPackage);
         append(value, title);
-        append(value, activityName);
+        // Accessibility may report a different nested root class for the same visible
+        // window on consecutive reads (for example ViewPager, RecyclerView, then an
+        // obfuscated View). It is not an Activity identity and must not invalidate an
+        // otherwise grounded operator command. Candidate signatures contain stable
+        // candidate IDs, semantics, bounds and state, so screen changes remain guarded.
         for (String signature : candidateSignatures) {
             append(value, signature);
         }

@@ -529,7 +529,14 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             publish("화면과 후보를 기록했습니다. Codex 선택을 기다립니다.");
             return;
         }
-        if (!snapshot.screenFingerprint.equals(command.expectedScreenFingerprint)) {
+        boolean candidateStillGrounded = "click".equals(command.actionName)
+                && snapshot.bindings.containsKey(command.candidateId);
+        if (!OperatorCommandGroundingPolicy.accepts(
+                command.actionName,
+                command.expectedScreenFingerprint,
+                snapshot.screenFingerprint,
+                candidateStillGrounded
+        )) {
             ExecutorPreferences.clearOperatorCommand(this);
             publish("화면이 바뀌어 오래된 Codex 명령을 폐기했습니다.");
             return;

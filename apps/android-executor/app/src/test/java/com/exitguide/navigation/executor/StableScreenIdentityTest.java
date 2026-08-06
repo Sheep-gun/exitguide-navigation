@@ -67,4 +67,28 @@ public final class StableScreenIdentityTest {
 
         assertEquals(first, second);
     }
+
+    @Test
+    public void accessibilityRootClassChurnDoesNotInvalidateOperatorCommand() {
+        String viewPager = StableScreenIdentity.fingerprint(
+                "com.parksmt.jejuair.android16",
+                "",
+                "androidx.viewpager.widget.ViewPager",
+                Arrays.asList(
+                        "a11y_popup|clickable|low|||||middle|[0.02,0.21,0.98,0.74]|true|true|false|null",
+                        "a11y_close|clickable|low|||||top|[0.91,0.22,0.96,0.24]|true|true|false|null"
+                )
+        );
+        String recyclerView = StableScreenIdentity.fingerprint(
+                "com.parksmt.jejuair.android16",
+                "",
+                "androidx.recyclerview.widget.RecyclerView",
+                Arrays.asList(
+                        "a11y_popup|clickable|low|||||middle|[0.02,0.21,0.98,0.74]|true|true|false|null",
+                        "a11y_close|clickable|low|||||top|[0.91,0.22,0.96,0.24]|true|true|false|null"
+                )
+        );
+
+        assertEquals(viewPager, recyclerView);
+    }
 }
