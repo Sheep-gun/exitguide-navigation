@@ -2,7 +2,7 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T19:07:21+09:00
+updated_at: 2026-08-06T19:10:16+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
 next_action: NH농협손해보험 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
@@ -464,12 +464,13 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
-- N100_release: `/srv/exitguide/releases/navigation-executor/843a3c9`
+- N100_release: `/srv/exitguide/releases/navigation-executor/cdd1ab1`
 - N100_current_link: `/srv/exitguide/releases/navigation-executor/current`
-- bundle: `navigation-executor-843a3c9-team.zip`
-- bundle_SHA256: `91B35B15FC6E0BB372ECF7502D1B86112A09412755E7BB47FC9E87BA7BCF5536`
+- bundle: `navigation-executor-cdd1ab1-team.zip`
+- bundle_SHA256: `2BF010CAD68C0C710823F51E9A5549C8AAE8A06DD3DE7F2D5579DB7E40FA8633`
 - APK_SHA256: `ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2`
 - implementation_commit: `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`
+- collection_snapshot_commit: `cdd1ab1af0103e4805158c0f420710a16e33e66f`
 - bundle_checksums: passed
 - bundle_zip_test: passed
 - PowerShell_parser: 5/5 passed

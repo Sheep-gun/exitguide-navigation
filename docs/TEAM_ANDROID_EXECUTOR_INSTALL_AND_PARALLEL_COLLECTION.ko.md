@@ -3,6 +3,7 @@
 ## 배포 상태
 
 - 이 배포본은 Android Executor 구현 커밋 `843a3c9`에서 빌드했다.
+- 수집 범위·근거 스냅샷은 저장소 커밋 `cdd1ab1` 기준이다.
 - APK SHA-256은 `ABD1DAB06774AEDF0C68E8E4F9A1AF53416FAFE7FE0994EAC282443FE8E50DB2`이다.
 - Android 단위 테스트와 APK 빌드는 통과했다.
 - 90% 화면 스크롤, ADB 연결 해제 시 자동 일시정지와 명시적 계정 삭제 안전 경계가
@@ -18,13 +19,13 @@
 N100 배포 위치:
 
 ```text
-/srv/exitguide/releases/navigation-executor/843a3c9/
+/srv/exitguide/releases/navigation-executor/cdd1ab1/
 ```
 
 ## 구성
 
 ```text
-navigation-executor-843a3c9-team.zip
+navigation-executor-cdd1ab1-team.zip
 ├─ navigation-executor-debug.apk
 ├─ README.ko.md
 ├─ SHA256SUMS.txt
@@ -59,11 +60,11 @@ PowerShell에서 명시적으로 Windows OpenSSH 실행 파일을 사용한다. 
 ```powershell
 & "$env:WINDIR\System32\OpenSSH\scp.exe" `
   -i <개인키경로> `
-  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/843a3c9/navigation-executor-843a3c9-team.zip `
+  exitguide@100.77.172.25:/srv/exitguide/releases/navigation-executor/cdd1ab1/navigation-executor-cdd1ab1-team.zip `
   .
 
-Expand-Archive .\navigation-executor-843a3c9-team.zip -DestinationPath .\navigation-executor-843a3c9
-Set-Location .\navigation-executor-843a3c9
+Expand-Archive .\navigation-executor-cdd1ab1-team.zip -DestinationPath .\navigation-executor-cdd1ab1
+Set-Location .\navigation-executor-cdd1ab1
 Get-FileHash -Algorithm SHA256 .\navigation-executor-debug.apk
 ```
 
