@@ -23,7 +23,9 @@ import java.util.UUID;
 final class AccessibilityScreenReader {
     private static final int MAX_NODES = 500;
     private static final int MAX_CANDIDATES = 250;
-    private static final int MAX_DEPTH = 40;
+    // Compose/WebView hybrids can legitimately nest actionable menu rows beyond depth 40.
+    // The node and candidate caps remain the hard payload-size limits.
+    private static final int MAX_DEPTH = 80;
     private static final int MAX_TEXT_LENGTH = 500;
 
     static final class CandidateBinding {
@@ -203,9 +205,14 @@ final class AccessibilityScreenReader {
         screen.put("screen_height_px", screenHeight);
         screen.put("density_dpi", densityDpi);
         screen.put("orientation", screenHeight >= screenWidth ? "portrait" : "landscape");
-        screen.put("nodes_total", stats.nodesTotal);
+        int reportedNodesTotal = reportedNodesTotal(
+                stats.nodesTotal,
+                nodes.length(),
+                stats.depthTruncated
+        );
+        screen.put("nodes_total", reportedNodesTotal);
         screen.put("nodes_captured", nodes.length());
-        screen.put("nodes_truncated", stats.nodesTotal > nodes.length() || stats.depthTruncated);
+        screen.put("nodes_truncated", reportedNodesTotal > nodes.length());
         screen.put("candidates_total", stats.candidatesTotal);
         screen.put("candidates_captured", candidates.length());
         screen.put("candidates_truncated", stats.candidatesTotal > candidates.length());
@@ -409,6 +416,15 @@ final class AccessibilityScreenReader {
                         node.isClickable()
                 )
         );
+    }
+
+    static int reportedNodesTotal(
+            int traversedNodesTotal,
+            int nodesCaptured,
+            boolean depthTruncated
+    ) {
+        int minimumTotal = depthTruncated ? nodesCaptured + 1 : nodesCaptured;
+        return Math.max(traversedNodesTotal, minimumTotal);
     }
 
     /**
