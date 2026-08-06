@@ -42,6 +42,19 @@ public final class VisualScreenAugmenterTest {
     }
 
     @Test
+    public void privacyRedactionCannotExpandTextBeyondApiContract() {
+        String repeatedAccountText = ("account member_2026 ").repeat(40);
+
+        String redacted = VisualScreenAugmenter.boundedRedactedText(
+                repeatedAccountText,
+                120
+        );
+
+        assertTrue(redacted.contains("[account]"));
+        assertEquals(120, redacted.length());
+    }
+
+    @Test
     public void recoverySignalsRequireVisualReinspection() throws Exception {
         assertTrue(ExitGuideAccessibilityService.requiresVisualRecovery(
                 "no_change", "unchanged", ""

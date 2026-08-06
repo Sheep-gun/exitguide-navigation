@@ -264,7 +264,9 @@ final class VisualScreenAugmenter implements AutoCloseable {
                 }
                 for (String field : new String[] {"text", "content_description"}) {
                     String value = node.optString(field, "");
-                    String redacted = redactSensitiveText(value, accountIdentifiers);
+                    String redacted = boundedRedactedText(
+                            value, accountIdentifiers, MAX_TEXT_LENGTH
+                    );
                     if (!redacted.equals(value)) {
                         put(node, field, redacted);
                     }
@@ -275,27 +277,50 @@ final class VisualScreenAugmenter implements AutoCloseable {
         if (candidates == null) {
             return;
         }
-        String[] semanticFields = {
-                "label", "icon_semantics", "nearby_text", "parent_semantics", "child_semantics"
-        };
+        Map<String, Integer> semanticFields = new LinkedHashMap<>();
+        semanticFields.put("label", MAX_TEXT_LENGTH);
+        semanticFields.put("icon_semantics", 200);
+        semanticFields.put("nearby_text", MAX_TEXT_LENGTH);
+        semanticFields.put("parent_semantics", 300);
+        semanticFields.put("child_semantics", MAX_TEXT_LENGTH);
         for (int index = 0; index < candidates.length(); index++) {
             JSONObject candidate = candidates.optJSONObject(index);
             if (candidate == null) {
                 continue;
             }
-            for (String field : semanticFields) {
+            for (Map.Entry<String, Integer> semanticField : semanticFields.entrySet()) {
+                String field = semanticField.getKey();
                 String value = candidate.optString(field, "");
-                String redacted = redactSensitiveText(value, accountIdentifiers);
+                String redacted = boundedRedactedText(
+                        value, accountIdentifiers, semanticField.getValue()
+                );
                 if (!redacted.equals(value)) {
                     put(candidate, field, redacted);
                 }
             }
         }
         String title = snapshot.payload.optString("window_title", "");
-        String redactedTitle = redactSensitiveText(title, accountIdentifiers);
+        String redactedTitle = boundedRedactedText(
+                title, accountIdentifiers, MAX_TEXT_LENGTH
+        );
         if (!redactedTitle.equals(title)) {
             put(snapshot.payload, "window_title", redactedTitle);
         }
+    }
+
+    static String boundedRedactedText(String value, int maximum) {
+        String source = value == null ? "" : value;
+        return boundedRedactedText(
+                source, contextualAccountIdentifiers(source), maximum
+        );
+    }
+
+    private static String boundedRedactedText(
+            String value,
+            Set<String> accountIdentifiers,
+            int maximum
+    ) {
+        return truncate(redactSensitiveText(value, accountIdentifiers), maximum);
     }
 
     private static int mergeOcrIntoExistingCandidates(

@@ -782,6 +782,44 @@ def main() -> None:
         )
         assert operator_decision.planner_provider == "codex_operator"
         assert operator_runtime.store.status()["screen_artifacts"] == 1
+        safe_delete_page_entry = operator_runtime.decide(
+            DecideRequest(
+                request_id="request-codex-safe-delete-page-entry",
+                app_package="evaluation.operator.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                operator_action=NavigationAction(
+                    name="click",
+                    candidate_id="account-delete-page-entry",
+                ),
+                operator_source="codex",
+                operator_command_id="codex-command-delete-page-entry",
+                operator_reason_codes=["goal_match", "stage_forward"],
+                operator_reason_text="최종 확정 전 회원탈퇴 안내 페이지로 이동",
+                operator_review_status="provisional",
+                screen=ScreenObservation(
+                    app_package="evaluation.operator.app",
+                    window_title="내 정보 수정",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="account-delete-page-entry",
+                            label="회원탈퇴 페이지로 이동하기",
+                            icon_semantics="회원탈퇴 페이지로 이동하기",
+                            nearby_text="로그아웃하기",
+                            parent_semantics=(
+                                "로그아웃하기 회원탈퇴 페이지로 이동하기 회원탈퇴"
+                            ),
+                            role="button",
+                            risk_level="low",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert safe_delete_page_entry.action == NavigationAction(
+            name="click",
+            candidate_id="account-delete-page-entry",
+        )
+        assert safe_delete_page_entry.safety_status == "allowed"
         operator_stop = operator_runtime.decide(
             DecideRequest(
                 request_id="request-codex-operator-stop",

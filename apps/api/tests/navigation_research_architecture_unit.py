@@ -1982,6 +1982,23 @@ def main() -> None:
     )
     assert safe_entry_action.name == "click"
     assert safe_entry_status == "allowed"
+    safe_delete_page_entry, safe_delete_page_status, _ = ActionSafetyGate().validate(
+        NavigationAction(name="click", candidate_id="account-delete-page-entry"),
+        candidates=[
+            NavigationCandidate(
+                candidate_id="account-delete-page-entry",
+                label="회원탈퇴 페이지로 이동하기",
+                icon_semantics="회원탈퇴 페이지로 이동하기",
+                nearby_text="로그아웃하기",
+                parent_semantics="로그아웃하기 회원탈퇴 페이지로 이동하기 회원탈퇴",
+                role="button",
+                risk_level="low",
+            )
+        ],
+        forbidden_candidate_ids=set(),
+    )
+    assert safe_delete_page_entry.name == "click"
+    assert safe_delete_page_status == "allowed"
     subscription_boundary, subscription_status, subscription_reason = (
         ActionSafetyGate().validate(
             NavigationAction(name="click", candidate_id="subscribe-pass"),

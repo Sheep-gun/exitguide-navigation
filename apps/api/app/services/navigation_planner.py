@@ -13,6 +13,7 @@ from app.services.navigation_decision_memory import (
     GOAL_ROLE_PRIORS,
     DecisionMemoryQuery,
     _candidate_ontology_score,
+    is_contextual_membership_cancellation_action,
     is_dangerous_final_candidate,
     is_state_changing_action_label,
 )
@@ -233,7 +234,7 @@ class ActionSafetyGate:
                 "candidate is forbidden by observed failure memory",
             )
 
-        semantic_text = " ".join(
+        screen_context = " ".join(
             (
                 candidate.label,
                 candidate.icon_semantics,
@@ -247,8 +248,18 @@ class ActionSafetyGate:
                 "replaced_with_safe_action",
                 f"candidate risk level is {candidate.risk_level}",
             )
-        if is_state_changing_action_label(candidate.label) or is_dangerous_final_candidate(
-            semantic_text
+        # Nearby or parent text may contain an adjacent destructive control (for example,
+        # "로그아웃" beside a safe "회원탈퇴 페이지로 이동하기" link). Only the candidate's
+        # own semantics can trigger the general final-action phrase gate. The one deliberately
+        # contextual exception is a generic cancellation CTA on a membership/billing screen.
+        own_action_semantics = " ".join((candidate.label, candidate.icon_semantics))
+        if (
+            is_state_changing_action_label(candidate.label)
+            or is_dangerous_final_candidate(own_action_semantics)
+            or is_contextual_membership_cancellation_action(
+                candidate.label,
+                screen_context,
+            )
         ):
             return (
                 NavigationAction(name="stop_for_user"),

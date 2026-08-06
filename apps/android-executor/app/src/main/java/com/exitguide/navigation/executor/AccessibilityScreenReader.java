@@ -34,6 +34,7 @@ final class AccessibilityScreenReader {
         final String label;
         final String semanticText;
         final Rect bounds;
+        final boolean accessibilityClickable;
 
         CandidateBinding(
                 String candidateId,
@@ -42,7 +43,8 @@ final class AccessibilityScreenReader {
                 String riskLevel,
                 String label,
                 String semanticText,
-                Rect bounds
+                Rect bounds,
+                boolean accessibilityClickable
         ) {
             this.candidateId = candidateId;
             this.path = Collections.unmodifiableList(new ArrayList<>(path));
@@ -51,6 +53,7 @@ final class AccessibilityScreenReader {
             this.label = label;
             this.semanticText = semanticText;
             this.bounds = new Rect(bounds);
+            this.accessibilityClickable = accessibilityClickable;
         }
     }
 
@@ -308,10 +311,11 @@ final class AccessibilityScreenReader {
         if (captured) {
             nodes.put(nodeSummary(node, nodeId, parentId, childIds, nodes.length()));
         }
-        if (included && node.isEnabled() && node.isClickable()) {
+        boolean semanticProxy = included && isSemanticProxyCandidate(node);
+        if (included && node.isEnabled() && (node.isClickable() || semanticProxy)) {
             stats.candidatesTotal++;
             if (captured && candidates.length() < MAX_CANDIDATES) {
-                addCandidate(node, nodeId, path, candidates, bindings);
+                addCandidate(node, nodeId, path, semanticProxy, candidates, bindings);
             }
         }
         for (int index = 0; index < node.getChildCount(); index++) {
@@ -346,6 +350,7 @@ final class AccessibilityScreenReader {
             AccessibilityNodeInfo node,
             String candidateId,
             List<Integer> path,
+            boolean semanticProxy,
             JSONArray candidates,
             Map<String, CandidateBinding> bindings
     ) throws JSONException {
@@ -384,8 +389,8 @@ final class AccessibilityScreenReader {
         candidate.put("bounds_normalized", normalizedBounds(bounds));
         candidate.put("grounding_node_id", candidateId);
         candidate.put("candidate_source", "accessibility");
-        candidate.put("candidate_generator_version", "android-accessibility-v5");
-        candidate.put("clickable", node.isClickable());
+        candidate.put("candidate_generator_version", "android-accessibility-v6");
+        candidate.put("clickable", true);
         candidate.put("enabled", node.isEnabled());
         candidate.put("selected", node.isSelected());
         candidate.put("checked", node.isCheckable() ? node.isChecked() : JSONObject.NULL);
@@ -393,9 +398,56 @@ final class AccessibilityScreenReader {
         bindings.put(
                 candidateId,
                 new CandidateBinding(
-                        candidateId, path, fingerprint, riskLevel, label, semanticText, bounds
+                        candidateId,
+                        path,
+                        fingerprint,
+                        riskLevel,
+                        label,
+                        semanticText,
+                        bounds,
+                        node.isClickable()
                 )
         );
+    }
+
+    /**
+     * Some Compose UIs expose a semantic Button node and stable bounds while omitting both
+     * {@code isClickable()} and {@code ACTION_CLICK}. Excluding those nodes made visible
+     * controls (for example, an edit affordance attached to a profile label) impossible to
+     * address by candidate_id. Admit only bounded, labelled Button/ImageButton nodes as
+     * accessibility-grounded proxy candidates. No model-generated coordinate is accepted.
+     */
+    private boolean isSemanticProxyCandidate(AccessibilityNodeInfo node) {
+        if (node == null
+                || node.isClickable()
+                || !node.isEnabled()
+                || !node.isVisibleToUser()
+                || node.isPassword()
+                || node.isEditable()) {
+            return false;
+        }
+        String nodeRole = role(node);
+        if (!"button".equals(nodeRole) && !"icon_button".equals(nodeRole)) {
+            return false;
+        }
+        String semantics = String.join(
+                " ",
+                preferredLabel(node),
+                string(node.getContentDescription()),
+                descendantText(node, 3)
+        ).trim();
+        if (semantics.isEmpty()) {
+            return false;
+        }
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        if (bounds.isEmpty()) {
+            return false;
+        }
+        return bounds.width() >= Math.max(24, screenWidth / 50)
+                && bounds.height() >= Math.max(24, screenHeight / 100)
+                && bounds.width() < screenWidth * 0.96f
+                && bounds.height() < screenHeight * 0.90f;
     }
 
     private static void applyContextualScreenSafety(
@@ -435,7 +487,8 @@ final class AccessibilityScreenReader {
                                 "high",
                                 binding.label,
                                 binding.semanticText,
-                                binding.bounds
+                                binding.bounds,
+                                binding.accessibilityClickable
                         )
                 );
             }

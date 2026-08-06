@@ -811,7 +811,7 @@ class NavigationRuntime:
             for candidate in effective_screen.candidates:
                 payload = candidate.model_dump(mode="json")
                 payload.update(query_candidate_payloads.get(candidate.candidate_id, {}))
-                semantic_text = " ".join(
+                screen_context = " ".join(
                     (
                         candidate.label,
                         candidate.icon_semantics,
@@ -821,9 +821,19 @@ class NavigationRuntime:
                 )
                 terminal = (
                     is_state_changing_action_label(candidate.label)
-                    or is_dangerous_final_candidate(semantic_text)
+                    or is_dangerous_final_candidate(
+                        " ".join((candidate.label, candidate.icon_semantics))
+                    )
+                    or is_contextual_membership_cancellation_action(
+                        candidate.label,
+                        screen_context,
+                    )
                 )
                 payload["terminal"] = terminal
+                # Query-time memory enrichment can carry a conservative dangerous_final flag
+                # derived from adjacent/parent text. Replace it with the authoritative current
+                # candidate-action classification before the external safety policy evaluates it.
+                payload["dangerous_final"] = terminal
                 payload["state_changing"] = terminal
                 policy_candidates.append(payload)
             policy_facts = build_policy_facts(

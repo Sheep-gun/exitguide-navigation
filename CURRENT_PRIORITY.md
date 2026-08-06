@@ -1,18 +1,35 @@
 # ExitGuide Navigation Current Priority
 
-status: blocked
+status: verifying
 phase: device_validation
-updated_at: 2026-08-04T20:24:15+09:00
-priority: B 고정 아키텍처로 11개 앱 × 5개 목표의 실기기 커버리지 55셀 완성
+updated_at: 2026-08-06T12:59:32+09:00
+priority: Codex 감독 골든 라벨 수집기의 후보 누락·실행·관찰 계약을 실기기에서 검증한 뒤 9개 파일럿 목표를 완성
 decision_db_collection: paused
-next_action: Samsung SM-S936N을 ADB로 다시 연결한 뒤 commit 07280a8 APK에 scripts/Install-NavigationExecutor.ps1을 실행하고 접근성 bound·90% 실제 스크롤·ADB lease 중지를 검증한 후 Netflix membership.join B 세션을 새로 시작한다.
+next_action: 배달의민족 account.delete의 연필 프록시·안전 경계 검증이 끝났으므로 동일 수집기로 배달의민족 membership.join과 membership.cancel 파일럿을 수집·검수한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
-verified_device: Samsung SM-S936N, Android 16
-verified_apps: YouTube 21.31.524+1561190182; Netflix 9.77.0 build 9 64328+64328; X 12.12.0-release.0+312120000; TVING 26.31.02+20263102
+verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
+verified_apps: 배달의민족 16.16.0+26001143 account.delete pencil-proxy traversal and terminal consent handoff; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
-deployed_commit: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
+integration_commit: pending commit for pencil-proxy collector fix
+deployed_commit: pending commit; N100 runtime code staged as `navigation-api-code-pencil-proxy-20260806-1232-v3`
+
+## 2026-08-06 배달의민족 연필 후보 누락 해결
+
+- goal_id: `account.delete`
+- issue: 마이배민 프로필 행의 연필 아이콘이 별도 클릭 노드로 노출되지 않아 기존 후보 추출기에서 누락됨
+- fix: 화면에 보이고 라벨·버튼 역할·경계가 있는 비클릭 Accessibility 노드를 semantic proxy candidate로 제한적으로 수집
+- execution: 모델 좌표 없이 현재 candidate bounds 내부의 trailing affordance anchor를 사용하고, API에는 표준 `gesture` 실행 방식으로 기록
+- verified_path: 마이배민 -> 프로필 행 연필 proxy -> 내 정보 수정 -> 회원탈퇴 페이지로 이동하기 -> 90% scroll -> 탈퇴 소멸 동의 전 `stop_for_user`
+- Runtime sessions: `navs_b7998439e97f4a2c8c15cdbf3df8b789`, `navs_0995b6a27bf74c779747c87a5ea8c373`, `navs_22145b3e172e4964a7129ef4b03c5189`
+- final_session: `status=stopped`, `terminal_reason=safe_user_handoff`, `handoff_reason=confirmation_required`
+- Review DB: 6 decisions reviewed, 84 candidate labels; pencil proxy `best`, 꾸미기 `hard_negative`, terminal consent `unsafe`
+- observation_contract_fix: 개인정보 마스킹으로 문자열이 늘어나도 후보 의미 필드가 API 최대 길이를 초과하지 않도록 마스킹 후 재절단
+- Android tests/build/install: passed
+- API tests on deployed N100 environment: `navigation_runtime_unit`, `navigation_research_architecture_unit`, `navigation_decision_memory_unit` passed
+- APK SHA-256: `19373D4E2F2C9700A528DC19E48C4C1B6F7E733925AAC29C96DB13C0FEC23FC8`
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/baemin-account-delete-pencil-proxy-20260806.md`
 
 ## Team Android Executor distribution
 

@@ -2,6 +2,7 @@ package com.exitguide.navigation.executor;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.accessibilityservice.GestureDescription;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -10,6 +11,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.os.Build;
@@ -21,6 +23,7 @@ import android.util.Log;
 import android.view.Display;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.View;
 import android.view.accessibility.AccessibilityWindowInfo;
 
 import org.json.JSONException;
@@ -514,19 +517,19 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         long generation = episodeGuard.current();
         inFlight = true;
         ExecutorPreferences.clearOperatorCommand(this);
-        prepareVisualContext(snapshot, false, (dataUrl, visualReasoningRequired) -> {
-            if (!acceptsCallback(generation)) {
-                return;
-            }
-            postDecision(
-                    snapshot,
-                    emptyToNull(dataUrl),
-                    visualReasoningRequired,
-                    appObservation,
-                    generation,
-                    command
-            );
-        });
+        // Codex has already inspected the current screen and explicitly selected a grounded
+        // candidate_id. Re-running OCR/VLM before honoring that command adds latency and can
+        // deadlock collection when the visual endpoint is degraded. The authoritative screen
+        // payload and full candidate set are still recorded; only the redundant visual call is
+        // skipped for this one operator action.
+        postDecision(
+                snapshot,
+                null,
+                false,
+                appObservation,
+                generation,
+                command
+        );
     }
 
     private void postDecision(
@@ -600,6 +603,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                             if (!acceptsCallback(generation)) {
                                 return;
                             }
+                            Log.w(
+                                    LOG_TAG,
+                                    "decision_request_failed class=" + failureClass
+                                            + " detail=" + detail
+                            );
                             inFlight = false;
                             if (isDatasetAccessDenied(failureClass, detail)) {
                                 foregroundAppTracker.markCurrentAppUnsupported();
@@ -841,7 +849,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo node = null;
         try {
             node = screenReader.resolve(root, binding);
-            if (node == null || !node.isVisibleToUser() || !node.isEnabled() || !node.isClickable()) {
+            if (node == null || !node.isVisibleToUser() || !node.isEnabled()) {
                 return new ActionExecution(false, "blocked", "후보가 바뀌어 클릭을 취소했습니다.");
             }
             if (NavigationSafetyPolicy.isStateChangingActionLabel(binding.label)
@@ -850,24 +858,58 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             }
             Rect clickBounds = new Rect();
             node.getBoundsInScreen(clickBounds);
-            boolean succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            boolean succeeded;
+            String executorMethod;
+            String failureCode;
+            if (binding.accessibilityClickable && node.isClickable()) {
+                succeeded = node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                executorMethod = "accessibility_action";
+                failureCode = "accessibility_action_rejected";
+            } else {
+                CandidateTapAnchor.TapPoint tapPoint = CandidateTapAnchor.resolve(
+                        clickBounds.left,
+                        clickBounds.top,
+                        clickBounds.right,
+                        clickBounds.bottom,
+                        true,
+                        getResources().getConfiguration().getLayoutDirection()
+                                == View.LAYOUT_DIRECTION_RTL
+                );
+                Path tap = new Path();
+                tap.moveTo(tapPoint.x, tapPoint.y);
+                GestureDescription gesture = new GestureDescription.Builder()
+                        .addStroke(new GestureDescription.StrokeDescription(tap, 0, 80))
+                        .build();
+                succeeded = dispatchGesture(gesture, null, null);
+                boolean trailingAnchor = tapPoint.x != clickBounds.exactCenterX();
+                // The API contract records all AccessibilityService-dispatched gestures under
+                // the standard "gesture" method. Keep the anchor subtype in the device log.
+                executorMethod = "gesture";
+                failureCode = "accessibility_node_bounds_gesture_rejected";
+                Log.i(
+                        LOG_TAG,
+                        "candidate_gesture_anchor candidate_id=" + candidateId
+                                + " anchor=" + (trailingAnchor ? "trailing" : "center")
+                );
+            }
             if (succeeded && overlayController != null) {
                 overlayController.showTap(clickBounds);
             }
             Log.i(
-                    LOG_TAG,
-                    "action_execution name=click candidate_id=" + candidateId
-                            + " executor_action_succeeded=" + succeeded
+                LOG_TAG,
+                "action_execution name=click candidate_id=" + candidateId
+                        + " executor_method=" + executorMethod
+                        + " executor_action_succeeded=" + succeeded
             );
             return new ActionExecution(
                     succeeded,
                     succeeded ? "none" : "blocked",
                     succeeded ? "후보 ID를 안전하게 클릭했습니다." : "Accessibility 클릭이 거절되었습니다.",
                     actionPayload("click", candidateId, ""),
-                    "accessibility_action",
+                    executorMethod,
                     startedAt,
                     SystemClock.elapsedRealtime(),
-                    succeeded ? "" : "accessibility_action_rejected"
+                    succeeded ? "" : failureCode
             );
         } finally {
             if (node != null && !binding.path.isEmpty()) {
@@ -1143,6 +1185,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                         if (!acceptsCallback(generation)) {
                             return;
                         }
+                        Log.w(
+                                LOG_TAG,
+                                "observation_request_failed class=" + failureClass
+                                        + " detail=" + detail
+                        );
                         inFlight = false;
                         awaitUserScreenChange(
                                 continuationBaseline,
