@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T16:30:00+09:00",
+  "updated_at": "2026-08-06T16:35:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -25,7 +25,7 @@
         {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.join", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
+        {"goal_id": "membership.cancel", "status": "state_not_applicable", "display_status_ko": "현재 비구독 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/x-membership-cancel-state-not-applicable-20260806.md", "runtime:navs_2380fe4b86da42b3a88d4a0480d491eb"], "last_observed_at": "2026-08-06T16:33:38+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "별도 실기기 세션에서 피드의 업그레이드를 candidate_id로 실행해 신규 Premium 상품 화면을 관찰했다. 활성 구독 관리나 해지 후보는 없고 월간·연간 신규 결제 옵션만 있어 현재 계정은 Premium 비구독 상태다. 구독이나 결제를 실행하지 않고 stop_for_user로 종료했다. 2개 결정과 45개 전체 후보를 검수했다."}
       ]
     },
     {
