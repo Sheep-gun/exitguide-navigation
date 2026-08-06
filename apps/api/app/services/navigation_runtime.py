@@ -698,7 +698,8 @@ class NavigationRuntime:
                         planner_provider = "python_visual_reobserve_gate"
                         verifier_provider += "->visual_reobserve_deferred"
         if (
-            proposal.action.name == "stop_for_user"
+            request.operator_action is None
+            and proposal.action.name == "stop_for_user"
             and not _planner_stop_has_grounded_boundary(
                 planner_provider=planner_provider,
                 plan_stage=plan.stage,

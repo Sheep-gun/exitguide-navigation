@@ -782,6 +782,22 @@ def main() -> None:
         )
         assert operator_decision.planner_provider == "codex_operator"
         assert operator_runtime.store.status()["screen_artifacts"] == 1
+        operator_stop = operator_runtime.decide(
+            DecideRequest(
+                request_id="request-codex-operator-stop",
+                app_package="evaluation.operator.app",
+                goal_text="회원 탈퇴 메뉴를 찾고 싶어",
+                operator_action=NavigationAction(name="stop_for_user"),
+                operator_source="codex",
+                operator_command_id="codex-command-stop-1",
+                operator_reason_codes=["safety_handoff"],
+                operator_reason_text="로그인이 필요한 사용자 전용 경계",
+                operator_review_status="provisional",
+                screen=_account_screen(),
+            )
+        )
+        assert operator_stop.action == NavigationAction(name="stop_for_user")
+        assert operator_stop.planner_provider == "codex_operator"
         operator_progress = operator_runtime.observe(
             ObserveRequest(
                 request_id="request-codex-operator-observe",
