@@ -17,6 +17,8 @@
 - device: Samsung SM-G998N, Android 15
 - app: 배달의민족 `com.sampleapp`, `16.16.0+26001143`
 - executor: Navigation Executor 0.6.0
+- implementation commit: `74100e09b14effd3a71f375ea9614f24f2b73436`
+- N100 runtime code: `/srv/exitguide/runtime/navigation-api-code-74100e0`
 - APK SHA-256: `19373D4E2F2C9700A528DC19E48C4C1B6F7E733925AAC29C96DB13C0FEC23FC8`
 - scripted reinstall: `scripts/Install-NavigationExecutor.ps1`
 - AccessibilityService enabled: passed

@@ -2,7 +2,7 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T12:59:32+09:00
+updated_at: 2026-08-06T13:01:30+09:00
 priority: Codex 감독 골든 라벨 수집기의 후보 누락·실행·관찰 계약을 실기기에서 검증한 뒤 9개 파일럿 목표를 완성
 decision_db_collection: paused
 next_action: 배달의민족 account.delete의 연필 프록시·안전 경계 검증이 끝났으므로 동일 수집기로 배달의민족 membership.join과 membership.cancel 파일럿을 수집·검수한다.
@@ -11,8 +11,8 @@ verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
 verified_apps: 배달의민족 16.16.0+26001143 account.delete pencil-proxy traversal and terminal consent handoff; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: pending commit for pencil-proxy collector fix
-deployed_commit: pending commit; N100 runtime code staged as `navigation-api-code-pencil-proxy-20260806-1232-v3`
+integration_commit: `74100e09b14effd3a71f375ea9614f24f2b73436`
+deployed_commit: `74100e09b14effd3a71f375ea9614f24f2b73436`; N100 runtime code `/srv/exitguide/runtime/navigation-api-code-74100e0`
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
