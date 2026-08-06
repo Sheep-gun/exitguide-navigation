@@ -1,0 +1,76 @@
+{
+  "schema_version": "navigation-account-state-recollection.v1",
+  "updated_at": "2026-08-06T20:55:11+09:00",
+  "source_coverage": "db/navigation_goal_coverage_v1.json",
+  "base_snapshot": "training_snapshot_d983e65055f5427fdb8d3dbe",
+  "policy": {
+    "append_only_runtime_and_review": true,
+    "overwrite_frozen_snapshot": false,
+    "credentials_collected": false,
+    "user_performs_login_and_account_state_changes": true,
+    "dangerous_final_action_auto_execution": false,
+    "recollection_data_split": "collection",
+    "production_activation_before_unseen_app_validation": false
+  },
+  "strict_completion_blockers": [
+    {
+      "priority": 1,
+      "app_package": "com.google.android.youtube",
+      "app_name": "YouTube",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "active Premium account with an exposed alternative plan, upgrade, downgrade, or family-plan control",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
+    {
+      "priority": 1,
+      "app_package": "com.netflix.mediaclient",
+      "app_name": "Netflix",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "account owner profile whose account page exposes Change Plan or an equivalent plan-selection control",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
+    {
+      "priority": 1,
+      "app_package": "com.postype.play",
+      "app_name": "포스타입",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "active creator membership with at least one eligible alternative tier",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    }
+  ],
+  "high_value_state_upgrades": [
+    {
+      "priority": 2,
+      "goal_id": "membership.join",
+      "apps": ["com.google.android.youtube", "com.netflix.mediaclient", "com.sampleapp"],
+      "required_state": "logged-in account without the target paid membership"
+    },
+    {
+      "priority": 3,
+      "goal_id": "membership.change",
+      "current_status": "state_not_applicable",
+      "required_state": "logged-in account with an active changeable membership"
+    },
+    {
+      "priority": 3,
+      "goal_id": "membership.cancel",
+      "current_status": "state_not_applicable",
+      "required_state": "logged-in account with an active cancellable membership"
+    },
+    {
+      "priority": 4,
+      "goal_id": "account.signup",
+      "current_status": "state_not_applicable",
+      "required_state": "signed-out or unregistered state; user completes any logout before collection"
+    },
+    {
+      "priority": 4,
+      "goal_id": "account.delete",
+      "current_status": "state_not_applicable",
+      "required_state": "signed-in account eligible to reach the deletion boundary"
+    }
+  ]
+}

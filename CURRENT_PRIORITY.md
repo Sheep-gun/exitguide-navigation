@@ -2,10 +2,10 @@
 
 status: verifying
 phase: implementation
-updated_at: 2026-08-06T20:49:00+09:00
-priority: 동결된 55셀 원료를 보존하고 새 계정 상태 보강 또는 미관측 앱 validation을 준비
-decision_db_collection: completed
-next_action: 사용자가 준비한 로그아웃·미구독·활성 구독 계정 상태로 보강할 셀 또는 새로 설치한 미관측 validation 앱을 지정할 때까지 staging 세대를 활성화하지 않는다.
+updated_at: 2026-08-06T20:55:11+09:00
+priority: 동결된 55셀 원료를 보존하면서 목표 원문에서 허용하지 않는 not_testable 3셀을 계정 상태별 새 세대로 보강
+decision_db_collection: paused
+next_action: 사용자가 YouTube·Netflix·포스타입 중 하나에서 멤버십 변경 제어가 노출되는 계정을 준비하면 해당 앱의 membership.change를 새 Runtime·Review 세션으로 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -609,7 +609,8 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - 대상: 사용자 지정 10개 앱 + TVING
 - 목표: `account.signup`, `account.delete`, `membership.join`, `membership.change`, `membership.cancel`
 - 완료 단위: 11개 앱 × 5개 목표 = 55셀
-- 완료 상태: `destination_reached`, `safe_boundary_reached`, 근거 있는 `not_supported`, 근거 있는 `not_testable`
+- 완료 상태: `destination_reached`, `safe_boundary_reached`, 근거 있는 `not_supported`,
+  근거 있는 `state_not_applicable`, `failed_with_evidence`
 - 미완료 상태: `not_explored`, `in_progress`, 임시 연결·환경 오류
 - current split: 11개 앱 모두 collection
 - future validation/holdout: 학습용 불변 스냅샷 동결 후 처음 설치하는 미관측 앱만 사용
@@ -815,8 +816,8 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 
 - final_session: `navs_e4aba79599d74068b3d46633f0aeb69d`
 - diagnostic_session: `navs_91fde4771e134266b221902f3c46319f`
-- result: `not_testable`
-- blocking_issue: `account_state`
+- result: `safe_boundary_reached`
+- blocking_issue: `login_required`
 - observed_path: 내 페이지 → 계정 → 계정 추가 → Samsung 생체 인증·기기 자격 증명
 - candidate-ID clicks: 3
 - executor actions succeeded: 3/3
@@ -895,7 +896,8 @@ ADB reverse `tcp:8100 -> tcp:18104`, Navigation API ready가 확인됐다. 연�
 다음이 모두 증명될 때만 `status: completed`로 변경한다.
 
 1. 55셀에 `not_explored` 또는 `in_progress`가 없음
-2. 모든 `not_supported`와 `not_testable`에 실기기·UI 근거가 있음
+2. `not_testable` 셀이 0개이며, 모든 `not_supported`·`state_not_applicable`·
+   `failed_with_evidence`에 실기기·UI 근거가 있음
 3. 현재 11개 앱 55셀이 모두 collection Runtime·Review 원료로 수집됨
 4. 현재 앱을 validation·holdout으로 재사용하지 않으며 향후 새 미관측 앱만 별도 분할함
 5. 현재 11개 앱의 승인된 경험이 표준 승격 파이프라인을 거침

@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts" / "Validate-NavigationGoalCoverage.py"
+RECOLLECTION = ROOT / "db" / "navigation_account_state_recollection_v1.json"
 SPEC = importlib.util.spec_from_file_location("goal_coverage_validator", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -23,9 +24,11 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["apps"] == 11
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
-    assert report["successful_cells"] == 25
+    assert report["successful_cells"] == 26
     assert report["terminal_cells"] == 55
     assert report["incomplete_cells"] == 0
+    assert report["strict_completed_cells"] == 52
+    assert report["strict_completion_blockers"] == 3
     assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
@@ -76,9 +79,30 @@ def test_app_specific_evidence_is_owned_by_the_matching_package() -> None:
                         )
 
 
+def test_every_not_testable_cell_has_a_recollection_plan() -> None:
+    payload = json.loads(MODULE.DEFAULT_COVERAGE.read_text(encoding="utf-8"))
+    plan = json.loads(RECOLLECTION.read_text(encoding="utf-8"))
+    observed = {
+        (app["app_package"], goal["goal_id"])
+        for app in payload["apps"]
+        for goal in app["goals"]
+        if goal["status"] == "not_testable"
+    }
+    planned = {
+        (entry["app_package"], entry["goal_id"])
+        for entry in plan["strict_completion_blockers"]
+    }
+    assert observed == planned
+    assert all(entry["current_status"] == "not_testable" for entry in plan["strict_completion_blockers"])
+    assert plan["policy"]["overwrite_frozen_snapshot"] is False
+    assert plan["policy"]["credentials_collected"] is False
+    assert plan["policy"]["dangerous_final_action_auto_execution"] is False
+
+
 if __name__ == "__main__":
     test_repository_goal_coverage_is_valid()
     test_goal_coverage_rejects_automatic_dangerous_action()
     test_every_current_app_is_a_collection_source()
     test_app_specific_evidence_is_owned_by_the_matching_package()
+    test_every_not_testable_cell_has_a_recollection_plan()
     print("navigation goal coverage contract checks passed")

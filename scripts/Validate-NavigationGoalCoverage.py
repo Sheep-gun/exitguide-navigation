@@ -50,6 +50,7 @@ def validate_coverage(
     seen_apps: set[str] = set()
     successful_cells = 0
     terminal_cells = 0
+    strict_completion_blockers = 0
     split_counts = {key: 0 for key in EXPECTED_SPLIT_COUNTS}
     manifest_packages = set(split_by_package)
     for app in coverage["apps"]:
@@ -81,6 +82,8 @@ def validate_coverage(
                     raise ValueError("terminal coverage requires evidence and observation time")
                 if not entry["notes"].strip():
                     raise ValueError("terminal coverage requires an evidence summary")
+            if status == "not_testable":
+                strict_completion_blockers += 1
             if status in SUCCESS_STATUSES:
                 successful_cells += 1
             if status == "not_testable" and entry["blocking_issue"] not in {
@@ -126,6 +129,8 @@ def validate_coverage(
         "successful_cells": successful_cells,
         "terminal_cells": terminal_cells,
         "incomplete_cells": coverage_cells - terminal_cells,
+        "strict_completed_cells": coverage_cells - strict_completion_blockers,
+        "strict_completion_blockers": strict_completion_blockers,
         "split_counts": split_counts,
         "dangerous_action_auto_executed": 0,
     }
