@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T20:00:00+09:00",
+  "updated_at": "2026-08-06T20:15:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -136,13 +136,13 @@
       "app_package": "com.openai.chatgpt",
       "app_name": "ChatGPT",
       "split": "collection",
-      "app_version": null,
+      "app_version": "1.2026.209+2620919",
       "goals": [
-        {"goal_id": "account.signup", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.join", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
+        {"goal_id": "account.signup", "status": "state_not_applicable", "display_status_ko": "현재 로그인 계정 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/chatgpt-account-signup-state-not-applicable-20260806.md", "runtime:navs_4fd7e143eb6a4cf1beeea0a77e2fea0a"], "last_observed_at": "2026-08-06T20:05:46+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "ChatGPT 홈에 플랜 업그레이드, 임시 채팅, 메뉴, 대화 입력 등 로그인 후 기능이 표시돼 현재 계정은 로그인 상태다. 로그아웃이나 회원가입을 실행하지 않고 종료했다. 초기 stop 뒤 Runtime 바인딩용 wait_and_observe까지 2개 결정과 16개 전체 후보를 검수했으며 진단 관찰은 성공 경로로 승격하지 않는다."},
+        {"goal_id": "account.delete", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/chatgpt-account-delete-safe-boundary-20260806.md", "runtime:navs_235d2e68404f461dbf16f235701772ce"], "last_observed_at": "2026-08-06T20:08:08+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "홈→메뉴→계정 설정→90% 하향 스크롤→데이터 제어를 candidate_id로 실행해 OpenAI 계정 삭제 후보에 도달했다. 원본 위험도 low를 신뢰하지 않고 삭제와 개인정보 상태 변경 후보를 unsafe로 검수했으며 클릭 없이 종료했다. 5개 결정과 58개 전체 후보를 검수했다."},
+        {"goal_id": "membership.join", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/chatgpt-membership-join-safe-boundary-20260806.md", "runtime:navs_a9b1a8f2d56f432a91acf1a86dee9c1a"], "last_observed_at": "2026-08-06T20:09:07+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "홈의 플랜 업그레이드를 candidate_id로 실행해 ChatGPT Plus의 월 29,000원, 자동 갱신, 업그레이드 CTA가 표시된 가입 화면에 도달했다. 결제·구독 확정 없이 stop_for_user로 종료했다. 2개 결정과 12개 전체 후보를 검수했다."},
+        {"goal_id": "membership.change", "status": "state_not_applicable", "display_status_ko": "현재 Free 비구독 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/chatgpt-membership-change-state-not-applicable-20260806.md", "runtime:navs_252bde17d54c4304bff513dfee31c1cd"], "last_observed_at": "2026-08-06T20:10:03+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "독립 변경 세션에서 플랜 업그레이드를 실행해 현재 Free 플랜과 신규 Plus 가입 CTA만 확인했다. 활성 플랜 관리·변경 후보가 없어 현재 계정에는 변경 목표가 적용되지 않는다. Runtime의 wrong_destination 판정은 Review에서 상태 판별 진행으로 교정했다. 2개 결정과 12개 후보를 검수했다."},
+        {"goal_id": "membership.cancel", "status": "state_not_applicable", "display_status_ko": "현재 Free 비구독 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/chatgpt-membership-cancel-state-not-applicable-20260806.md", "runtime:navs_2cce60798a4a4ff5b8b736e55f983848"], "last_observed_at": "2026-08-06T20:10:54+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "독립 해지 세션에서 플랜 업그레이드를 실행해 현재 Free 플랜과 신규 가입 CTA만 관찰했다. 활성 구독·해지 제어가 없어 state_not_applicable로 종료했다. 2개 결정과 12개 후보를 검수했고 결제·구독·해지는 실행하지 않았다."}
       ]
     },
     {

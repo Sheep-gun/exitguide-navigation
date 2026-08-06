@@ -23,9 +23,9 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["apps"] == 11
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
-    assert report["successful_cells"] == 23
-    assert report["terminal_cells"] == 50
-    assert report["incomplete_cells"] == 5
+    assert report["successful_cells"] == 25
+    assert report["terminal_cells"] == 55
+    assert report["incomplete_cells"] == 0
     assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
@@ -55,6 +55,7 @@ def test_every_current_app_is_a_collection_source() -> None:
 def test_app_specific_evidence_is_owned_by_the_matching_package() -> None:
     payload = json.loads(MODULE.DEFAULT_COVERAGE.read_text(encoding="utf-8"))
     evidence_owners = {
+        "docs/evidence/chatgpt-": "com.openai.chatgpt",
         "docs/evidence/coupang-": "com.coupang.mobile",
         "docs/evidence/instagram-": "com.instagram.android",
         "docs/evidence/jejuair-": "com.parksmt.jejuair.android16",

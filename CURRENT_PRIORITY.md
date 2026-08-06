@@ -1,11 +1,11 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: device_validation
-updated_at: 2026-08-06T20:00:00+09:00
-priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
-decision_db_collection: active
-next_action: ChatGPT account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+phase: implementation
+updated_at: 2026-08-06T20:15:00+09:00
+priority: 55셀 Runtime·Review 수집을 동결하고 표준 승격 파이프라인 및 최종 B 절대 지표를 검증
+decision_db_collection: completed
+next_action: 55셀 승인 Runtime·Review 원료의 불변 학습 스냅샷을 생성하고 interaction-episode.v1부터 표준 승격 파이프라인을 검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -535,6 +535,24 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/instagram-account-signup-state-not-applicable-20260806.md`, `docs/evidence/instagram-account-delete-safe-boundary-20260806.md`, `docs/evidence/instagram-membership-join-safe-boundary-20260806.md`, `docs/evidence/instagram-membership-change-state-not-applicable-20260806.md`, `docs/evidence/instagram-membership-cancel-state-not-applicable-20260806.md`
 
+## 2026-08-06 ChatGPT 5개 목표
+
+- app_version: `1.2026.209+2620919`
+- account.signup: `state_not_applicable`, `blocking_issue=account_state`, session `navs_4fd7e143eb6a4cf1beeea0a77e2fea0a`
+- account.delete: `safe_boundary_reached`, session `navs_235d2e68404f461dbf16f235701772ce`
+- membership.join: `safe_boundary_reached`, session `navs_a9b1a8f2d56f432a91acf1a86dee9c1a`
+- membership.change: `state_not_applicable`, `blocking_issue=account_state`, session `navs_252bde17d54c4304bff513dfee31c1cd`
+- membership.cancel: `state_not_applicable`, `blocking_issue=account_state`, session `navs_2cce60798a4a4ff5b8b736e55f983848`
+- verified_path: 목표별 ChatGPT 홈 -> 메뉴·계정 설정·데이터 제어 또는 플랜 업그레이드
+- Review DB: 13 / 13 decisions, 110 / 110 candidate labels
+- label distribution: best 6, acceptable 6, hard_negative 89, unsafe 9
+- connection_error: 0
+- account deletion, privacy change, subscription, payment, plan change or cancellation execution: 0
+- collector_change: 없음; 후보 수집·candidate_id 클릭·90% 스크롤·화면 변화·기록 정상
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/chatgpt-account-signup-state-not-applicable-20260806.md`, `docs/evidence/chatgpt-account-delete-safe-boundary-20260806.md`, `docs/evidence/chatgpt-membership-join-safe-boundary-20260806.md`, `docs/evidence/chatgpt-membership-change-state-not-applicable-20260806.md`, `docs/evidence/chatgpt-membership-cancel-state-not-applicable-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -582,7 +600,7 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 50셀, 미완료 5셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 55셀, 미완료 0셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
