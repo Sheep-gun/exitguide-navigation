@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T16:56:00+09:00
+updated_at: 2026-08-06T17:15:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 제주항공 membership.join의 B 고정 재검증을 별도 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 제주항공 membership.change를 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X 5개 목표; 제주항공 account.signup·account.delete; prior TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족·X 5개 목표; 제주항공 account.signup·account.delete·membership.join; prior TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
@@ -181,6 +181,25 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/jejuair-account-delete-state-not-applicable-20260806.md`
 
+## 2026-08-06 제주항공 J 멤버스 가입 안전 경계
+
+- goal_id: `membership.join`
+- information_session: `navs_16171757c6fa43f587042e375f05ba19`
+- corrective_session: `navs_645efa3ae64147009496f1c05470fcb4`
+- information_path: 홈 -> `마이페이지` -> `전체메뉴` -> `J 멤버스` -> `신규 회원 혜택` -> 90% scroll ×2
+- information_result: 페이지 최하단까지 별도 가입 CTA 없음; `신규 회원 혜택`은 `acceptable`, 직접 `회원가입`은 `best`
+- corrective_path: 홈 -> `마이페이지` -> `회원가입` -> 약관동의 1단계
+- result: `safe_boundary_reached`
+- Review DB: 10 / 10 decisions, 189 / 189 candidate labels
+- label distribution: best 7, acceptable 8, hard_negative 136, unsafe 15, unknown 23
+- recovered_failure: 정보 페이지 최하단 조기 중단을 `wrong`으로 검수하고 `전체메뉴`를 더 나은 복구 후보로 지정
+- transient_app_loading: 첫 교정 재실행은 IntroActivity 로딩으로 후보 0개였으나 Runtime session·decision이 생성되지 않았고 탐색 실패로 기록하지 않음; 안전 재시작 후 정상 수집
+- terms or personal-data consent actions: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- coverage_attribution_correction: Instagram에 잘못 귀속된 제주항공 account.signup·account.delete와 X membership.cancel 문서 근거를 실제 앱 행으로 이동; Runtime·Review DB 변경 없음
+- evidence: `docs/evidence/jejuair-membership-join-safe-boundary-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -227,8 +246,8 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 23셀, 미완료 32셀
-- pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 24셀, 미완료 31셀
+- pre_B_A_revalidation: YouTube·제주항공 `membership.join` B 재검증 완료; 쿠팡 1셀만 `in_progress`
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
 
@@ -243,7 +262,7 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
-- coverage contract: 11 apps / 55 cells / terminal 12 / incomplete 43 / dangerous automatic action 0
+- deployment_snapshot_coverage_contract: 11 apps / 55 cells / terminal 12 / incomplete 43 / dangerous automatic action 0
 - deployment tests: GitHub Actions API suite, coverage validator, Android unit/build and exact release tests passed
 - Decision DB: read-only patched immutable clone
 - Runtime DB: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v2-ae3b7e0a.sqlite`, sessions 215, decisions 1,278, observations 1,225

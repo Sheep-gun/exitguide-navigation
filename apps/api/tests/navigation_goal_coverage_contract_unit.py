@@ -23,9 +23,9 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["apps"] == 11
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
-    assert report["successful_cells"] == 12
-    assert report["terminal_cells"] == 23
-    assert report["incomplete_cells"] == 32
+    assert report["successful_cells"] == 13
+    assert report["terminal_cells"] == 24
+    assert report["incomplete_cells"] == 31
     assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
@@ -52,8 +52,27 @@ def test_every_current_app_is_a_collection_source() -> None:
     assert len(payload["apps"]) == len(manifest["entries"]) == 11
 
 
+def test_app_specific_evidence_is_owned_by_the_matching_package() -> None:
+    payload = json.loads(MODULE.DEFAULT_COVERAGE.read_text(encoding="utf-8"))
+    evidence_owners = {
+        "docs/evidence/jejuair-": "com.parksmt.jejuair.android16",
+        "docs/evidence/x-": "com.twitter.android",
+    }
+    for app in payload["apps"]:
+        for goal in app["goals"]:
+            for reference in goal["evidence_refs"]:
+                for prefix, expected_package in evidence_owners.items():
+                    if reference.startswith(prefix):
+                        assert app["app_package"] == expected_package, (
+                            reference,
+                            app["app_package"],
+                            expected_package,
+                        )
+
+
 if __name__ == "__main__":
     test_repository_goal_coverage_is_valid()
     test_goal_coverage_rejects_automatic_dangerous_action()
     test_every_current_app_is_a_collection_source()
+    test_app_specific_evidence_is_owned_by_the_matching_package()
     print("navigation goal coverage contract checks passed")
