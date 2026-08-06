@@ -100,7 +100,9 @@
             "destination_reached",
             "safe_boundary_reached",
             "not_supported",
-            "not_testable"
+            "not_testable",
+            "state_not_applicable",
+            "failed_with_evidence"
           ]
         },
         "display_status_ko": {"type": "string", "minLength": 1},

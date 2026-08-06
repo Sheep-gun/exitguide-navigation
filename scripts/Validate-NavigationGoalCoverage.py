@@ -18,6 +18,8 @@ FINAL_STATUSES = {
     "safe_boundary_reached",
     "not_supported",
     "not_testable",
+    "state_not_applicable",
+    "failed_with_evidence",
 }
 EXPECTED_SPLIT_COUNTS = {"collection": 7, "locked_holdout": 3, "validation": 1}
 
@@ -89,6 +91,13 @@ def validate_coverage(
                 "permission_required",
             }:
                 raise ValueError("not_testable requires a durable account or policy blocker")
+            if status == "state_not_applicable" and entry["blocking_issue"] not in {
+                "account_state",
+                "login_required",
+            }:
+                raise ValueError(
+                    "state_not_applicable requires a current account or login state blocker"
+                )
             if status == "not_supported" and entry["blocking_issue"] is not None:
                 raise ValueError("not_supported cannot be caused by an environment blocker")
             if status == "not_explored" and (

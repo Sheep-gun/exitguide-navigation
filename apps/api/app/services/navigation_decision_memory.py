@@ -161,6 +161,8 @@ GENERIC_CANCELLATION_ACTION_LABELS = frozenset(
     {
         "취소",
         "취소하기",
+        "해지",
+        "해지하기",
         "cancel",
     }
 )
@@ -174,6 +176,8 @@ MEMBERSHIP_CONTEXT_MARKERS = (
     "subscription",
     "premium",
     "plan",
+    "클럽",
+    "club",
 )
 
 MEMBERSHIP_BILLING_OR_END_MARKERS = (

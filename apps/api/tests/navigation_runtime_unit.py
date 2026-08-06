@@ -369,6 +369,27 @@ def main() -> None:
         "membership.cancel",
     )
     assert contextual_cancel_screen.candidates[0].risk_level == "high"
+    contextual_baemin_cancel_screen = _contextualize_membership_cancellation_safety(
+        ScreenObservation(
+            window_title="마이배민클럽",
+            nodes=[
+                AccessibilityNodeSummary(
+                    node_id="cancel-membership",
+                    text="해지하기",
+                    clickable=True,
+                ),
+                AccessibilityNodeSummary(
+                    node_id="next-payment",
+                    text="다음 결제일 2026년 9월 1일",
+                ),
+            ],
+            candidates=[
+                NavigationCandidate(candidate_id="cancel-membership", label="해지하기")
+            ],
+        ),
+        "membership.cancel",
+    )
+    assert contextual_baemin_cancel_screen.candidates[0].risk_level == "high"
     dismiss_cancel_screen = _contextualize_membership_cancellation_safety(
         ScreenObservation(
             window_title="알림",

@@ -120,6 +120,22 @@ public final class NavigationSafetyPolicy {
             "delete account", "delete your account", "close account"
     );
 
+    private static final Set<String> MEMBERSHIP_CANCELLATION_LABELS = Set.of(
+            "취소", "취소하기", "해지", "해지하기",
+            "멤버십 해지", "구독 해지", "구독 취소", "이용권 해지",
+            "cancel", "cancel membership", "cancel subscription", "unsubscribe"
+    );
+
+    private static final String[] MEMBERSHIP_CONTEXT_MARKERS = {
+            "멤버십", "멤버쉽", "구독", "이용권", "클럽",
+            "membership", "subscription", "premium", "plan", "club"
+    };
+
+    private static final String[] MEMBERSHIP_BILLING_OR_END_MARKERS = {
+            "다음 결제", "결제일", "결제 수단", "혜택을 종료",
+            "billing", "next payment", "payment method", "end benefit", "end membership"
+    };
+
     private static final String[] FINAL_CONFIRMATION_MARKERS = {
             "정말", "확정", "최종", "즉시", "영구", "복구할 수 없", "되돌릴 수 없",
             "삭제됩니다", "탈퇴됩니다", "종료됩니다", "혜택이 종료", "모든 데이터",
@@ -170,11 +186,15 @@ public final class NavigationSafetyPolicy {
 
     public static boolean isIrreversibleFinalAction(String label, String screenContext) {
         String normalizedLabel = normalize(label);
+        String normalizedContext = normalize(screenContext);
         if (IRREVERSIBLE_EXACT_LABELS.contains(normalizedLabel)) {
             return true;
         }
-        return DESTRUCTIVE_FLOW_LABELS.contains(normalizedLabel)
-                && containsAny(normalize(screenContext), FINAL_CONFIRMATION_MARKERS);
+        return (DESTRUCTIVE_FLOW_LABELS.contains(normalizedLabel)
+                && containsAny(normalizedContext, FINAL_CONFIRMATION_MARKERS))
+                || (MEMBERSHIP_CANCELLATION_LABELS.contains(normalizedLabel)
+                && containsAny(normalizedContext, MEMBERSHIP_CONTEXT_MARKERS)
+                && containsAny(normalizedContext, MEMBERSHIP_BILLING_OR_END_MARKERS));
     }
 
     private static boolean containsAny(String value, String[] markers) {

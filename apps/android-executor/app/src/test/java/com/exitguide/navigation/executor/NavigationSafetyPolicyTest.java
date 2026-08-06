@@ -74,5 +74,13 @@ public final class NavigationSafetyPolicyTest {
                 "취소",
                 "정말 알림을 닫으시겠습니까?"
         ));
+        assertTrue(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "해지하기",
+                "배민클럽 이용 중 다음 결제일 2026년 9월 1일"
+        ));
+        assertFalse(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
+                "해지하기",
+                "알림 해지하기"
+        ));
     }
 }

@@ -921,40 +921,71 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
 
     private ActionExecution scroll(String direction, long startedAt) {
         AccessibilityNodeInfo root = activeRoot();
-        AccessibilityNodeInfo scrollable = findScrollable(root);
-        if (scrollable == null) {
-            if (root != null) {
-                root.recycle();
-            }
+        if (root == null) {
             return new ActionExecution(false, "blocked", "스크롤 가능한 영역을 찾지 못했습니다.");
         }
+        AccessibilityNodeInfo scrollable = findScrollable(root);
         try {
-            int action = "up".equals(direction)
-                    ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-                    : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
-            boolean succeeded = scrollable.performAction(action);
+            Rect scrollBounds = new Rect();
+            (scrollable == null ? root : scrollable).getBoundsInScreen(scrollBounds);
+            if (scrollBounds.isEmpty()) {
+                root.getBoundsInScreen(scrollBounds);
+            }
+            ViewportScrollGesture.Swipe swipe;
+            try {
+                swipe = ViewportScrollGesture.resolve(
+                        scrollBounds.left,
+                        scrollBounds.top,
+                        scrollBounds.right,
+                        scrollBounds.bottom,
+                        direction
+                );
+            } catch (IllegalArgumentException invalidBounds) {
+                return new ActionExecution(
+                        false,
+                        "blocked",
+                        "스크롤 영역의 경계가 비어 있습니다."
+                );
+            }
+            Path path = new Path();
+            path.moveTo(swipe.x, swipe.startY);
+            path.lineTo(swipe.x, swipe.endY);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(new GestureDescription.StrokeDescription(path, 0, 360))
+                    .build();
+            boolean succeeded = dispatchGesture(gesture, null, null);
+            String executorMethod = "gesture";
+            String failureCode = "viewport_scroll_gesture_rejected";
+            if (!succeeded && scrollable != null) {
+                int action = "up".equals(direction)
+                        ? AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                        : AccessibilityNodeInfo.ACTION_SCROLL_FORWARD;
+                succeeded = scrollable.performAction(action);
+                executorMethod = "accessibility_action";
+                failureCode = "accessibility_action_rejected";
+            }
             Log.i(
                     LOG_TAG,
                     "action_execution name=scroll direction=" + direction
+                            + " executor_method=" + executorMethod
+                            + " viewport_fraction=0.90"
                             + " executor_action_succeeded=" + succeeded
             );
             return new ActionExecution(
                     succeeded,
                     succeeded ? "none" : "blocked",
-                    succeeded ? "Accessibility 스크롤을 실행했습니다." : "Accessibility 스크롤이 거절되었습니다.",
+                    succeeded ? "90% 화면 스크롤을 실행했습니다." : "화면 스크롤이 거절되었습니다.",
                     actionPayload("scroll", "", direction),
-                    "accessibility_action",
+                    executorMethod,
                     startedAt,
                     SystemClock.elapsedRealtime(),
-                    succeeded ? "" : "accessibility_action_rejected"
+                    succeeded ? "" : failureCode
             );
         } finally {
-            if (scrollable != root) {
+            if (scrollable != null && scrollable != root) {
                 scrollable.recycle();
             }
-            if (root != null) {
-                root.recycle();
-            }
+            root.recycle();
         }
     }
 
