@@ -77,22 +77,42 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private String collectionStartedAt = "";
     private String lastOperatorSignature = "";
     private int repeatedOperatorCommandCount;
+    private boolean adbLeasePauseInProgress;
+    private final Runnable adbLeaseWatchdog = new Runnable() {
+        @Override
+        public void run() {
+            if (!ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
+                return;
+            }
+            if (!requireFreshAdbLease()) {
+                return;
+            }
+            scheduleAdbLeaseWatchdog();
+        }
+    };
 
     private final BroadcastReceiver configurationReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String previousSessionId = sessionId;
+            boolean connectionLeasePause = adbLeasePauseInProgress;
             resetSession();
             // Configuration changes can replace an active goal while its last
             // callback is still in flight. Close the previous server session
             // before scheduling the replacement so one device never leaves an
             // orphaned active episode behind.
-            requestSessionStop(previousSessionId);
+            if (!connectionLeasePause) {
+                requestSessionStop(previousSessionId);
+            }
             if (ExecutorPreferences.active(ExitGuideAccessibilityService.this)) {
+                adbLeasePauseInProgress = false;
                 holdScreenAwake();
+                scheduleAdbLeaseWatchdog();
                 verifyApiAndSchedule();
             } else {
+                adbLeasePauseInProgress = false;
                 cancelPending();
+                cancelAdbLeaseWatchdog();
                 releaseScreenAwake();
             }
         }
@@ -126,6 +146,13 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
             continuationGate.reset();
             cancelPending();
             scheduleDecision(0);
+        }
+    };
+
+    private final BroadcastReceiver adbHeartbeatReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            scheduleAdbLeaseWatchdog();
         }
     };
 
@@ -165,6 +192,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     new IntentFilter(ExecutorPreferences.ACTION_OPERATOR_COMMAND_CHANGED),
                     Context.RECEIVER_NOT_EXPORTED
             );
+            registerReceiver(
+                    adbHeartbeatReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_ADB_HEARTBEAT_INTERNAL),
+                    Context.RECEIVER_NOT_EXPORTED
+            );
         } else {
             registerReceiver(configurationReceiver, filter);
             registerReceiver(
@@ -179,10 +211,15 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     operatorCommandReceiver,
                     new IntentFilter(ExecutorPreferences.ACTION_OPERATOR_COMMAND_CHANGED)
             );
+            registerReceiver(
+                    adbHeartbeatReceiver,
+                    new IntentFilter(ExecutorPreferences.ACTION_ADB_HEARTBEAT_INTERNAL)
+            );
         }
         publish("접근성 서비스가 준비되었습니다.");
         if (ExecutorPreferences.active(this)) {
             holdScreenAwake();
+            scheduleAdbLeaseWatchdog();
             verifyApiAndSchedule();
         }
     }
@@ -238,6 +275,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     @Override
     public void onDestroy() {
         cancelPending();
+        cancelAdbLeaseWatchdog();
         releaseScreenAwake();
         try {
             unregisterReceiver(configurationReceiver);
@@ -256,6 +294,11 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
         }
         try {
             unregisterReceiver(operatorCommandReceiver);
+        } catch (IllegalArgumentException ignored) {
+            // Service startup did not finish.
+        }
+        try {
+            unregisterReceiver(adbHeartbeatReceiver);
         } catch (IllegalArgumentException ignored) {
             // Service startup did not finish.
         }
@@ -324,6 +367,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private void verifyApiAndSchedule() {
+        if (!requireFreshAdbLease()) {
+            return;
+        }
         long generation = episodeGuard.current();
         holdScreenAwake();
         publish("Navigation API 상태를 확인하는 중입니다.");
@@ -363,6 +409,9 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                 || continuationGate.isWaitingForUser()) {
             return;
         }
+        if (!requireFreshAdbLease()) {
+            return;
+        }
         long boundedDelayMs = decisionDebounceWindow.boundedDelay(
                 SystemClock.elapsedRealtime(),
                 delayMs
@@ -385,7 +434,7 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     private void requestDecision() {
         pendingDecision = null;
         decisionDebounceWindow.reset();
-        if (!ExecutorPreferences.active(this) || inFlight) {
+        if (!ExecutorPreferences.active(this) || inFlight || !requireFreshAdbLease()) {
             return;
         }
         AccessibilityScreenReader.ScreenSnapshot snapshot = currentSnapshot();
@@ -725,6 +774,18 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
                     "현재 화면은 사용자 조작이 필요합니다.",
                     "safe_user_handoff",
                     "confirmation_required"
+            );
+            return;
+        }
+
+        // A decision may arrive after the USB/ADB lease has expired. Recheck at
+        // the last possible grounded boundary so a delayed response can never
+        // execute after the supervising connection has disappeared.
+        if (!requireFreshAdbLease()) {
+            requestSessionStop(
+                    response.optString("session_id", sessionId),
+                    "device_disconnected",
+                    "adb_lease_expired"
             );
             return;
         }
@@ -1669,7 +1730,55 @@ public final class ExitGuideAccessibilityService extends AccessibilityService {
     }
 
     private boolean acceptsCallback(long generation) {
-        return episodeGuard.accepts(generation, ExecutorPreferences.active(this));
+        if (!episodeGuard.accepts(generation, ExecutorPreferences.active(this))) {
+            return false;
+        }
+        return requireFreshAdbLease();
+    }
+
+    private boolean requireFreshAdbLease() {
+        if (!ExecutorPreferences.active(this)) {
+            return false;
+        }
+        if (ExecutorPreferences.hasFreshAdbLease(this)) {
+            return true;
+        }
+        pauseForExpiredAdbLease();
+        return false;
+    }
+
+    private void scheduleAdbLeaseWatchdog() {
+        handler.removeCallbacks(adbLeaseWatchdog);
+        if (!ExecutorPreferences.active(this)) {
+            return;
+        }
+        long remaining = ExecutorPreferences.adbLeaseRemainingMillis(this);
+        handler.postDelayed(adbLeaseWatchdog, Math.max(100L, remaining + 100L));
+    }
+
+    private void cancelAdbLeaseWatchdog() {
+        handler.removeCallbacks(adbLeaseWatchdog);
+    }
+
+    private void pauseForExpiredAdbLease() {
+        if (adbLeasePauseInProgress || !ExecutorPreferences.active(this)) {
+            return;
+        }
+        adbLeasePauseInProgress = true;
+        String stoppingSessionId = sessionId;
+        cancelPending();
+        cancelAdbLeaseWatchdog();
+        inFlight = false;
+        ExecutorPreferences.clearOperatorCommand(this);
+        ExecutorPreferences.setActive(this, false);
+        requestSessionStop(
+                stoppingSessionId,
+                "device_disconnected",
+                "adb_lease_expired"
+        );
+        releaseScreenAwake();
+        Log.w(LOG_TAG, "connection_pause reason=adb_lease_expired connection_error=true");
+        publish("ADB 연결 heartbeat가 만료되어 탐색을 일시중지했습니다. 자동 재개하지 않습니다.");
     }
 
     private void requestSessionStop(String stoppingSessionId) {

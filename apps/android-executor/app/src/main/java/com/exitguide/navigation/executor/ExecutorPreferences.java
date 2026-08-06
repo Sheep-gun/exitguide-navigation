@@ -21,6 +21,10 @@ final class ExecutorPreferences {
             "com.exitguide.navigation.executor.ADB_STOP_NAVIGATION";
     static final String ACTION_ADB_OPERATOR_ACTION =
             "com.exitguide.navigation.executor.ADB_OPERATOR_ACTION";
+    static final String ACTION_ADB_HEARTBEAT =
+            "com.exitguide.navigation.executor.ADB_HEARTBEAT";
+    static final String ACTION_ADB_HEARTBEAT_INTERNAL =
+            "com.exitguide.navigation.executor.ADB_HEARTBEAT_INTERNAL";
     static final String ACTION_OPERATOR_COMMAND_CHANGED =
             "com.exitguide.navigation.executor.OPERATOR_COMMAND_CHANGED";
 
@@ -51,6 +55,7 @@ final class ExecutorPreferences {
     private static final String KEY_OPERATOR_REASON_CODES = "operator_reason_codes";
     private static final String KEY_OPERATOR_REASON_TEXT = "operator_reason_text";
     private static final String KEY_OPERATOR_REVIEW_STATUS = "operator_review_status";
+    private static final String KEY_ADB_HEARTBEAT_EPOCH_MS = "adb_heartbeat_epoch_ms";
 
     private ExecutorPreferences() {}
 
@@ -71,6 +76,25 @@ final class ExecutorPreferences {
 
     static boolean active(Context context) {
         return preferences(context).getBoolean(KEY_ACTIVE, false);
+    }
+
+    static void recordAdbHeartbeat(Context context) {
+        preferences(context).edit()
+                .putLong(KEY_ADB_HEARTBEAT_EPOCH_MS, System.currentTimeMillis())
+                .apply();
+    }
+
+    static boolean hasFreshAdbLease(Context context) {
+        long heartbeat = preferences(context).getLong(KEY_ADB_HEARTBEAT_EPOCH_MS, 0L);
+        return AdbConnectionLease.isFresh(System.currentTimeMillis(), heartbeat);
+    }
+
+    static long adbLeaseRemainingMillis(Context context) {
+        long heartbeat = preferences(context).getLong(KEY_ADB_HEARTBEAT_EPOCH_MS, 0L);
+        return AdbConnectionLease.millisecondsUntilExpired(
+                System.currentTimeMillis(),
+                heartbeat
+        );
     }
 
     static String status(Context context) {

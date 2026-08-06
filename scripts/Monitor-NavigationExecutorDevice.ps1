@@ -11,6 +11,7 @@ param(
 $ErrorActionPreference = "Stop"
 $receiver = "com.exitguide.navigation.executor/.ExecutorDiagnosticReceiver"
 $heartbeatAction = "com.exitguide.navigation.executor.ADB_HEARTBEAT"
+$heartbeatAcceptedResult = 73
 
 function Write-MonitorState {
     param([string]$Status, [string]$Reason)
@@ -53,11 +54,12 @@ while (Test-CurrentToken) {
 
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & $AdbPath -s $DeviceSerial shell am broadcast --receiver-foreground `
-        -a $heartbeatAction -n $receiver | Out-Null
+    $heartbeatOutput = & $AdbPath -s $DeviceSerial shell am broadcast --receiver-foreground `
+        -a $heartbeatAction -n $receiver 2>&1
     $heartbeatExit = $LASTEXITCODE
     $ErrorActionPreference = $previousPreference
-    if ($heartbeatExit -ne 0) {
+    $heartbeatText = ($heartbeatOutput -join "`n")
+    if ($heartbeatExit -ne 0 -or $heartbeatText -notmatch "result=$heartbeatAcceptedResult(?:,|\s|$)") {
         Pause-ForDisconnect -Reason "adb_heartbeat_failed"
         exit 0
     }

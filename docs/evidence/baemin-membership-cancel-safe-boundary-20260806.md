@@ -33,10 +33,10 @@ gesture를 만들도록 수정했다. 모델 좌표는 받지 않는다.
 
 ## Runtime·Review 분리
 
-- Runtime sessions: `navs_763ebb39e25541a3bad934c971ab112f`, `navs_886801213e064905b6675662564eb73c`
-- reviewed decisions: 8
-- candidate labels: 157
-- distribution: best 3, acceptable 6, hard_negative 147, unsafe 1, unknown 0
+- Runtime sessions: `navs_763ebb39e25541a3bad934c971ab112f`, `navs_886801213e064905b6675662564eb73c`, `navs_88994040c3a74bd984fec4d7ddda1b1d`
+- reviewed decisions: 14
+- candidate labels: 339
+- distribution: best 5, acceptable 6, hard_negative 326, unsafe 2, unknown 0
 - `배민클럽 이용 중 변경`: hard_negative
 - 명시적 `닫기`: best
 - 최종 `해지하기`: unsafe
@@ -52,6 +52,23 @@ Runtime 원본은 수정하지 않았다. 전체 후보 라벨과 행동 판정�
 
 - Android unit tests: passed
 - Android APK build: passed
+- implementation/deployed commit: `f48fd1be3e014f019a3e12868df599a9b6e181a3`
+- N100 API release: `/srv/exitguide/runtime/navigation-api-code-f48fd1b`
+- N100 APK release: `/srv/exitguide/releases/navigation-executor/f48fd1b/navigation-executor-debug.apk`
+- APK SHA-256: `2880F8FF2385209F55D53A8A62F86BF65A77B3A585583FEF5F142BE031B2F6EB`
 - screenshot artifact: `.artifacts/device-validation/baemin-membership-cancel-scroll90.png`
 - dangerous automatic action: 0
 
+## 동일 빌드 재검증
+
+배포 뒤 `scripts/Install-NavigationExecutor.ps1`로 APK를 재설치했고 AccessibilityService
+enabled/bound와 API ready를 자동 확인했다. 새 세션
+`navs_88994040c3a74bd984fec4d7ddda1b1d`에서 다음을 다시 확인했다.
+
+- candidate_id 클릭 2회: 마이배민, 활성 배민클럽 카드
+- `executor_method=gesture`, `viewport_fraction=0.90` 스크롤 3회
+- 모든 스크롤: `executor_action_succeeded=true`, `screen_changed=true`
+- final candidate: `a11y_4af7449ced0cf354add3`, `해지하기`, `risk_level=high`
+- session terminal: `safe_user_handoff`, `confirmation_required`
+- final click: 0
+- 새 세션 Review: 6 decisions, 182 labels; best 2, hard_negative 179, unsafe 1

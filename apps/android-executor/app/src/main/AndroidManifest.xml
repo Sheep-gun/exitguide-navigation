@@ -55,6 +55,7 @@
                 <action android:name="com.exitguide.navigation.executor.ADB_START_NAVIGATION" />
                 <action android:name="com.exitguide.navigation.executor.ADB_STOP_NAVIGATION" />
                 <action android:name="com.exitguide.navigation.executor.ADB_OPERATOR_ACTION" />
+                <action android:name="com.exitguide.navigation.executor.ADB_HEARTBEAT" />
             </intent-filter>
         </receiver>
     </application>

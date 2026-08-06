@@ -18,6 +18,15 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
+        if (ExecutorPreferences.ACTION_ADB_HEARTBEAT.equals(action)) {
+            ExecutorPreferences.recordAdbHeartbeat(context);
+            context.sendBroadcast(
+                    new Intent(ExecutorPreferences.ACTION_ADB_HEARTBEAT_INTERNAL)
+                            .setPackage(context.getPackageName())
+            );
+            setResultCode(AdbConnectionLease.ACCEPTED_RESULT_CODE);
+            return;
+        }
         if (ExecutorPreferences.ACTION_ADB_START_NAVIGATION.equals(action)) {
             String goal = value(intent.getStringExtra("goal"));
             String apiBaseUrl = value(intent.getStringExtra("api_base_url"));
@@ -32,6 +41,9 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             if (collectorAlias.isEmpty()) {
                 collectorAlias = ExecutorPreferences.collectorAlias(context);
             }
+            // The start command itself proves that the exact ADB device is connected.
+            // This closes the short gap before the hidden monitor's first heartbeat.
+            ExecutorPreferences.recordAdbHeartbeat(context);
             ExecutorPreferences.clearOperatorCommand(context);
             ExecutorPreferences.setTaskPreconditions(
                     context,
@@ -71,6 +83,7 @@ public final class ExecutorDiagnosticReceiver extends BroadcastReceiver {
             String reasonText = value(intent.getStringExtra("reason_text"));
             String reviewStatus = valueOr(intent, "review_status", "unreviewed");
             if (!ExecutorPreferences.active(context)
+                    || !ExecutorPreferences.hasFreshAdbLease(context)
                     || !NavigationSafetyPolicy.isAllowedAction(actionName)
                     || commandId.isEmpty()
                     || expectedScreen.isEmpty()

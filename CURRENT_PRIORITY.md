@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T13:01:30+09:00
+updated_at: 2026-08-06T13:50:00+09:00
 priority: Codex 감독 골든 라벨 수집기의 후보 누락·실행·관찰 계약을 실기기에서 검증한 뒤 9개 파일럿 목표를 완성
 decision_db_collection: paused
-next_action: 배달의민족 account.delete의 연필 프록시·안전 경계 검증이 끝났으므로 동일 수집기로 배달의민족 membership.join과 membership.cancel 파일럿을 수집·검수한다.
+next_action: 배달의민족 파일럿 3셀이 완료됐으므로 B 고정 수집기로 YouTube membership.join을 현재 Premium 상태에서 재검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: 배달의민족 16.16.0+26001143 account.delete pencil-proxy traversal and terminal consent handoff; prior YouTube·Netflix·X·TVING evidence preserved
+verified_apps: 배달의민족 16.16.0+26001143 account.delete pencil-proxy, membership.join active-state handoff, membership.cancel 90% scroll and high-risk handoff; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `74100e09b14effd3a71f375ea9614f24f2b73436`
-deployed_commit: `74100e09b14effd3a71f375ea9614f24f2b73436`; N100 runtime code `/srv/exitguide/runtime/navigation-api-code-74100e0`
+integration_commit: `f48fd1be3e014f019a3e12868df599a9b6e181a3`
+deployed_commit: `f48fd1be3e014f019a3e12868df599a9b6e181a3`; N100 runtime code `/srv/exitguide/runtime/navigation-api-code-f48fd1b`
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
@@ -77,7 +77,7 @@ deployed_commit: `74100e09b14effd3a71f375ea9614f24f2b73436`; N100 runtime code `
 - split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 6셀, 미완료 49셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 9셀, 미완료 46셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
@@ -265,24 +265,24 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 YouTube `membership.join`은 B 고정 이전 A 기록으로 확인돼 재검증 대기로 되돌렸다.
 나머지 4개 YouTube 목표는 근거 있는 최종 상태를 유지한다.
 
-## 90% 스크롤·ADB 단절 자동 중지 — 실기기 재검증 대기
+## 90% 스크롤·ADB 단절 자동 중지
 
-- implementation_commit: `07280a813ded8bcc77a34fe6b748e7d6a541abec`
+- implementation_commit: `f48fd1be3e014f019a3e12868df599a9b6e181a3`
 - Android unit tests: passed
 - APK build: passed
-- APK SHA-256: `C9B64BF2D724533265B28BEBEE6E7A6B42078D0B797AB2C3C338AAF3E8D4A699`
+- APK SHA-256: `2880F8FF2385209F55D53A8A62F86BF65A77B3A585583FEF5F142BE031B2F6EB`
 - PowerShell parser: Install/Start/Stop/Monitor 4개 passed
 - disconnected monitor branch: `paused`, `adb_disconnected`, `auto_resume=false`
-- viewport scroll policy: Accessibility scrollable 영역 높이의 `0.90`, 예상 중복 약 `0.10`
+- viewport scroll policy: scrollable 노드가 있으면 해당 경계, 없으면 현재 Accessibility root 경계의 `0.90`; 예상 중복 약 `0.10`
 - arbitrary model coordinates: 사용하지 않음
 - ADB heartbeat: 5초 간격
 - Executor ADB lease: 15초
 - background execution: Install 스크립트가 device-idle whitelist와
   `RUN_ANY_IN_BACKGROUND=allow` 적용
-- device deployment: pending
-- real-device 90% overlap verification: pending
-- real-device disconnect lease verification: pending
-- evidence: `docs/evidence/android-executor-scroll-and-adb-pause-20260804.md`
+- device deployment: passed; `scripts/Install-NavigationExecutor.ps1`, versionCode 9 / 0.6.0
+- real-device 90% gesture verification: passed; 배민 WebView 3회 모두 gesture accepted, screen_changed=true
+- real-device disconnect lease verification: passed; accepted heartbeat `result=73`, controlled heartbeat-loss caused `connection_pause reason=adb_lease_expired connection_error=true` after about 15 seconds, auto-resume false
+- evidence: `docs/evidence/android-executor-scroll-and-adb-pause-20260804.md`, `docs/evidence/baemin-membership-cancel-safe-boundary-20260806.md`, `docs/evidence/adb-lease-auto-pause-20260806.md`
 
 Netflix `membership.join` 사전 수정 세션:
 
@@ -297,8 +297,9 @@ Netflix `membership.join` 사전 수정 세션:
 - promotion: 0
 - stop reason: ADB disconnect; 탐색 실패로 변환하지 않음
 
-현재 `adb devices -l`에는 기기가 0대다. 실기기 행동과 Decision DB 수집은 자동 일시중지
-상태이며 연결만 복구돼도 자동 재개하지 않는다.
+현재 실기기 `R3CR60V3DKM`은 authorized 상태이고 AccessibilityService enabled/bound,
+ADB reverse `tcp:8100 -> tcp:18104`, Navigation API ready가 확인됐다. 연결이 끊기면
+자동 일시중지하며 명시적 재개 전에는 행동하지 않는다.
 
 ## 안전 불변조건
 
