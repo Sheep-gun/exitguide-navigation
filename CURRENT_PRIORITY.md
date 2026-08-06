@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:50:53+09:00
+updated_at: 2026-08-06T18:55:37+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: 포스타입 account.delete를 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: 포스타입 membership.join을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -58,6 +58,23 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - label distribution: best 2, acceptable 1, hard_negative 36, unknown 16
 - logout, signup, personal-information input or dangerous action execution: 0
 - evidence: `docs/evidence/postype-account-signup-state-not-applicable-20260806.md`
+
+## 2026-08-06 포스타입 회원탈퇴 안전 경계
+
+- goal_id: `account.delete`
+- Runtime session: `navs_eb704e61905443e981792c96ba9a0ea2`
+- verified_path: 광고 팝업 `닫기` -> `마이메뉴` -> `설정` -> `계정` -> 90% 하향 스크롤
+- final candidate: `a11y_398fbc229e28ec7cdb78` (`탈퇴하기`)
+- raw candidate risk: low; Codex Review label: `unsafe`
+- result: `safe_boundary_reached`
+- final action: `stop_for_user`; 탈퇴 후보 클릭 0
+- Review DB: 6 / 6 decisions, 98 / 98 candidate labels
+- label distribution: best 4, acceptable 1, hard_negative 70, unsafe 1, unknown 22
+- invalid local command: `scroll_direction` key 1회는 Executor가 `invalid_command`로 거부해
+  Runtime 미기록; 올바른 `direction=down`으로 재실행, 탐색 실패로 기록하지 않음
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/postype-account-delete-safe-boundary-20260806.md`
 - bulk_collection: 운영 8100 split·안전 경계 배포 검증 완료, active
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
