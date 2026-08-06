@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T22:23:08+09:00
-priority: 계정 상태 변경 후 확보한 6개 긍정 경로를 반영했고 사용자 지시에 따라 실기기 수집을 일시정지
+updated_at: 2026-08-07T00:50:00+09:00
+priority: 현재 계정 상태에서 가능한 잔여 6개 셀을 보강했고 나머지는 사용자 계정 상태 변경 또는 Executor 외부 브라우저 보강 전까지 일시정지
 decision_db_collection: paused
-next_action: 사용자 재개 지시 후 남은 긍정 경로 20개 중 Executor 실행 문제가 분리된 NH농협손해보험 account.delete부터 재검증한다.
+next_action: 사용자가 NH농협손해보험을 다시 로그인하거나 Instagram·Netflix·배달의민족·TVING 중 하나를 로그아웃한 뒤 해당 잔여 셀을 재검증한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -20,8 +20,8 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - generation_id: `account-state-recollection-v1`
 - generation_path: `/srv/exitguide/runtime/navigation-collection-generations/account-state-recollection-v1`
 - base_snapshot: `training_snapshot_d983e65055f5427fdb8d3dbe`
-- active_runtime_schema/counts: v5, sessions 20, decisions 73, observations 73
-- active_review_schema/counts: v2, reviewed 21, remaining 52
+- active_runtime_schema/counts: v5, sessions 34, decisions 136, observations 136
+- active_review_schema/counts: v2, reviewed 53, remaining 83
 - frozen_previous_runtime: SHA-256 `7af6bd7b765d79c1c0a14f415765f651878b578f89f2fd62b1538caf63ffc4ea`, mode 0440
 - frozen_previous_review: SHA-256 `8ad8e3687188a4b340817f5e9fa6489b6baf2175245d23d3172afb48097a4c3a`, mode 0440
 - frozen_archive: `/srv/exitguide/runtime/collection-generations/frozen-20260806T120807Z`
@@ -29,7 +29,21 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - device_transport: `R3CR60V3DKM device`, `tcp:8100 → tcp:18104`
 - production_decision_db_changed: false
 - dangerous_action_auto_execution: 0
-- evidence: `docs/evidence/navigation-runtime-generation-rollover-20260806.md`
+- evidence: `docs/evidence/navigation-runtime-generation-rollover-20260806.md`, `docs/evidence/remaining-feasible-coverage-20260807.md`
+
+## 2026-08-07 현재 상태에서 가능한 잔여 셀 보강
+
+- Instagram `membership.change`: 활성 Plus 상세에 플랜 변경 제어가 없어 `not_testable/service_policy`
+- X `membership.change`: 활성 Premium 설정에 요금제 변경 제어가 없어 `not_testable/service_policy`
+- X `membership.cancel`: 잘못된 내 계정 진입을 복구한 뒤에도 앱 내 해지 제어가 없어 `not_testable/service_policy`
+- 제주항공 `account.delete`: 회원정보 수정의 비밀번호 본인 인증 전 `safe_boundary_reached`
+- 제주항공 `membership.change`: SILVER 등급·승급 조건만 있어 `not_testable/service_policy`
+- 제주항공 `membership.cancel`: 전체 J 멤버스 기능에 별도 해지가 없어 `not_supported`
+- 이번 Review: 6세션, 32결정, 486개 전체 후보 라벨; best 21, hard negative 422, unsafe 5, unknown 38
+- 쿠팡 `account.signup`: 빈 외부 Custom Tab과 외부 앱 split 거부는 `executor_error`로 분리하고 커버리지 성공·실패로 기록하지 않음
+- NH농협손해보험: 재실행 당시 로그인 세션 만료를 확인해 탈퇴·변경·해지 기존 상태 유지
+- production Decision DB changed: false
+- dangerous action auto execution: 0
 
 ## 11개 앱 골든 라벨 동결 및 표준 승격
 
@@ -634,7 +648,7 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 55셀, 미완료 0셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 55셀, 미완료 0셀; 목적지 6, 안전 경계 27, 미지원 1, 검증 불가 7, 현재 상태 해당 없음 14
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.

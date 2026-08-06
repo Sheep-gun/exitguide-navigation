@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-account-state-recollection.v1",
-  "updated_at": "2026-08-06T20:55:11+09:00",
+  "updated_at": "2026-08-07T00:45:00+09:00",
   "source_coverage": "db/navigation_goal_coverage_v1.json",
   "base_snapshot": "training_snapshot_d983e65055f5427fdb8d3dbe",
   "policy": {
@@ -13,6 +13,42 @@
     "production_activation_before_unseen_app_validation": false
   },
   "strict_completion_blockers": [
+    {
+      "priority": 1,
+      "app_package": "com.instagram.android",
+      "app_name": "Instagram",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "active Instagram Plus account whose subscription page exposes an alternative plan, tier, upgrade, or downgrade control",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
+    {
+      "priority": 1,
+      "app_package": "com.twitter.android",
+      "app_name": "X",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "active X Premium account whose management surface exposes a selectable alternative tier, upgrade, or downgrade control",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
+    {
+      "priority": 1,
+      "app_package": "com.twitter.android",
+      "app_name": "X",
+      "goal_id": "membership.cancel",
+      "current_status": "not_testable",
+      "required_state": "active X Premium subscription whose purchasing channel exposes an in-app or linked cancellation control",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
+    {
+      "priority": 1,
+      "app_package": "com.parksmt.jejuair.android16",
+      "app_name": "제주항공",
+      "goal_id": "membership.change",
+      "current_status": "not_testable",
+      "required_state": "J Members service configuration that exposes a user-selectable tier or membership-plan change control rather than automatic status qualification",
+      "desired_terminal_status": ["destination_reached", "safe_boundary_reached", "not_supported", "failed_with_evidence"]
+    },
     {
       "priority": 1,
       "app_package": "com.google.android.youtube",
