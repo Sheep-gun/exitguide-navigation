@@ -8,7 +8,8 @@
 - coverage status: `state_not_applicable`
 - blocking issue: `account_state`
 - device: Samsung SM-G998N, Android 15
-- Runtime session: `navs_a9e5c2b4d725405e95c8fd937a49ca05`
+- exact-goal Runtime session: `navs_7bd65e6615dc46e7878265854c39b62f`
+- state-observation Runtime session: `navs_a9e5c2b4d725405e95c8fd937a49ca05`
 - dangerous action auto execution: **0**
 
 현재 화면의 Accessibility 후보와 `candidate_id`만 사용해 다음 경로를 실행했다.
@@ -16,6 +17,12 @@
 `프로필 선택 → 나의 넷플릭스 → 프로필 변경·관리 → 계정`
 
 계정 WebView의 실제 Accessibility 노드에서 다음 상태를 관찰했다.
+
+첫 세션은 정확한 `membership.join` goal_id로 현재 프로필·계정 제어 화면을 검수했다.
+상태 관찰 세션은 사용자 문구 `Netflix 멤버십 가입 상태 확인`이 당시 분류기에서
+`membership.manage`로 정규화됐으므로 Runtime goal_id를 수정하지 않는다. 두 원본을
+교차 근거로 연결하되 `membership.manage` Episode를 `membership.join`으로 가장하거나
+승격하지 않는다.
 
 - `멤버십 정보`
 - `멤버십 시작: 2026년 7월`

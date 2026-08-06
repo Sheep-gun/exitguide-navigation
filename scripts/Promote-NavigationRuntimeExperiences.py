@@ -23,7 +23,11 @@ API_ROOT = ROOT / "apps" / "api"
 if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
-from app.navigation_contracts import ScreenObservation  # noqa: E402
+from app.navigation_contracts import (  # noqa: E402
+    AccessibilityNodeSummary,
+    NavigationCandidate,
+    ScreenObservation,
+)
 from app.services.navigation_decision_memory import (  # noqa: E402
     contextual_account_identifiers,
     redact_text,
@@ -169,7 +173,28 @@ def load_contract(path: Path) -> dict[str, Any]:
 
 
 def sanitized_screen(raw: str) -> dict[str, Any]:
-    model = ScreenObservation.model_validate(json.loads(raw))
+    payload = json.loads(raw)
+    if not isinstance(payload, Mapping):
+        raise ValueError("Runtime screen payload must be an object")
+    # Runtime snapshots are append-only and can contain collector fields that
+    # postdate the promotion code.  In particular, raw_* fields are privacy
+    # source material and must never enter an Interaction Episode.  Retain only
+    # the current normalized contract instead of rejecting or copying them.
+    screen_fields = set(ScreenObservation.model_fields)
+    node_fields = set(AccessibilityNodeSummary.model_fields)
+    candidate_fields = set(NavigationCandidate.model_fields)
+    normalized = {key: value for key, value in payload.items() if key in screen_fields}
+    normalized["nodes"] = [
+        {key: value for key, value in node.items() if key in node_fields}
+        for node in payload.get("nodes", [])
+        if isinstance(node, Mapping)
+    ]
+    normalized["candidates"] = [
+        {key: value for key, value in candidate.items() if key in candidate_fields}
+        for candidate in payload.get("candidates", [])
+        if isinstance(candidate, Mapping)
+    ]
+    model = ScreenObservation.model_validate(normalized)
     return _screen_payload(model)
 
 
@@ -255,7 +280,10 @@ def eligible_row(row: Mapping[str, Any]) -> bool:
     # clicks but it has not established source-goal consistency.  In
     # particular, an operator-aborted session must never leak those clicks
     # into canonical App Knowledge.
-    if normalize(row.get("session_status")) not in {"reached", "completed"}:
+    if (
+        normalize(row.get("session_status")) not in {"reached", "completed"}
+        and not bool(row.get("review_positive_approved"))
+    ):
         return False
     if row.get("action_name") not in ELIGIBLE_ACTIONS:
         return False
@@ -280,7 +308,10 @@ def eligible_row(row: Mapping[str, Any]) -> bool:
 
 
 def eligible_failure_row(row: Mapping[str, Any]) -> bool:
-    if normalize(row.get("session_status")) not in {"reached", "completed"}:
+    if (
+        normalize(row.get("session_status")) not in {"reached", "completed"}
+        and not bool(row.get("review_failure_verified"))
+    ):
         return False
     if row.get("action_name") != "click":
         return False
@@ -298,6 +329,92 @@ def eligible_failure_row(row: Mapping[str, Any]) -> bool:
         return False
     candidate = row.get("selected_candidate")
     return isinstance(candidate, Mapping) and bool(candidate_semantics(candidate))
+
+
+def load_review_decisions(path: Path | None) -> dict[str, dict[str, Any]]:
+    """Load the immutable Review snapshot keyed by Interaction Episode step."""
+
+    if path is None:
+        return {}
+    records = read_jsonl(path)
+    result: dict[str, dict[str, Any]] = {}
+    for record in records:
+        step_id = str(record.get("source_step_id") or "")
+        if not step_id:
+            raise ValueError("Review snapshot record lacks source_step_id")
+        if step_id in result:
+            raise ValueError(f"duplicate Review snapshot step: {step_id}")
+        human_review = record.get("human_review")
+        candidate_labels = record.get("candidate_labels")
+        if not isinstance(human_review, Mapping):
+            raise ValueError(f"Review snapshot lacks human review: {step_id}")
+        if not isinstance(candidate_labels, list):
+            raise ValueError(f"Review snapshot lacks candidate labels: {step_id}")
+        expected_count = int(record.get("candidate_inventory_count") or 0)
+        if len(candidate_labels) != expected_count:
+            raise ValueError(
+                f"Review snapshot candidate inventory mismatch: {step_id} "
+                f"expected={expected_count} labeled={len(candidate_labels)}"
+            )
+        if any(label.get("review_status") != "verified" for label in candidate_labels):
+            raise ValueError(f"Review snapshot contains unverified labels: {step_id}")
+        result[step_id] = record
+    return result
+
+
+def annotate_rows_with_reviews(
+    rows: Iterable[dict[str, Any]],
+    reviews: Mapping[str, Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Attach explicit Review approval without rewriting observed Runtime facts.
+
+    Intentional ``stop_for_user`` makes a session ``aborted`` in the shared
+    episode contract.  A preceding action can still be a valid action unit,
+    but only when Codex/human Review verified the action, progress, and full
+    candidate inventory.  Wrong clicks are admitted only as negative recovery
+    evidence.
+    """
+
+    annotated: list[dict[str, Any]] = []
+    for original in rows:
+        row = dict(original)
+        step_id = str(row.get("source_step_id") or "")
+        review_record = reviews.get(step_id)
+        row["review_positive_approved"] = False
+        row["review_failure_verified"] = False
+        if review_record is not None:
+            human_review = review_record["human_review"]
+            labels = {
+                str(item["candidate_id"]): item
+                for item in review_record["candidate_labels"]
+            }
+            selected_id = str(row.get("candidate_id") or "")
+            selected_label = labels.get(selected_id) if selected_id else None
+            action_judgment = str(human_review.get("action_judgment") or "")
+            progress_judgment = str(human_review.get("progress_judgment") or "")
+            positive_selected = (
+                row.get("action_name") != "click"
+                or (
+                    selected_label is not None
+                    and selected_label.get("label") in {"best", "acceptable"}
+                )
+            )
+            row["review_positive_approved"] = bool(
+                action_judgment in {"correct", "acceptable"}
+                and progress_judgment in {"advanced", "reached"}
+                and positive_selected
+            )
+            row["review_failure_verified"] = bool(
+                action_judgment in {"wrong", "unsafe"}
+                and progress_judgment in {"unchanged", "regressed"}
+                and selected_label is not None
+                and selected_label.get("label") in {"hard_negative", "unsafe"}
+            )
+            row["review_snapshot_present"] = True
+        else:
+            row["review_snapshot_present"] = False
+        annotated.append(row)
+    return annotated
 
 
 def runtime_rows(connection: sqlite3.Connection, session_ids: Iterable[str]) -> list[dict[str, Any]]:
@@ -758,6 +875,38 @@ def best_per_episode(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(ranked.values(), key=lambda item: (item["session_id"], item["step_ordinal"]))
 
 
+def independent_transition_support(rows: Iterable[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Return one source per distinct observed transition.
+
+    Re-running the same screen/action/result in a second session is useful
+    verification evidence, but it is not a second independent UI example.
+    Counting both as promotion support makes an exact replay look like
+    semantic diversity and can promote memorised paths.  Preserve the total
+    episode count for provenance while requiring distinct before/after screen
+    fingerprints for canonical App Knowledge support.
+    """
+
+    episode_support = best_per_episode(rows)
+    independent: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in episode_support:
+        key = (
+            str(row.get("screen_fingerprint") or ""),
+            str(row.get("next_screen_fingerprint") or ""),
+            str(row.get("action_name") or ""),
+            str(row.get("group_key") or ""),
+            str(row.get("outcome_type") or ""),
+            str(row.get("progress_label") or ""),
+        )
+        independent.setdefault(key, row)
+    return (
+        sorted(
+            independent.values(),
+            key=lambda item: (item["session_id"], item["step_ordinal"]),
+        ),
+        len(episode_support),
+    )
+
+
 def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = list(rows)
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
@@ -768,7 +917,7 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     generated_at = now()
     result: list[dict[str, Any]] = []
     for (app_package, group_key), grouped in sorted(groups.items()):
-        support = best_per_episode(grouped)
+        support, observed_episode_count = independent_transition_support(grouped)
         support_count = len(support)
         all_progressed = support_count >= 2 and all(
             row["progress_label"] in POSITIVE_PROGRESS for row in support
@@ -809,10 +958,29 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                 "result": "passed",
                 "validator_kind": "rule",
                 "validator_version": GENERATOR_VERSION,
-                "metrics": {"eligible_source_steps": support_count},
+                "metrics": {
+                    "eligible_source_steps": support_count,
+                    "observed_episodes": observed_episode_count,
+                    "exact_replay_duplicates_excluded": observed_episode_count - support_count,
+                },
                 "evidence_refs": [source["step_id"] for source in sources],
             }
         ]
+        if all(bool(row.get("review_positive_approved")) for row in support):
+            validations.append(
+                {
+                    "validation_id": stable_id("validation", group_key, "review"),
+                    "kind": "human_review",
+                    "result": "passed",
+                    "validator_kind": "human",
+                    "validator_version": "navigation-review-snapshot-v1",
+                    "metrics": {
+                        "reviewed_support_steps": support_count,
+                        "full_candidate_inventories": support_count,
+                    },
+                    "evidence_refs": [source["step_id"] for source in sources],
+                }
+            )
         if support_count >= 2:
             validations.append(
                 {
@@ -822,7 +990,8 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                     "validator_kind": "rule",
                     "validator_version": GENERATOR_VERSION,
                     "metrics": {
-                        "distinct_episodes": support_count,
+                        "distinct_transition_evidence": support_count,
+                        "observed_episodes": observed_episode_count,
                         "executed_and_screen_changed": support_count,
                     },
                     "evidence_refs": [source["step_id"] for source in sources],
@@ -837,7 +1006,8 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                     "validator_kind": "rule",
                     "validator_version": GENERATOR_VERSION,
                     "metrics": {
-                        "distinct_episodes": support_count,
+                        "distinct_transition_evidence": support_count,
+                        "observed_episodes": observed_episode_count,
                         "progressed_episodes": support_count,
                         "contradictions": 0,
                     },
@@ -885,7 +1055,7 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         failure_groups[(str(row["app_package"]), failure_key)].append(row)
 
     for (app_package, failure_key), grouped in sorted(failure_groups.items()):
-        support = best_per_episode(grouped)
+        support, observed_episode_count = independent_transition_support(grouped)
         support_count = len(support)
         status = "ready_for_validation" if support_count >= 2 else "draft"
         confidence = 0.8 if support_count >= 3 else 0.74 if support_count >= 2 else 0.55
@@ -909,10 +1079,29 @@ def build_candidates(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                 "result": "passed",
                 "validator_kind": "rule",
                 "validator_version": GENERATOR_VERSION,
-                "metrics": {"eligible_failure_steps": support_count},
+                "metrics": {
+                    "eligible_failure_steps": support_count,
+                    "observed_episodes": observed_episode_count,
+                    "exact_replay_duplicates_excluded": observed_episode_count - support_count,
+                },
                 "evidence_refs": evidence_refs,
             }
         ]
+        if all(bool(row.get("review_failure_verified")) for row in support):
+            validations.append(
+                {
+                    "validation_id": stable_id("validation", failure_key, "review"),
+                    "kind": "human_review",
+                    "result": "passed",
+                    "validator_kind": "human",
+                    "validator_version": "navigation-review-snapshot-v1",
+                    "metrics": {
+                        "reviewed_failure_steps": support_count,
+                        "full_candidate_inventories": support_count,
+                    },
+                    "evidence_refs": evidence_refs,
+                }
+            )
         if support_count >= 2:
             validations.extend(
                 [
@@ -2056,6 +2245,9 @@ def command_generate(args: argparse.Namespace) -> None:
             raise ValueError("legacy Runtime generation requires at least one --session")
         with closing(sqlite3.connect(args.runtime_db)) as connection:
             rows = runtime_rows(connection, args.session)
+    review_path = getattr(args, "review_decisions", None)
+    if review_path is not None:
+        rows = annotate_rows_with_reviews(rows, load_review_decisions(review_path))
     candidates = build_candidates(rows)
     validate_candidates(candidates, contract)
     write_jsonl(args.output, candidates)
@@ -2088,6 +2280,8 @@ def command_accept(args: argparse.Namespace) -> None:
             )
         runtime_context = sqlite3.connect(args.runtime_db)
         source_lookup = lambda step_id: source_step(runtime_context, step_id)
+    review_path = getattr(args, "review_decisions", None)
+    reviews = load_review_decisions(review_path)
     try:
         for original in candidates:
             candidate = json.loads(json.dumps(original))
@@ -2095,6 +2289,8 @@ def command_accept(args: argparse.Namespace) -> None:
                 accepted.append(candidate)
                 continue
             rows = [source_lookup(source["step_id"]) for source in candidate["sources"]]
+            if reviews:
+                rows = annotate_rows_with_reviews(rows, reviews)
             payload = candidate["proposed_payload"]
             row_eligible = (
                 eligible_failure_row
@@ -2455,6 +2651,11 @@ def parser() -> argparse.ArgumentParser:
     generate_source.add_argument("--runtime-db", type=Path)
     generate.add_argument("--session", action="append")
     generate.add_argument("--allow-legacy-runtime-input", action="store_true")
+    generate.add_argument(
+        "--review-decisions",
+        type=Path,
+        help="immutable Review decision snapshot used to approve stopped-session action units",
+    )
     generate.add_argument("--output", type=Path, required=True)
     generate.set_defaults(handler=command_generate)
 
@@ -2463,6 +2664,11 @@ def parser() -> argparse.ArgumentParser:
     accept_source.add_argument("--episodes", type=Path)
     accept_source.add_argument("--runtime-db", type=Path)
     accept.add_argument("--allow-legacy-runtime-input", action="store_true")
+    accept.add_argument(
+        "--review-decisions",
+        type=Path,
+        help="same immutable Review decision snapshot used during candidate generation",
+    )
     accept.add_argument("--input", type=Path, required=True)
     accept.add_argument("--output", type=Path, required=True)
     accept.set_defaults(handler=command_accept)

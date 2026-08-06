@@ -64,3 +64,6 @@ jobs:
 
       - name: Test API runtime and safety gates
         run: python apps/api/tests/navigation_runtime_unit.py
+
+      - name: Test standardized promotion pipeline
+        run: python apps/api/tests/navigation_promotion_pipeline_unit.py

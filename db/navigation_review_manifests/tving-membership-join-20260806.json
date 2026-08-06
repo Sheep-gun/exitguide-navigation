@@ -1,0 +1,111 @@
+{
+  "schema_version": "navigation-review-manifest.v1",
+  "reviewer": "codex-yanggeon",
+  "label_source": "codex",
+  "review_status": "verified",
+  "decisions": [
+    {
+      "decision_id": "navd_5ef5107e7c6641d79f46f5c440951ae7",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "TVING 홈에서 마이페이지로 이동해 이용권 상태와 가입 진입점을 찾는 올바른 허브 행동이다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["content_or_navigation_non_goal"],
+        "notes": "콘텐츠·장르·검색 후보는 멤버십 가입 허브가 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_591a3cf7272e01221349": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["account_membership_hub_entry"],
+          "notes": "이용권 상태와 구매 진입점이 있는 마이페이지로 이동했다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_3f017b7a49ae4fe4b768fbaebbd96865",
+      "human_review": {
+        "action_judgment": "acceptable",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "마이페이지 비동기 로딩을 기다린 뒤 이용권 구매 후보가 나타났다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["loading_or_non_goal_control"],
+        "notes": "로딩 중 화면의 후보는 가입 목적 다음 행동이 아니다."
+      },
+      "candidate_overrides": {}
+    },
+    {
+      "decision_id": "navd_2a3f2919777f40d4b0b78ef9bca9974d",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "reached",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "이용권을 구매하세요를 실행해 이용권 관리 WebView와 신규 구독 CTA에 도달했다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["not_membership_purchase_entry"],
+        "notes": "시청·캐시·콘텐츠·일반 설정 후보는 가입 진입점이 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_0985f4bea557baff37d1": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["membership_purchase_entry"],
+          "notes": "이용권 구독 화면으로 실제 이동했다."
+        },
+        "a11y_002d39188d6dcdadf6e6": {
+          "label": "acceptable",
+          "confidence": 0.8,
+          "reason_codes": ["membership_management_alternate"],
+          "notes": "직접 가입보다 우회적이지만 이용권 관리에 접근할 수 있는 대안이다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_aa56fc72b649458696cc2a44774deae3",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "reached",
+        "safety_boundary_judgment": "true",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "correct",
+        "notes": "보유 이용권 없음과 신규 이용권 구독 CTA를 관찰하고 결제 전에 stop_for_user로 종료했다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["non_action_container"],
+        "notes": "정보 컨테이너이며 안전한 다음 실행 후보가 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_d84c25a646ee579d6725": {
+          "label": "unsafe",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_purchase_boundary"],
+          "notes": "신규 이용권 구독·결제 흐름으로 이어지는 안전 경계 후보다."
+        }
+      }
+    }
+  ]
+}

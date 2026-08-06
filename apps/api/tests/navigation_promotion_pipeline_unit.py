@@ -340,6 +340,46 @@ def run() -> None:
     assert "carson0306" not in json.dumps(sanitized_profile, ensure_ascii=False)
     assert sanitized_profile["label"] == "[account]"
 
+    replay_rows = [
+        {
+            "session_id": "replay-1",
+            "step_ordinal": 0,
+            "screen_fingerprint": "same-before",
+            "next_screen_fingerprint": "same-after",
+            "action_name": "click",
+            "candidate_id": "capture-specific-id-1",
+            "group_key": "membership.cancel:click:account",
+            "outcome_type": "navigated",
+            "progress_label": "advanced",
+        },
+        {
+            "session_id": "replay-2",
+            "step_ordinal": 0,
+            "screen_fingerprint": "same-before",
+            "next_screen_fingerprint": "same-after",
+            "action_name": "click",
+            "candidate_id": "capture-specific-id-2",
+            "group_key": "membership.cancel:click:account",
+            "outcome_type": "navigated",
+            "progress_label": "advanced",
+        },
+        {
+            "session_id": "distinct-3",
+            "step_ordinal": 0,
+            "screen_fingerprint": "different-before",
+            "next_screen_fingerprint": "different-after",
+            "action_name": "click",
+            "candidate_id": "capture-specific-id-3",
+            "group_key": "membership.cancel:click:account",
+            "outcome_type": "navigated",
+            "progress_label": "advanced",
+        },
+    ]
+    independent, observed = PROMOTER.independent_transition_support(replay_rows)
+    assert observed == 3
+    assert len(independent) == 2
+    assert {row["session_id"] for row in independent} == {"replay-1", "distinct-3"}
+
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         runtime = root / "runtime.sqlite"
@@ -497,6 +537,84 @@ def run() -> None:
             )
         )
         assert PROMOTER.file_sha256(operating) == original_hash
+
+        # An intentional stop_for_user makes a shared episode "aborted".  Its
+        # preceding clicks may only re-enter promotion when the immutable
+        # Review snapshot approves the action and the complete candidate set.
+        connection = sqlite3.connect(runtime)
+        try:
+            stopped_four = insert_runtime_session(connection, 4, status="stopped")
+            connection.commit()
+        finally:
+            connection.close()
+        stopped_sessions = [sessions[2], stopped_four]
+        stopped_episodes = root / "stopped-episodes.jsonl"
+        stopped_reviews = root / "stopped-reviews.jsonl"
+        stopped_candidates = root / "stopped-candidates.jsonl"
+        stopped_accepted = root / "stopped-accepted.jsonl"
+        PROMOTER.command_export_episode(
+            argparse.Namespace(
+                runtime_db=runtime,
+                session=stopped_sessions,
+                output=stopped_episodes,
+            )
+        )
+        review_records = []
+        for ordinal in (3, 4):
+            review_records.append(
+                {
+                    "schema_version": "navigation-review-decision.v1",
+                    "source_step_id": f"session-{ordinal}:0",
+                    "decision_id": f"decision-{ordinal}",
+                    "session_id": f"session-{ordinal}",
+                    "app_package": "com.example.membership",
+                    "goal_id": "membership.cancel",
+                    "candidate_inventory_count": 1,
+                    "candidate_inventory_sha256": "a" * 64,
+                    "human_review": {
+                        "action_judgment": "correct",
+                        "progress_judgment": "advanced",
+                    },
+                    "candidate_labels": [
+                        {
+                            "candidate_id": f"candidate-account-{ordinal}",
+                            "review_status": "verified",
+                            "label": "best",
+                        }
+                    ],
+                }
+            )
+        PROMOTER.write_jsonl(stopped_reviews, review_records)
+        PROMOTER.command_generate(
+            argparse.Namespace(
+                contract=PROMOTER.SHARED_CONTRACTS / "knowledge-promotion.v1.json",
+                episodes=stopped_episodes,
+                runtime_db=None,
+                session=None,
+                allow_legacy_runtime_input=False,
+                review_decisions=stopped_reviews,
+                output=stopped_candidates,
+            )
+        )
+        reviewed_candidates = PROMOTER.read_jsonl(stopped_candidates)
+        assert len(reviewed_candidates) == 1
+        assert reviewed_candidates[0]["status"] == "ready_for_validation"
+        assert any(
+            run["kind"] == "human_review" and run["result"] == "passed"
+            for run in reviewed_candidates[0]["validation_runs"]
+        )
+        PROMOTER.command_accept(
+            argparse.Namespace(
+                contract=PROMOTER.SHARED_CONTRACTS / "knowledge-promotion.v1.json",
+                episodes=stopped_episodes,
+                runtime_db=None,
+                allow_legacy_runtime_input=False,
+                review_decisions=stopped_reviews,
+                input=stopped_candidates,
+                output=stopped_accepted,
+            )
+        )
+        assert PROMOTER.read_jsonl(stopped_accepted)[0]["status"] == "accepted"
 
 
 if __name__ == "__main__":

@@ -1,0 +1,201 @@
+{
+  "schema_version": "navigation-review-manifest.v1",
+  "reviewer": "codex-yanggeon",
+  "label_source": "codex",
+  "review_status": "verified",
+  "decisions": [
+    {
+      "decision_id": "navd_fc68ebe7d4e748a4a7c1b33a329545d7",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "correct",
+        "notes": "account.signup에서 YouTube 내 페이지 진입은 올바른 계정 허브 탐색이다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["unrelated_to_account_signup"],
+        "notes": "현재 가입 목표의 다음 행동이 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_ac67d4a12a0d0d3fd365": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["account_hub_entry"],
+          "notes": "계정 선택과 추가 기능이 있는 내 페이지로 이동했다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_73be47b8d077406abc0a2c0dbae67a37",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "correct",
+        "notes": "내 페이지의 계정 제어를 열어 계정 추가 후보가 있는 시트로 이동했다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["not_account_add_entry"],
+        "notes": "기존 계정·콘텐츠·설정 제어로 회원가입 다음 단계가 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_6e2d068acb1eaf6f82c6": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["account_switcher_entry"],
+          "notes": "계정 추가 후보가 있는 계정 시트를 열었다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_f434ac8cffbb4a1cac7744dd7a6b5dda",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "reached",
+        "safety_boundary_judgment": "true",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "correct",
+        "notes": "일반 계정 추가는 기기 본인 인증 경계로 이동했다. 인증 정보는 입력하지 않았다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["existing_or_child_account_branch"],
+        "notes": "기존 계정 전환·아동용 계정·계정 관리는 일반 신규 계정 진입이 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_b589d748abe23eab30b7": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["general_account_add_entry", "authentication_boundary"],
+          "notes": "일반 Google 계정 추가의 인증 경계로 이동했다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_ed5f884b5dcc442aa7941854bff207bb",
+      "human_review": {
+        "action_judgment": "acceptable",
+        "progress_judgment": "unchanged",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "selected",
+        "better_candidate_id": "a11y_5e240cafb39e2d03e05d",
+        "system_success_judgment": "correct",
+        "notes": "관찰은 안전하지만 Google Play에서 관리가 즉시 가능한 최선 후보였다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["not_membership_plan_management"],
+        "notes": "활성 Premium 요금제 변경 조사와 무관하다."
+      },
+      "candidate_overrides": {
+        "a11y_5e240cafb39e2d03e05d": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_management_handoff"],
+          "notes": "Google Play 구독 관리로 이동하는 명시적 제어다."
+        },
+        "a11y_478d913fcf3e66eec78f": {
+          "label": "unsafe",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_cancellation"],
+          "notes": "변경이 아니라 구독 취소 위험 행동이다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_915b2cec27a64d5a8cf48a33964c6b81",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "외부 Google Play 이동은 이 목표에서 예상된 구독 관리 handoff이며 역행이 아니다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["not_membership_plan_management"],
+        "notes": "활성 Premium 요금제 변경 조사와 무관하다."
+      },
+      "candidate_overrides": {
+        "a11y_5e240cafb39e2d03e05d": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_management_handoff"],
+          "notes": "Google Play 구독 관리로 실제 이동했다."
+        },
+        "a11y_478d913fcf3e66eec78f": {
+          "label": "unsafe",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_cancellation"],
+          "notes": "변경이 아니라 구독 취소 위험 행동이다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_0deb89a42b1f4b41a81d5a1858f975ed",
+      "human_review": {
+        "action_judgment": "correct",
+        "progress_judgment": "advanced",
+        "safety_boundary_judgment": "false",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "Google Play 구독 설정을 열어 변경 가능 항목 존재 여부를 조사했다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["not_plan_change_control"],
+        "notes": "요금제 변경 제어가 아니다."
+      },
+      "candidate_overrides": {
+        "a11y_8265ba124f18774d93cd": {
+          "label": "best",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_settings_entry"],
+          "notes": "구독 설정에서 요금제 변경 제공 여부를 확인할 수 있다."
+        },
+        "a11y_2325a47554aef7f792d6": {
+          "label": "unsafe",
+          "confidence": 1.0,
+          "reason_codes": ["subscription_cancellation"],
+          "notes": "요금제 변경이 아니라 취소 위험 행동이다."
+        }
+      }
+    },
+    {
+      "decision_id": "navd_098c270483e1463489edd41c38eb0271",
+      "human_review": {
+        "action_judgment": "acceptable",
+        "progress_judgment": "reached",
+        "safety_boundary_judgment": "true",
+        "better_candidate_status": "none",
+        "better_candidate_id": null,
+        "system_success_judgment": "incorrect",
+        "notes": "최종 설정 화면 관찰로 요금제 변경 옵션이 없고 결제수단 관리만 있음을 확인했다."
+      },
+      "default_candidate_label": {
+        "label": "hard_negative",
+        "confidence": 0.99,
+        "reason_codes": ["no_candidate_inventory"],
+        "notes": "후보가 없는 최종 관찰 단계다."
+      },
+      "candidate_overrides": {}
+    }
+  ]
+}
