@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:09:00+09:00
+updated_at: 2026-08-06T18:13:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: 쿠팡 membership.cancel을 목표별 독립 실기기 세션으로 수행하고 현재 와우 비가입 계정 상태의 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: TVING account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X·제주항공 5개 목표; prior TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡 5개 목표; prior TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
@@ -301,6 +301,22 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/coupang-membership-change-state-not-applicable-20260806.md`
 
+## 2026-08-06 쿠팡 와우 멤버십 해지 현재 계정 상태
+
+- goal_id: `membership.cancel`
+- Runtime session: `navs_4c6c59c7935545a6b9164acd7401832e`
+- decisions: `navd_d5f7f8f699dc40dc9762b64b3dd57ac5`, `navd_e2f2e0bcc36d4de988d4831f05c75121`
+- observed_path: 쿠팡 홈 -> `마이쿠팡`
+- observed_state: 와우 1개월 무료·지금받기·신규 가입 CTA만 존재; 이용 중·관리·해지 후보 없음
+- result: `state_not_applicable`, `blocking_issue=account_state`
+- Review DB: 2 / 2 decisions, 65 / 65 candidate labels
+- label distribution: best 1, hard_negative 44, unknown 20
+- enrollment, payment or cancellation execution: 0
+- collector_change: 없음; 후보 수집·candidate_id 클릭·화면 변화·기록 정상
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/coupang-membership-cancel-state-not-applicable-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -347,7 +363,7 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 30셀, 미완료 25셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 31셀, 미완료 24셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
