@@ -24,8 +24,8 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
     assert report["successful_cells"] == 12
-    assert report["terminal_cells"] == 22
-    assert report["incomplete_cells"] == 33
+    assert report["terminal_cells"] == 23
+    assert report["incomplete_cells"] == 32
     assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
