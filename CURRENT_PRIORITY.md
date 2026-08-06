@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:13:00+09:00
+updated_at: 2026-08-06T18:17:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: TVING account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: TVING account.delete를 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -317,6 +317,22 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/coupang-membership-cancel-state-not-applicable-20260806.md`
 
+## 2026-08-06 TVING 회원가입 현재 계정 상태
+
+- goal_id: `account.signup`
+- Runtime session: `navs_6f0e57de94414859ba0619f851f17809`
+- decisions: `navd_537872bc80294c2cbc624a92493b8fbc`, `navd_67f49c76265f48469c3cc847ed997457`
+- observed_path: TVING 홈 -> `마이페이지 마이`
+- observed_state: 기본프로필·포인트·알림·설정과 시청·구매 항목이 있는 로그인 상태
+- result: `state_not_applicable`, `blocking_issue=account_state`
+- Review DB: 2 / 2 decisions, 42 / 42 candidate labels
+- label distribution: best 1, hard_negative 39, unknown 2
+- logout or signup execution: 0
+- collector_change: 없음; 후보 수집·candidate_id 클릭·화면 변화·기록 정상
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/tving-account-signup-state-not-applicable-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -363,7 +379,7 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 31셀, 미완료 24셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 32셀, 미완료 23셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
