@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T16:17:00+09:00
+updated_at: 2026-08-06T16:21:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 X membership.join의 현재 Premium 상태와 가입 목적지를 실기기 근거로 판정하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 X membership.change의 현재 Premium 가입 상태와 변경 가능 여부를 실기기 근거로 판정하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족 5개 목표; X account.signup·account.delete; prior TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족 5개 목표; X account.signup·account.delete·membership.join; prior TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
 deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`; APK `/srv/exitguide/releases/navigation-executor/0dee4c8`
@@ -102,6 +102,21 @@ deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed50
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/x-account-delete-safe-boundary-20260806.md`
 
+## 2026-08-06 X Premium 가입 안전 경계
+
+- goal_id: `membership.join`
+- Runtime session: `navs_037a9dac04ad47b8aef1a66af85dbbba`
+- verified path: 피드 -> `업그레이드` -> X Premium 상품 화면
+- final candidates: 월간 할인 상품, 연간 상품
+- result: `safe_boundary_reached`
+- final action: `stop_for_user`
+- Review DB: 2 / 2 decisions, 43 / 43 candidate labels
+- label distribution: best 1, acceptable 2, hard_negative 37, unsafe 2, unknown 1
+- paid subscription options clicked: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/x-membership-join-safe-boundary-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -148,7 +163,7 @@ deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed50
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 18셀, 미완료 37셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 19셀, 미완료 36셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
