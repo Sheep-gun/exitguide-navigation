@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T19:10:16+09:00
+updated_at: 2026-08-06T19:31:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: NH농협손해보험 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: Instagram account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING·포스타입 5개 목표
+verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING·포스타입·NH농협손해보험 5개 목표
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
@@ -123,7 +123,62 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - Runtime source_read_only: true
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/postype-membership-cancel-safe-boundary-20260806.md`
+
+## 2026-08-06 NH농협손해보험 회원가입 인증 등록 경계
+
+- goal_id: `account.signup`
+- app_version: `1.434+476`
+- Runtime session: `navs_d43cb6be5b2f4d60aa2285ee47d435a1`
+- verified_path: 서비스 안내 팝업 `닫기` -> 홈 `메뉴` -> 전체 메뉴 `로그인`
+- destination evidence: 개인고객 지문/Face ID, `인증수단 신규 등록하기`
+- result: `safe_boundary_reached`, `blocking_issue=authentication_required`
+- semantic hard negative: 홈 `재가입`은 계정 가입이 아닌 보험 상품 재가입
+- final action: `stop_for_user`; 본인인증·생체정보 등록 0
+- Review DB: 4 / 4 decisions, 158 / 158 candidate labels
+- label distribution: best 3, acceptable 2, hard_negative 140, unsafe 1, unknown 12
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/nh-account-signup-auth-registration-boundary-20260806.md`
+
+## 2026-08-06 NH농협손해보험 회원탈퇴 현재 계정 상태
+
+- goal_id: `account.delete`
+- Runtime session: `navs_0b176df434394e6f9ef1b45a1d6112b3`
+- verified_path: 서비스 안내 팝업 `닫기` -> 홈 `메뉴`
+- observed_state: 전체 메뉴에 `로그인` 표시; API `login_required` 자동 안전 종료
+- result: `state_not_applicable`, `blocking_issue=account_state`
+- recording status: 2개 행동·실행 성공·화면 변화 모두 Runtime 저장; 연결·관찰 실패 아님
+- Review DB: 2 / 2 decisions, 82 / 82 candidate labels
+- label distribution: best 2, hard_negative 72, unknown 8
+- login, authentication or account deletion execution: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/nh-account-delete-state-not-applicable-20260806.md`
 - bulk_collection: 운영 8100 split·안전 경계 배포 검증 완료, active
+
+## 2026-08-06 NH농협손해보험 멤버십 3개 목표
+
+- membership.join session: `navs_0e11afd0ee414d9980cfce397bdbd013`
+- membership.join result: `safe_boundary_reached`, `blocking_issue=authentication_required`
+- membership.join path: 서비스 안내 팝업 `닫기` -> 홈 `NH멤버스` -> 개인고객 로그인·지문/Face ID·인증수단 신규 등록 경계 -> `stop_for_user`
+- membership.join Review DB: 3 / 3 decisions, 92 / 92 candidate labels
+- membership.join labels: best 2, acceptable 3, hard_negative 74, unsafe 5, unknown 8
+- membership.change sessions: `navs_e032f988fa104436a8fd00f5234762f3`, `navs_b72ed298a3dc4abf9a57272ece178313`
+- membership.change result: `state_not_applicable`, `blocking_issue=account_state`
+- membership.change evidence: 전체 메뉴와 NH멤버스 직접 진입을 각각 검증; 직접 진입은 로그인·생체인증 화면으로 이동
+- membership.change API error: 전체 메뉴에 로그인 항목이 보인다는 이유만으로 `login_required` 조기 종료; 실행·화면 변화는 성공했으나 시스템 도달 판정은 Review에서 `incorrect`
+- membership.change Review DB: 4 / 4 decisions, 161 / 161 candidate labels
+- membership.cancel session: `navs_a668fff4acc24dd694a3707ae7b38b6e`
+- membership.cancel result: `state_not_applicable`, `blocking_issue=account_state`
+- membership.cancel evidence: NH멤버스 직접 진입 후 로그인·생체인증 경계; 보험계약 `해지/환급`은 멤버십 해지와 다른 의미적 hard negative
+- membership.cancel Review DB: 2 / 2 decisions, 81 / 81 candidate labels
+- NH total Review DB: 15 / 15 decisions, 574 / 574 candidate labels
+- NH total label distribution: best 13, acceptable 14, hard_negative 489, unsafe 6, unknown 52
+- authentication, biometric registration, membership change/cancel or final confirmation execution: 0
+- collector_change: 없음; 조기 종료는 API 의미 판정 오류이며 후보 수집·candidate_id 클릭·화면 변화 기록은 정상
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/nh-membership-join-auth-boundary-20260806.md`, `docs/evidence/nh-membership-change-state-not-applicable-20260806.md`, `docs/evidence/nh-membership-cancel-state-not-applicable-20260806.md`
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
@@ -508,7 +563,7 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 35셀, 미완료 20셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 45셀, 미완료 10셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.

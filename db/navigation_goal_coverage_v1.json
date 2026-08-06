@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T18:27:00+09:00",
+  "updated_at": "2026-08-06T19:31:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -123,13 +123,13 @@
       "app_package": "ni.mh.android.launcher",
       "app_name": "NH농협손해보험",
       "split": "collection",
-      "app_version": null,
+      "app_version": "1.434+476",
       "goals": [
-        {"goal_id": "account.signup", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.join", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
+        {"goal_id": "account.signup", "status": "safe_boundary_reached", "display_status_ko": "인증수단 신규 등록 안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/nh-account-signup-auth-registration-boundary-20260806.md", "runtime:navs_d43cb6be5b2f4d60aa2285ee47d435a1"], "last_observed_at": "2026-08-06T19:12:00+09:00", "blocking_issue": "login_required", "dangerous_action_auto_executed": false, "notes": "서비스 안내 팝업 닫기→메뉴→로그인을 candidate_id로 실행해 개인고객 지문/Face ID 인증수단 신규 등록 화면에 도달했다. 일반 계정 회원가입 대신 인증수단 신규 등록이 신규 사용자 진입점이며, 본인인증·생체정보 등록 없이 stop_for_user로 종료했다. 홈의 보험 재가입은 계정 가입과 다른 hard negative다. 4개 결정과 158개 전체 후보를 Review DB에서 검수했다."},
+        {"goal_id": "account.delete", "status": "state_not_applicable", "display_status_ko": "현재 로그아웃 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/nh-account-delete-state-not-applicable-20260806.md", "runtime:navs_0b176df434394e6f9ef1b45a1d6112b3"], "last_observed_at": "2026-08-06T19:15:00+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "서비스 안내 팝업을 닫고 홈의 메뉴를 candidate_id로 실행하자 전체 메뉴에 로그인 후보가 표시됐고 Navigation API가 login_required로 자동 안전 종료했다. 현재 로그아웃 상태에서는 회원탈퇴가 적용되지 않는다. 로그인이나 본인인증 없이 종료했으며 2개 결정과 82개 전체 후보를 Review DB에서 검수했다."},
+        {"goal_id": "membership.join", "status": "safe_boundary_reached", "display_status_ko": "인증 필요 안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/nh-membership-join-auth-boundary-20260806.md", "runtime:navs_0e11afd0ee414d9980cfce397bdbd013"], "last_observed_at": "2026-08-06T19:22:00+09:00", "blocking_issue": "login_required", "dangerous_action_auto_executed": false, "notes": "서비스 안내 팝업 닫기 후 홈의 NH멤버스 이벤트 후보를 candidate_id로 실행해 개인고객 로그인·지문/Face ID·인증수단 신규 등록 화면에 도달했다. 인증·개인정보 등록 없이 stop_for_user로 종료했다. 3개 결정과 92개 전체 후보를 Review DB에서 검수했으며 로그인·생체인증 관련 5개 후보를 unsafe로 라벨링했다."},
+        {"goal_id": "membership.change", "status": "state_not_applicable", "display_status_ko": "현재 로그아웃 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/nh-membership-change-state-not-applicable-20260806.md", "runtime:navs_e032f988fa104436a8fd00f5234762f3", "runtime:navs_b72ed298a3dc4abf9a57272ece178313"], "last_observed_at": "2026-08-06T19:27:00+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "전체 메뉴와 NH멤버스 직접 진입을 각각 검증했다. 직접 진입은 로그인·생체인증 화면으로 이어졌고 현재 로그아웃 상태에서는 기존 멤버십 변경을 확인할 수 없다. 메뉴를 열었을 때 단순 로그인 항목 노출을 API가 login_required로 조기 종료한 오판도 별도 검수했다. 2개 세션 4개 결정과 161개 전체 후보를 Review DB에서 검수했고 인증·변경 행동은 실행하지 않았다."},
+        {"goal_id": "membership.cancel", "status": "state_not_applicable", "display_status_ko": "현재 로그아웃 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/nh-membership-cancel-state-not-applicable-20260806.md", "runtime:navs_a668fff4acc24dd694a3707ae7b38b6e"], "last_observed_at": "2026-08-06T19:29:00+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "팝업 닫기 후 NH멤버스 직접 진입을 candidate_id로 실행해 로그인·생체인증 경계에 도달했다. 현재 로그아웃 상태에서는 기존 멤버십 해지를 확인할 수 없다. 보험계약 해지/환급은 멤버십 해지와 다른 의미임을 전이 근거로 보존했다. 2개 결정과 81개 전체 후보를 Review DB에서 검수했고 로그인·해지·확정은 실행하지 않았다."}
       ]
     },
     {
