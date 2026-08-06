@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T17:55:00+09:00",
+  "updated_at": "2026-08-06T18:00:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -87,7 +87,7 @@
       "app_version": null,
       "goals": [
         {"goal_id": "account.signup", "status": "state_not_applicable", "display_status_ko": "현재 로그인 계정 상태에서 해당 없음", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/coupang-account-signup-state-not-applicable-20260806.md", "runtime:navs_fd03f9553d904949a47a7414c6c997aa"], "last_observed_at": "2026-08-06T17:51:00+09:00", "blocking_issue": "account_state", "dangerous_action_auto_executed": false, "notes": "account.signup 독립 세션에서 홈의 마이쿠팡을 candidate_id로 실행해 개인화된 계정명과 주문·결제·설정 영역이 있는 로그인 상태를 관찰했다. 로그아웃이나 계정 상태 변경 없이 stop_for_user로 종료했다. 2개 결정과 65개 전체 후보를 Review DB에서 검수했다."},
-        {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
+        {"goal_id": "account.delete", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/coupang-account-delete-identity-boundary-20260806.md", "runtime:navs_439c2e904f1c417693fb00f62d1fea04"], "last_observed_at": "2026-08-06T18:00:00+09:00", "blocking_issue": "login_required", "dangerous_action_auto_executed": false, "notes": "쿠팡 홈에서 마이쿠팡, 설정, 회원정보 수정을 현재 candidate_id로 실행했다. login.coupang.com 외부 본인확인 화면에서 휴대전화 인증번호 발송이 필요함을 실제 관찰하고 외부 전송·인증 행동 없이 stop_for_user로 종료했다. 3개 결정과 79개 전체 후보를 Review DB에서 검수했다."},
         {"goal_id": "membership.join", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/coupang-membership-join-safe-boundary-20260806.md", "runtime:navs_03d555e2405d4ad084b81d508f1a2cb1", "runtime:navs_5e1847b33ae8486eb7b7c202a47bebcd"], "last_observed_at": "2026-08-06T17:41:45+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "B 고정 독립 세션에서 쿠팡 홈의 마이쿠팡을 candidate_id로 실행해 와우 가입 혜택 1개월 무료와 혜택받고 시작 및 결제하기가 표시된 가입·결제 경계에 도달했다. 결제 버튼과 동의 체크 후보를 unsafe로 검수하고 stop_for_user로 종료했다. 2개 결정과 38개 전체 후보를 Review DB에서 검수했으며 결제·가입·동의는 실행하지 않았다. B 이전 기록의 이용 중 상태와 달리 현재 계정에는 신규 가입 화면이 실제 표시되어 최신 상태를 우선한다."},
         {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
