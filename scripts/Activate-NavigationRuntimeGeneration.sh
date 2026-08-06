@@ -171,7 +171,12 @@ receipt={
   'generation_dir':os.environ['generation_dir'],
   'activated_at':os.environ['timestamp'],
   'previous_environment_backup':os.environ['backup_env'],
-  'previous_generation_archive':os.environ['archive_dir'],
+  'previous_generation_archive':{
+    'path':os.environ['archive_dir'],
+    'runtime_sha256':sha(os.path.join(os.environ['archive_dir'],'navigation-runtime-v1.sqlite')),
+    'review_sha256':sha(os.path.join(os.environ['archive_dir'],'navigation-human-review-v1.sqlite')),
+    'verification_mode':'sqlite immutable read-only',
+  },
   'previous_runtime':{'path':os.environ['old_runtime_db'],'sha256':os.environ['actual_old_runtime_sha']},
   'previous_review':{'path':os.environ['old_review_db'],'sha256':os.environ['actual_old_review_sha']},
   'active_runtime':{'path':os.environ['runtime_db'],'sha256':sha(os.environ['runtime_db'])},
@@ -185,5 +190,6 @@ path.write_text(json.dumps(receipt,ensure_ascii=False,indent=2,sort_keys=True)+'
 path.chmod(0o440)
 print(json.dumps(receipt,ensure_ascii=False,sort_keys=True))
 PY
+chgrp exitguide-admin "$generation_dir/activation-receipt.json"
 
 trap - EXIT

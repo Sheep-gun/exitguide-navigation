@@ -2,7 +2,7 @@
 
 status: verifying
 phase: implementation
-updated_at: 2026-08-06T20:55:11+09:00
+updated_at: 2026-08-06T21:08:07+09:00
 priority: 동결된 55셀 원료를 보존하면서 목표 원문에서 허용하지 않는 not_testable 3셀을 계정 상태별 새 세대로 보강
 decision_db_collection: paused
 next_action: 사용자가 YouTube·Netflix·포스타입 중 하나에서 멤버십 변경 제어가 노출되는 계정을 준비하면 해당 앱의 membership.change를 새 Runtime·Review 세션으로 수집한다.
@@ -13,6 +13,23 @@ verified_apps: Instagram·YouTube·Netflix·제주항공·X·쿠팡·배달의�
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
+
+## 계정 상태 보강 Runtime·Review 세대
+
+- generation_status: active_empty_waiting_for_account_state
+- generation_id: `account-state-recollection-v1`
+- generation_path: `/srv/exitguide/runtime/navigation-collection-generations/account-state-recollection-v1`
+- base_snapshot: `training_snapshot_d983e65055f5427fdb8d3dbe`
+- active_runtime_schema/counts: v5, sessions 0, decisions 0, observations 0
+- active_review_schema/counts: v2, reviewed 0
+- frozen_previous_runtime: SHA-256 `7af6bd7b765d79c1c0a14f415765f651878b578f89f2fd62b1538caf63ffc4ea`, mode 0440
+- frozen_previous_review: SHA-256 `8ad8e3687188a4b340817f5e9fa6489b6baf2175245d23d3172afb48097a4c3a`, mode 0440
+- frozen_archive: `/srv/exitguide/runtime/collection-generations/frozen-20260806T120807Z`
+- service_health: active, `/health` 200, navigation ready true
+- device_transport: `R3CR60V3DKM device`, `tcp:8100 → tcp:18104`
+- production_decision_db_changed: false
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/navigation-runtime-generation-rollover-20260806.md`
 
 ## 11개 앱 골든 라벨 동결 및 표준 승격
 
