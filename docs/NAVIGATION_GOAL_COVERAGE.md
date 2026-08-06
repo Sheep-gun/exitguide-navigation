@@ -39,6 +39,23 @@ holdout은 이 앱들에서 만들지 않는다. 55셀 수집과 학습용 불�
 - B 재검증 대기: 0
 - 위험 행동 자동 실행: 0
 
+## 계정 상태 변경으로 보강 가능한 셀
+
+현재 최종 판정은 원료 누락이 아니라 당시 계정 상태에 대한 사실 기록이다. 사용자가 다음 상태를
+준비하면 기존 원료를 덮어쓰지 않고 새 Runtime/Review 세대로 더 강한 경로 근거를 수집할 수 있다.
+
+- 로그아웃·미가입 상태: Instagram, Netflix, 쿠팡, 배달의민족, 포스타입, ChatGPT,
+  TVING의 `account.signup`
+- 로그인 상태: 제주항공과 NH농협손해보험의 `account.delete`
+- 미구독 상태: YouTube와 배달의민족의 `membership.join`
+- 활성 구독 상태: Instagram, X, 쿠팡, NH농협손해보험, ChatGPT, TVING의
+  `membership.change`·`membership.cancel`
+- 별도 인증 또는 서비스 정책 확인: YouTube `account.signup`·`membership.change`,
+  Netflix `membership.change`, 포스타입 `membership.change`
+
+계정 로그인, 결제, 구독·해지 확정과 개인정보 입력은 사용자가 직접 수행한다. 준비된 상태에서
+Executor는 안전한 탐색만 실행하고 최종 위험 행동 직전 `stop_for_user()`로 종료한다.
+
 ## 상태 정의
 
 - `미탐색` (`not_explored`): 아직 해당 목표의 실기기 탐색을 시작하지 않음

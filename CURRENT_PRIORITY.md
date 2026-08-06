@@ -2,17 +2,33 @@
 
 status: verifying
 phase: implementation
-updated_at: 2026-08-06T20:15:00+09:00
-priority: 55셀 Runtime·Review 수집을 동결하고 표준 승격 파이프라인 및 최종 B 절대 지표를 검증
+updated_at: 2026-08-06T20:49:00+09:00
+priority: 동결된 55셀 원료를 보존하고 새 계정 상태 보강 또는 미관측 앱 validation을 준비
 decision_db_collection: completed
-next_action: 55셀 승인 Runtime·Review 원료의 불변 학습 스냅샷을 생성하고 interaction-episode.v1부터 표준 승격 파이프라인을 검증한다.
+next_action: 사용자가 준비한 로그아웃·미구독·활성 구독 계정 상태로 보강할 셀 또는 새로 설치한 미관측 validation 앱을 지정할 때까지 staging 세대를 활성화하지 않는다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING·포스타입·NH농협손해보험 5개 목표
+verified_apps: Instagram·YouTube·Netflix·제주항공·X·쿠팡·배달의민족·포스타입·NH농협손해보험·ChatGPT·TVING 각 5개 목표
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
+
+## 11개 앱 골든 라벨 동결 및 표준 승격
+
+- pipeline_commit: `6aaf94ffe2f918830d7c2eb4b5d2f38a0f73e9c0`
+- snapshot: `training_snapshot_d983e65055f5427fdb8d3dbe`
+- snapshot_counts: 11 apps, 55 cells, 66 episodes, 233 reviewed decisions, 4,213 verified candidate labels
+- source_read_only: Runtime true, Review true
+- excluded_legacy_sessions: 6; 완전 검수된 대체 세션이 있어 재수집 불필요
+- promotion_candidates: draft 123, accepted 4
+- exact_replay_duplicate_support: excluded
+- generation: `generation_1a106b2e1925d28eaa56b973`, sealed
+- staging_projection: Decision cases 88 → 96, quick_check ok, foreign key errors 0
+- staging_db: `/srv/exitguide/runtime/navigation-decision-staging/training_snapshot_d983e65055f5427fdb8d3dbe.sqlite`
+- production_activation: 보류; 새 미관측 앱 validation 필요
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/navigation-training-snapshot-promotion-audit-20260806.md`
 
 ## 9개 파일럿 골든 라벨 게이트
 
