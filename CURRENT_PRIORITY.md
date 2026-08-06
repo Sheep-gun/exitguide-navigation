@@ -2,7 +2,7 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T13:56:00+09:00
+updated_at: 2026-08-06T14:06:00+09:00
 priority: Codex 감독 골든 라벨 수집기의 후보 누락·실행·관찰 계약을 실기기에서 검증한 뒤 9개 파일럿 목표를 완성
 decision_db_collection: paused
 next_action: 9개 파일럿 중 남은 Netflix account.delete를 B 고정 수집기로 실기기 검증하고 전체 후보를 Review DB에 라벨링한다.
@@ -12,7 +12,7 @@ verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and 
 verified_apps: 배달의민족 파일럿 3셀; YouTube membership.join B 고정 active Premium state; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`
-deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N100 API `f48fd1be3e014f019a3e12868df599a9b6e181a3` at `/srv/exitguide/runtime/navigation-api-code-f48fd1b`
+deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N100 API `e7901914719498560d4e2634ebc5dee4767f78e6` at `/srv/exitguide/runtime/navigation-api-code-e790191`
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
@@ -34,17 +34,17 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
-- N100_release: `/srv/exitguide/releases/navigation-executor/07280a8`
+- N100_release: `/srv/exitguide/releases/navigation-executor/dbc14a9`
 - N100_current_link: `/srv/exitguide/releases/navigation-executor/current`
-- bundle: `navigation-executor-07280a8-team.zip`
-- bundle_SHA256: `5817419FD5F7E11799A41558217B30E35DECDF57A995489AC5529F35645847EF`
-- APK_SHA256: `C9B64BF2D724533265B28BEBEE6E7A6B42078D0B797AB2C3C338AAF3E8D4A699`
-- implementation_commit: `07280a813ded8bcc77a34fe6b748e7d6a541abec`
+- bundle: `navigation-executor-dbc14a9-team.zip`
+- bundle_SHA256: `4B1E47792924B73268F23A7B67EF39BB1FD7702B550B854200F2A6FFDA1F6573`
+- APK_SHA256: `556F3AD1506713F3503DD7A969F8F4BBACF72A174B5D7D9707457C0702B59D0C`
+- implementation_commit: `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`
 - bundle_checksums: passed
 - bundle_zip_test: passed
 - PowerShell_parser: 5/5 passed
 - team_setup_dry_run: no ADB device -> stopped before SSH tunnel, no orphan tunnel
-- exact_APK_real_device_validation: pending
+- exact_APK_real_device_validation: passed on Samsung SM-G998N Android 15; scripted accessibility binding, candidate collection/click, 90% scroll, accepted heartbeat and automatic lease expiry pause
 - decision_db_collection: remains paused until the recorded device-validation next_action succeeds
 - guide: `docs/TEAM_ANDROID_EXECUTOR_INSTALL_AND_PARALLEL_COLLECTION.ko.md`
 
@@ -82,17 +82,19 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 
 holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
 
-## N100 운영 상태 — 2026-08-04 확인
+## N100 운영 상태 — 2026-08-06 확인
 
 - service: `exitguide-navigation-api.service`, active
 - endpoint: `http://100.77.172.25:8100`
 - ready: true
-- code: `/home/kyle/exitguide/runtime/navigation-api-code-3c86df8-repo`
-- deployed_git_head: `3c86df8c42dcb22bf94b0529a0777bcba71a7bda`
+- code: `/home/kyle/exitguide/runtime/navigation-api-code-e790191`
+- deployed_git_head: `e7901914719498560d4e2634ebc5dee4767f78e6`
 - public_prior.enabled: true
 - public service episodes/transitions: 2,047 / 27,343
 - public failure transitions: 2,737
 - public task records: 570
+- coverage contract: 11 apps / 55 cells / terminal 10 / incomplete 45 / dangerous automatic action 0
+- deployment tests: Decision Memory, Runtime, research architecture, coverage contract and JSON Schema validator passed before atomic service switch
 - Decision DB: read-only patched immutable clone
 - Runtime DB: coverage 전용, sessions 45, decisions 225, observations 198
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
