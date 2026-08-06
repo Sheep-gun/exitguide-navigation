@@ -2,17 +2,17 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T16:35:00+09:00
+updated_at: 2026-08-06T16:50:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 제주항공 account.signup을 별도 실기기 세션으로 탐색하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 제주항공 account.delete를 별도 실기기 세션으로 탐색하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X 5개 목표; prior TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족·X 5개 목표; 제주항공 account.signup; prior TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
-integration_commit: `0dee4c8557dd13961648a81f9f57ed5094eef6d1`
-deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`; APK `/srv/exitguide/releases/navigation-executor/0dee4c8`
+integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
+deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
 
 ## 9개 파일럿 골든 라벨 게이트
 
@@ -146,6 +146,27 @@ deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed50
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/x-membership-cancel-state-not-applicable-20260806.md`
 
+## 2026-08-06 제주항공 동적 화면 접지 수정과 회원가입 목적지
+
+- issue: 홈·시작 팝업에서 동일 후보가 유지돼도 Accessibility root class와 자동 캐러셀이 바뀌어 전체 화면 지문이 계속 변경됨
+- pre_fix_result: `imgClose` 후보 명령이 stale screen으로 폐기되고 Runtime session·클릭이 생성되지 않음
+- fix: 화면 지문에서 불안정한 Accessibility root class를 제외하고 candidate_id를 포함; 전체 화면이 바뀌어도 정확한 click candidate_id가 현재 후보에 남아 있으면 허용하고 실행 시 노드 지문을 재검사
+- implementation_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
+- Android unit tests/build: passed
+- scripted reinstall and accessibility rebind: passed
+- APK SHA-256: `D5F083C065093D90AAC6A02576F2AF14252D6EE0F7BC81DE7127D62D94AFF678`
+- real-device proof: expected screen fingerprint와 실행 시점 화면 지문이 달랐지만 동일 `마이페이지` candidate_id가 존재해 Accessibility click 성공
+- goal_id: `account.signup`
+- Runtime session: `navs_2e0e54dd7d084b29bf9db4246b4ccc35`
+- verified path: 홈 -> `마이페이지` -> `회원가입` -> 약관동의 1단계
+- result: `destination_reached`
+- Review DB: 3 / 3 decisions, 59 / 59 candidate labels
+- label distribution: best 2, acceptable 4, hard_negative 32, unsafe 12, unknown 9
+- terms or personal-data consent actions: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/jejuair-dynamic-screen-grounding-fix-20260806.md`, `docs/evidence/jejuair-account-signup-destination-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -192,7 +213,7 @@ deployed_commit: Android Executor and N100 API `0dee4c8557dd13961648a81f9f57ed50
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 21셀, 미완료 34셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 22셀, 미완료 33셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
