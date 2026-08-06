@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:21:00+09:00
+updated_at: 2026-08-06T18:27:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: TVING membership.change를 목표별 독립 실기기 세션으로 수행하고 현재 이용권 비구매 계정 상태의 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: 포스타입 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡 5개 목표; prior TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING 5개 목표
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
@@ -348,6 +348,24 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/tving-account-delete-password-boundary-20260806.md`
 
+## 2026-08-06 TVING 멤버십 변경·해지 현재 계정 상태
+
+- membership.change Runtime session: `navs_9b777b7b23cb4f2caf7c6b3c131be95d`
+- membership.change decisions: `navd_d2dfceb4ec8048159ddd6bb4dbf32f72`, `navd_6d66677895774f189ce8c0133504093e`
+- membership.cancel Runtime session: `navs_bd699c02620e4b7c9061b5e85b5d7a33`
+- membership.cancel decisions: `navd_bcdca8138f714ba786df960ab78498d7`, `navd_53e1e5b4ce6e462189dc6b34f8963644`
+- observed_path: TVING 홈 -> `마이페이지 마이`
+- observed_state: `이용권을 구매하세요`만 존재; 활성 이용권 관리·변경·해지 후보 없음
+- result: 두 목표 모두 `state_not_applicable`, `blocking_issue=account_state`
+- Review DB: 각 2 / 2 decisions, 36 / 36 candidate labels
+- per-goal label distribution: best 1, hard_negative 35
+- first change-label request: 단일 reason code 직렬화 422 후 배열로 재전송, 36 / 36 저장 확인; 탐색 실패로 기록하지 않음
+- purchase, payment, change or cancellation execution: 0
+- collector_change: 없음
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/tving-membership-change-state-not-applicable-20260806.md`, `docs/evidence/tving-membership-cancel-state-not-applicable-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -394,7 +412,7 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 33셀, 미완료 22셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 35셀, 미완료 20셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
