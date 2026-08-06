@@ -23,9 +23,9 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["apps"] == 11
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
-    assert report["successful_cells"] == 15
-    assert report["terminal_cells"] == 32
-    assert report["incomplete_cells"] == 23
+    assert report["successful_cells"] == 16
+    assert report["terminal_cells"] == 33
+    assert report["incomplete_cells"] == 22
     assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
@@ -57,6 +57,7 @@ def test_app_specific_evidence_is_owned_by_the_matching_package() -> None:
     evidence_owners = {
         "docs/evidence/coupang-": "com.coupang.mobile",
         "docs/evidence/jejuair-": "com.parksmt.jejuair.android16",
+        "docs/evidence/tving-": "net.cj.cjhv.gs.tving",
         "docs/evidence/x-": "com.twitter.android",
     }
     for app in payload["apps"]:
