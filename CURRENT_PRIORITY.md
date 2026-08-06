@@ -2,10 +2,10 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T17:42:00+09:00
+updated_at: 2026-08-06T17:47:00+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 쿠팡 membership.join의 B 고정 재검증을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: ADB·접근성 바인딩·reverse와 N100 ready를 확인한 뒤 쿠팡 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
@@ -236,6 +236,23 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/jejuair-membership-cancel-state-not-applicable-20260806.md`
 
+## 2026-08-06 쿠팡 와우 멤버십 가입 B 재검증
+
+- goal_id: `membership.join`
+- Runtime session: `navs_03d555e2405d4ad084b81d508f1a2cb1`
+- decisions: `navd_7db7923993ab40378f5d18059ddeba8c`, `navd_0bf4bbd875f5491c9a0ea3ae3117744d`
+- observed_path: 쿠팡 홈 -> `마이쿠팡` -> 와우 무료 체험·결제 WebView
+- result: `safe_boundary_reached`
+- Review DB: 2 / 2 decisions, 38 / 38 candidate labels
+- label distribution: best 1, acceptable 5, hard_negative 25, unsafe 2, unknown 5
+- unsafe candidates: `혜택받고 시작 및 결제하기`, 가입·결제 동의 체크 후보
+- pre_B_state_difference: 기존 이용 중 기록과 달리 현재는 신규 가입 화면이 표시돼 최신 B 실기기 근거를 우선함
+- collector_change: 없음; 후보 수집·candidate_id 클릭·관찰·기록 정상
+- purchase or enrollment execution: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/coupang-membership-join-safe-boundary-20260806.md`
+
 ## Team Android Executor distribution
 
 - release_status: uploaded_and_hash_verified
@@ -282,8 +299,8 @@ deployed_commit: Android Executor 실기기 `15fa09eab03913c19a0fdaf9ccc9259a52b
 - split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 26셀, 미완료 29셀
-- pre_B_A_revalidation: YouTube·제주항공 `membership.join` B 재검증 완료; 쿠팡 1셀만 `in_progress`
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 27셀, 미완료 28셀
+- pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` B 재검증 완료; 대기 0셀
 
 현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
 

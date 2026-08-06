@@ -1,6 +1,6 @@
 {
   "schema_version": "navigation-goal-coverage.v1",
-  "updated_at": "2026-08-06T17:42:00+09:00",
+  "updated_at": "2026-08-06T17:47:00+09:00",
   "source_scope": "real_device_exploration_status",
   "success_definition": "destination_observed_without_automatic_dangerous_final_action",
   "holdout_policy": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze",
@@ -88,7 +88,7 @@
       "goals": [
         {"goal_id": "account.signup", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "account.delete", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
-        {"goal_id": "membership.join", "status": "in_progress", "display_status_ko": "재검증 필요(B 고정 이전 A 기록)", "evidence_level": "recorded_observation", "evidence_refs": ["docs/REAL_DEVICE_COLLECTION_2026-08-03.md", "docs/evidence/pre-b-coverage-revalidation-register-20260804.md", "runtime:navs_5e1847b33ae8486eb7b7c202a47bebcd"], "last_observed_at": "2026-08-03T09:15:48+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "WOW 혜택 이용중 관찰은 보존하지만 B 고정 이전 A 런타임에서 기록된 최종 판정이므로 완료 근거에서 제외했다. B로 현재 계정 상태를 다시 확인한다."},
+        {"goal_id": "membership.join", "status": "safe_boundary_reached", "display_status_ko": "안전 경계 도달", "evidence_level": "real_device_verified", "evidence_refs": ["docs/evidence/coupang-membership-join-safe-boundary-20260806.md", "runtime:navs_03d555e2405d4ad084b81d508f1a2cb1", "runtime:navs_5e1847b33ae8486eb7b7c202a47bebcd"], "last_observed_at": "2026-08-06T17:41:45+09:00", "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": "B 고정 독립 세션에서 쿠팡 홈의 마이쿠팡을 candidate_id로 실행해 와우 가입 혜택 1개월 무료와 혜택받고 시작 및 결제하기가 표시된 가입·결제 경계에 도달했다. 결제 버튼과 동의 체크 후보를 unsafe로 검수하고 stop_for_user로 종료했다. 2개 결정과 38개 전체 후보를 Review DB에서 검수했으며 결제·가입·동의는 실행하지 않았다. B 이전 기록의 이용 중 상태와 달리 현재 계정에는 신규 가입 화면이 실제 표시되어 최신 상태를 우선한다."},
         {"goal_id": "membership.change", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""},
         {"goal_id": "membership.cancel", "status": "not_explored", "display_status_ko": "미탐색", "evidence_level": "none", "evidence_refs": [], "last_observed_at": null, "blocking_issue": null, "dangerous_action_auto_executed": false, "notes": ""}
       ]
