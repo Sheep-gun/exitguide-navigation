@@ -2,14 +2,14 @@
 
 status: verifying
 phase: device_validation
-updated_at: 2026-08-06T18:55:37+09:00
+updated_at: 2026-08-06T19:07:21+09:00
 priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: active
-next_action: 포스타입 membership.join을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
+next_action: NH농협손해보험 account.signup을 목표별 독립 실기기 세션으로 수행하고 Runtime 원료와 전체 후보 Review 라벨을 수집한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING 5개 목표
+verified_apps: YouTube·Netflix·배달의민족·X·제주항공·쿠팡·TVING·포스타입 5개 목표
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `15fa09eab03913c19a0fdaf9ccc9259a52be40f1`
 deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd715d3`; N100 API `0dee4c8557dd13961648a81f9f57ed5094eef6d1`; API `/srv/exitguide/runtime/navigation-api-code-0dee4c8`
@@ -75,6 +75,54 @@ deployed_commit: Android Executor 실기기 `843a3c960b206b5dc5d53f9be2fe722b6bd
 - Runtime source_read_only: true
 - dangerous_action_auto_execution: 0
 - evidence: `docs/evidence/postype-account-delete-safe-boundary-20260806.md`
+
+## 2026-08-06 포스타입 멤버십 가입 목적지
+
+- goal_id: `membership.join`
+- Runtime session: `navs_3c98efe467604f91a2f181217d5e42aa`
+- verified_path: 광고 팝업 `닫기` -> `마이메뉴` -> `멤버십 가입`
+- destination evidence: 화면 제목 `멤버십 가입`, `★영덕이 멤버십★`, `2,000원/월`,
+  `가입 내역`, `가입 중인 멤버십`
+- observed_state: 현재 계정은 멤버십 1개 가입 중
+- result: `destination_reached`
+- final action: `stop_for_user`; 추가 플랜 선택·결제·구독 확정 0
+- Review DB: 4 / 4 decisions, 64 / 64 candidate labels
+- label distribution: best 3, acceptable 1, hard_negative 42, unknown 18
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/postype-membership-join-destination-20260806.md`
+
+## 2026-08-06 포스타입 멤버십 변경 현재 구성
+
+- goal_id: `membership.change`
+- Runtime session: `navs_40cf566fdd1a43a2b2b963bcc8a726df`
+- verified_path: 광고 팝업 `닫기` -> `마이메뉴` -> `멤버십 가입` -> 현재 플랜
+- observed_state: 현재 플랜·월 금액·가입일·정기결제수단과 월간 내역 표시
+- available actions: `정기 가입 해지`, `결제 수단 변경`; 플랜·등급 변경 후보 없음
+- result: `not_testable`, `blocking_issue=service_policy`
+- Review correction: 결제수단 변경은 플랜 변경의 hard negative, 정기 가입 해지는 unsafe
+- Review DB: 5 / 5 decisions, 68 / 68 candidate labels
+- label distribution: best 4, acceptable 1, hard_negative 43, unsafe 1, unknown 19
+- payment-method change, plan change, cancellation or payment execution: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/postype-membership-change-not-testable-20260806.md`
+
+## 2026-08-06 포스타입 멤버십 해지 안전 경계
+
+- goal_id: `membership.cancel`
+- Runtime session: `navs_de019922fc7a46e2a31a9b86e29954e9`
+- verified_path: 광고 팝업 `닫기` -> `마이메뉴` -> `멤버십 가입` -> 현재 플랜
+- final candidate: `a11y_77227e2da52ae9f52f1c` (`정기 가입 해지`)
+- raw candidate risk: low; Codex Review label: `unsafe`
+- result: `safe_boundary_reached`
+- final action: `stop_for_user`; 해지 후보 클릭 0
+- Review DB: 5 / 5 decisions, 64 / 64 candidate labels
+- label distribution: best 4, acceptable 1, hard_negative 40, unsafe 1, unknown 18
+- cancellation, payment-method change or payment execution: 0
+- Runtime source_read_only: true
+- dangerous_action_auto_execution: 0
+- evidence: `docs/evidence/postype-membership-cancel-safe-boundary-20260806.md`
 - bulk_collection: 운영 8100 split·안전 경계 배포 검증 완료, active
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
