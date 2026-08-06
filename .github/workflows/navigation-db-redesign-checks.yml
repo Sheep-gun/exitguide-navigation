@@ -67,3 +67,6 @@ jobs:
 
       - name: Test standardized promotion pipeline
         run: python apps/api/tests/navigation_promotion_pipeline_unit.py
+
+      - name: Test isolated Runtime and Review generation
+        run: python apps/api/tests/navigation_runtime_generation_unit.py
