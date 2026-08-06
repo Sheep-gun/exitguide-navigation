@@ -120,6 +120,20 @@ public final class NavigationSafetyPolicy {
             "delete account", "delete your account", "close account"
     );
 
+    /*
+     * An explicit account-deletion label is already the safe hand-off
+     * destination. Some apps open another page while others commit
+     * immediately, so the executor must not guess. Exact matching keeps
+     * read-only text such as "검색 기록 삭제" navigable.
+     */
+    private static final Set<String> ACCOUNT_DELETION_BOUNDARY_LABELS = Set.of(
+            "계정 삭제",
+            "google 계정 삭제",
+            "delete account",
+            "delete your account",
+            "close account"
+    );
+
     private static final Set<String> MEMBERSHIP_CANCELLATION_LABELS = Set.of(
             "취소", "취소하기", "해지", "해지하기",
             "멤버십 해지", "구독 해지", "구독 취소", "이용권 해지",
@@ -157,6 +171,9 @@ public final class NavigationSafetyPolicy {
                 || node.isEditable()) {
             return "blocked";
         }
+        if (isAccountDeletionBoundaryLabel(preferredActionLabel(node))) {
+            return "high";
+        }
         if (isIrreversibleFinalAction(preferredActionLabel(node), semanticText)) {
             return "high";
         }
@@ -175,6 +192,10 @@ public final class NavigationSafetyPolicy {
 
     public static boolean isStateChangingActionLabel(String value) {
         return IRREVERSIBLE_EXACT_LABELS.contains(normalize(value));
+    }
+
+    public static boolean isAccountDeletionBoundaryLabel(String value) {
+        return ACCOUNT_DELETION_BOUNDARY_LABELS.contains(normalize(value));
     }
 
     public static boolean isContextualMembershipCancellationAction(

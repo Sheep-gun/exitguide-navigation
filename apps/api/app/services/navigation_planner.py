@@ -13,6 +13,7 @@ from app.services.navigation_decision_memory import (
     GOAL_ROLE_PRIORS,
     DecisionMemoryQuery,
     _candidate_ontology_score,
+    is_account_deletion_boundary_label,
     is_contextual_membership_cancellation_action,
     is_dangerous_final_candidate,
     is_state_changing_action_label,
@@ -143,6 +144,7 @@ class CandidateValueScorer:
             )
             dangerous = (
                 bool(memory_candidate.get("dangerous_final"))
+                or is_account_deletion_boundary_label(candidate.label)
                 or is_state_changing_action_label(candidate.label)
                 or is_dangerous_final_candidate(semantic_text)
             )
@@ -254,7 +256,8 @@ class ActionSafetyGate:
         # contextual exception is a generic cancellation CTA on a membership/billing screen.
         own_action_semantics = " ".join((candidate.label, candidate.icon_semantics))
         if (
-            is_state_changing_action_label(candidate.label)
+            is_account_deletion_boundary_label(candidate.label)
+            or is_state_changing_action_label(candidate.label)
             or is_dangerous_final_candidate(own_action_semantics)
             or is_contextual_membership_cancellation_action(
                 candidate.label,

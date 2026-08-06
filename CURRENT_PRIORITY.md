@@ -1,18 +1,34 @@
 # ExitGuide Navigation Current Priority
 
 status: verifying
-phase: device_validation
-updated_at: 2026-08-06T14:06:00+09:00
-priority: Codex 감독 골든 라벨 수집기의 후보 누락·실행·관찰 계약을 실기기에서 검증한 뒤 9개 파일럿 목표를 완성
+phase: implementation
+updated_at: 2026-08-06T14:52:00+09:00
+priority: 9개 파일럿을 완성한 뒤 현재 11개 앱 55셀 전부의 Runtime 원료와 Review 골든 라벨을 수집
 decision_db_collection: paused
-next_action: 9개 파일럿 중 남은 Netflix account.delete를 B 고정 수집기로 실기기 검증하고 전체 후보를 Review DB에 라벨링한다.
+next_action: 파일럿 게이트를 통과한 변경의 전체 테스트를 실행하고 11개 앱 collection split과 안전 경계 코드를 N100 운영 8100에 배포한다.
 verification_started_at: 2026-08-04T05:35:00+09:00
 verification_completed_at: pending
 verified_device: Samsung SM-G998N, Android 15; AccessibilityService enabled and bound after scripted reinstall
-verified_apps: 배달의민족 파일럿 3셀; YouTube membership.join B 고정 active Premium state; prior YouTube·Netflix·X·TVING evidence preserved
+verified_apps: YouTube·Netflix·배달의민족 파일럿 9셀; prior YouTube·Netflix·X·TVING evidence preserved
 baseline_commit: `a4a47c327468a1670caec6fdcd56be01a0923fc1`
 integration_commit: `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`
 deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N100 API `e7901914719498560d4e2634ebc5dee4767f78e6` at `/srv/exitguide/runtime/navigation-api-code-e790191`
+
+## 9개 파일럿 골든 라벨 게이트
+
+- gate_status: passed
+- gate_completed_at: 2026-08-06T14:52:00+09:00
+- pilot_cells: 9 / 9 final
+- selected_runtime_sessions: 17
+- reviewed_decisions: 69 / 69
+- candidate_labels: 1,082 / 1,082
+- label_distribution: best 36, acceptable 13, hard_negative 986, unsafe 19, unknown 28
+- candidate_id_clicks: 33 / 33 grounded and executed
+- dangerous_action_auto_execution: 0
+- source_read_only: true
+- excluded_incomplete_transition: `navd_18e32b01411641d88471649fb705f912` (`/observe` schema 422); replacement real-device transition verified
+- evidence: `docs/evidence/pilot-golden-label-gate-audit-20260806.md`
+- bulk_collection: 운영 8100 split·안전 경계 배포 검증 전까지 paused
 
 ## 2026-08-06 배달의민족 연필 후보 누락 해결
 
@@ -53,7 +69,7 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 - architecture: `B fixed`
 - public_navigation_prior: `enabled`, 운영 확인값 `true`
 - ab_winner_comparison: `disabled`
-- evaluation_basis: B 절대 지표, 고정 replay, locked holdout 회귀
+- evaluation_basis: B 절대 지표와 고정 replay; future validation/holdout은 새 미관측 앱으로 구성
 - public_role: Planner/Solar 참고 근거만 허용
 - runtime_execution_allowed_for_public_data: false
 - canonical_promotion_allowed_for_public_data: false
@@ -72,15 +88,15 @@ deployed_commit: Android Executor `dbc14a9e610b1fb1fdd7dde4f3e6f6e6313f1324`; N1
 - 완료 단위: 11개 앱 × 5개 목표 = 55셀
 - 완료 상태: `destination_reached`, `safe_boundary_reached`, 근거 있는 `not_supported`, 근거 있는 `not_testable`
 - 미완료 상태: `not_explored`, `in_progress`, 임시 연결·환경 오류
-- locked holdout: Instagram, Postype, ChatGPT
-- validation: TVING
-- split_manifest: `db/navigation_coverage_split_v1.json`, 7 collection / 3 locked holdout / 1 TVING validation
+- current split: 11개 앱 모두 collection
+- future validation/holdout: 학습용 불변 스냅샷 동결 후 처음 설치하는 미관측 앱만 사용
+- split_manifest: `db/navigation_coverage_split_v1.json`, 11 collection
 - coverage_source: `db/navigation_goal_coverage_v1.json`
 - coverage_document: `docs/NAVIGATION_GOAL_COVERAGE.md`
-- current_coverage_scope: 11/11 앱, 55셀 계약 검증 통과; 최종 상태 10셀, 미완료 45셀
+- current_coverage_scope: 11/11 앱, 55셀 계약 검증 대상; 최종 상태 12셀, 미완료 43셀
 - pre_B_A_revalidation: YouTube·제주항공·쿠팡 `membership.join` 3셀을 `in_progress`로 복원
 
-holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지 않는다.
+현재 11개 앱은 모두 Runtime→Review→표준 승격 파이프라인의 collection 원료다.
 
 ## N100 운영 상태 — 2026-08-06 확인
 
@@ -99,8 +115,9 @@ holdout 3개와 TVING 경험은 Decision DB 또는 App Knowledge로 승격하지
 - Runtime DB: coverage 전용, sessions 45, decisions 225, observations 198
 - production split SHA-256: `9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142`
 - production split counts: collection 8, validation 2, locked_holdout 3
-- target coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
-- target coverage split counts: collection 7, validation 1, locked_holdout 3
+- deployed coverage split SHA-256: `a26cb574561683fd973960df319f20e5f2ac205f4537a377f22289e7b8541bf5`
+- deployed coverage split counts: collection 7, validation 1, locked_holdout 3 (새 11 collection 정책 배포 전)
+- repository target split: `navigation-coverage-split-v2-20260806-all-collection`, collection 11
 - target coverage Runtime: `/srv/exitguide/runtime/navigation-runtime-coverage-b-v1-a26cb574.sqlite` (운영 8100 쓰기 대상)
 - planner: Solar Pro 4 selective, Solar Pro 3 fallback, EXAONE 4.5 selective
 
@@ -124,7 +141,7 @@ collection 경험은 다음 경로만 사용한다.
 
 Runtime DB에서 Decision DB로 직접 삽입하지 않는다.
 
-## TVING validation 근거
+## TVING 기존 실기기 근거
 
 - goal_id: `membership.join`
 - app_package: `net.cj.cjhv.gs.tving`
@@ -139,7 +156,7 @@ Runtime DB에서 Decision DB로 직접 삽입하지 않는다.
 - patched Decision DB SHA-256: `3891d4cc4d44b10d5363e0134937eab215663f115cb0809d9e232bead82fd9c1`
 - original Decision DB preserved SHA-256: `14c73a685ab7c915e9357ba6f99454e738f8f907d0b1abdf77c234825bb4478a`
 - API unit tests: 10/10 passed
-- promotion_allowed: false
+- promotion_allowed: 표준 승격 파이프라인 검증·승인 후 가능
 - evidence: `docs/evidence/tving-public-prior-ab-20260804.md`
 
 남은 TVING 복구 실패 사례는 `tving_my_bottom_recover_up`, `tving_settings_recover_back`이다.
@@ -187,6 +204,37 @@ OS가 ADB 복원을 명시적으로 차단하고 자동 재시도도 실패했�
 - outcome: `destination_reached`, session `reached`
 - dangerous auto click: 0
 - evidence: `docs/evidence/netflix-membership-cancel-safe-boundary-20260804.md`
+
+## Netflix account.delete 안전 경계
+
+- original_session: `navs_415cd061bdfd4ddf9abf3150ad26347c`
+- exact_APK_revalidation_session: `navs_e215fe28842b435fa4ca3df3dd51ee03`
+- observed_path: 프로필 선택 → 나의 넷플릭스 → 프로필 관리 → 계정 WebView → 90% scroll
+- final candidate: `a11y_d0818522e676e1da3a4d`, label `계정 삭제`
+- corrected candidate safety: `risk_level=high`
+- final action: `stop_for_user`, executor action not executed
+- Review DB: 12 decisions reviewed, 134 candidate labels
+- per-session labels: best 4, acceptable 0, hard_negative 55, unsafe 2, unknown 6
+- duplicate policy: 재검증 세션 앞 5개 동일 화면은 학습 스냅샷 중복 제외
+- source_read_only: true
+- dangerous automatic action: 0
+- APK SHA-256: `DED7802E765FE816D8035CA7DF7CDFC466E0489792D24B537CCBE5CD99FD299F`
+- evidence: `docs/evidence/netflix-account-delete-safe-boundary-20260806.md`
+
+## Netflix membership.join 현재 계정 상태
+
+- session: `navs_a9e5c2b4d725405e95c8fd937a49ca05`
+- observed_path: 프로필 선택 → 나의 넷플릭스 → 프로필 관리 → 계정 WebView
+- observed_state: 스탠다드 멤버십, 시작 2026년 7월, 다음 결제일 2026년 8월 14일
+- result: `state_not_applicable`, `blocking_issue=account_state`
+- extra_member_purchase: 일반 멤버십 가입이 아닌 `hard_negative`
+- final action: `stop_for_user`, 가입·결제 실행 0
+- Review DB: 5 decisions reviewed, 53 candidates labeled
+- labels: best 4, acceptable 0, hard_negative 42, unsafe 1, unknown 6
+- Runtime misjudgment: account WebView `wrong_destination/regressed`, final stop `blocked/unknown`
+- Review correction: both actions correct, progress reached, system success incorrect
+- source_read_only: true
+- evidence: `docs/evidence/netflix-membership-join-state-not-applicable-20260806.md`
 
 ## YouTube membership.cancel 안전 경계
 
@@ -273,7 +321,7 @@ Review DB에서 검수했고 위험 행동 자동 실행은 0건이다.
 - Review: 3 decisions / 67 candidates; best 2, acceptable 2, hard_negative 62, unsafe 0, unknown 1
 - source_read_only: true
 - evidence: `docs/evidence/youtube-membership-join-state-not-applicable-20260806.md`
-- pilot coverage: 7 / 9 final; remaining Netflix `account.delete`, `membership.join`
+- pilot coverage: 9 / 9 final; gate audit pending
 
 ## 90% 스크롤·ADB 단절 자동 중지
 
@@ -325,9 +373,9 @@ ADB reverse `tcp:8100 -> tcp:18104`, Navigation API ready가 확인됐다. 연�
 
 1. 55셀에 `not_explored` 또는 `in_progress`가 없음
 2. 모든 `not_supported`와 `not_testable`에 실기기·UI 근거가 있음
-3. collection 7개, locked holdout 3개, TVING validation이 분리됨
-4. holdout과 TVING 데이터가 승격되지 않음
-5. collection 경험이 표준 승격 파이프라인을 거침
+3. 현재 11개 앱 55셀이 모두 collection Runtime·Review 원료로 수집됨
+4. 현재 앱을 validation·holdout으로 재사용하지 않으며 향후 새 미관측 앱만 별도 분할함
+5. 현재 11개 앱의 승인된 경험이 표준 승격 파이프라인을 거침
 6. 최신 B 코드와 N100 배포 커밋이 일치함
 7. 공개 Navigation DB가 활성화됨
 8. APK 재설치 시 접근성 자동 복원과 실제 바인딩이 검증됨

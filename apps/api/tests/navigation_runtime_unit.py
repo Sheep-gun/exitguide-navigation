@@ -32,6 +32,7 @@ from app.navigation_contracts import (  # noqa: E402
 from app.services.navigation_decision_memory import (  # noqa: E402
     NavigationDecisionMemory,
     NormalizedGoal,
+    is_account_deletion_boundary_label,
 )
 from app.services.navigation_dataset_split import (  # noqa: E402
     DatasetSplitAccessError,
@@ -46,7 +47,7 @@ from app.services.navigation_research_policy import AndroidWorldResearchPolicy  
 from app.services.navigation_runtime import (  # noqa: E402
     NavigationRuntime,
     _automatic_recovery_forbidden_candidates,
-    _contextualize_membership_cancellation_safety,
+    _contextualize_destructive_safety,
     _dismissible_modal_fast_path_candidate_id,
     _interleaved_repeat_guard,
     _is_authentication_boundary,
@@ -118,6 +119,33 @@ def _account_screen() -> ScreenObservation:
 
 
 def main() -> None:
+    assert is_account_deletion_boundary_label("계정 삭제")
+    assert is_account_deletion_boundary_label("Google 계정 삭제")
+    assert is_account_deletion_boundary_label("Delete account")
+    assert not is_account_deletion_boundary_label("검색 기록 삭제")
+    assert not is_account_deletion_boundary_label("계정 삭제 방법")
+    account_delete_screen = _contextualize_destructive_safety(
+        ScreenObservation(
+            window_title="계정",
+            candidates=[
+                NavigationCandidate(
+                    candidate_id="delete-account",
+                    label="계정 삭제",
+                    role="button",
+                    risk_level="low",
+                ),
+                NavigationCandidate(
+                    candidate_id="delete-history",
+                    label="검색 기록 삭제",
+                    role="button",
+                    risk_level="low",
+                ),
+            ],
+        ),
+        "account.delete",
+    )
+    assert account_delete_screen.candidates[0].risk_level == "high"
+    assert account_delete_screen.candidates[1].risk_level == "low"
     assert _is_profile_gate_entry_progress(
         action_name="click",
         previous_screen={
@@ -350,7 +378,7 @@ def main() -> None:
         "membership.cancel",
         ("기본", "결제", "수단", "업데이트"),
     )
-    contextual_cancel_screen = _contextualize_membership_cancellation_safety(
+    contextual_cancel_screen = _contextualize_destructive_safety(
         ScreenObservation(
             window_title="YouTube Premium",
             nodes=[
@@ -369,7 +397,7 @@ def main() -> None:
         "membership.cancel",
     )
     assert contextual_cancel_screen.candidates[0].risk_level == "high"
-    contextual_baemin_cancel_screen = _contextualize_membership_cancellation_safety(
+    contextual_baemin_cancel_screen = _contextualize_destructive_safety(
         ScreenObservation(
             window_title="마이배민클럽",
             nodes=[
@@ -390,7 +418,7 @@ def main() -> None:
         "membership.cancel",
     )
     assert contextual_baemin_cancel_screen.candidates[0].risk_level == "high"
-    dismiss_cancel_screen = _contextualize_membership_cancellation_safety(
+    dismiss_cancel_screen = _contextualize_destructive_safety(
         ScreenObservation(
             window_title="알림",
             nodes=[
@@ -841,6 +869,40 @@ def main() -> None:
             candidate_id="account-delete-page-entry",
         )
         assert safe_delete_page_entry.safety_status == "allowed"
+        explicit_account_delete_boundary = operator_runtime.decide(
+            DecideRequest(
+                request_id="request-codex-explicit-account-delete-boundary",
+                app_package="evaluation.operator.app",
+                goal_text="계정 삭제 메뉴를 찾고 싶어",
+                operator_action=NavigationAction(
+                    name="click",
+                    candidate_id="delete-account",
+                ),
+                operator_source="codex",
+                operator_command_id="codex-command-explicit-account-delete-boundary",
+                operator_reason_codes=["goal_match", "safety_handoff"],
+                operator_reason_text="명시적 계정 삭제 경계에서 사용자에게 넘김",
+                operator_review_status="provisional",
+                screen=ScreenObservation(
+                    app_package="evaluation.operator.app",
+                    window_title="계정",
+                    candidates=[
+                        NavigationCandidate(
+                            candidate_id="delete-account",
+                            label="계정 삭제",
+                            role="button",
+                            risk_level="low",
+                        )
+                    ],
+                ),
+            )
+        )
+        assert explicit_account_delete_boundary.action == NavigationAction(
+            name="stop_for_user"
+        )
+        assert explicit_account_delete_boundary.safety_status == (
+            "replaced_with_safe_action"
+        )
         operator_stop = operator_runtime.decide(
             DecideRequest(
                 request_id="request-codex-operator-stop",

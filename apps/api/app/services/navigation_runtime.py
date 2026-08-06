@@ -27,6 +27,7 @@ from app.services.navigation_decision_memory import (
     DecisionMemoryQuery,
     NavigationDecisionMemory,
     NormalizedGoal,
+    is_account_deletion_boundary_label,
     is_dangerous_final_candidate,
     is_contextual_membership_cancellation_action,
     is_state_changing_action_label,
@@ -231,7 +232,7 @@ class NavigationRuntime:
         )
         request = request.model_copy(
             update={
-                "screen": _contextualize_membership_cancellation_safety(
+                "screen": _contextualize_destructive_safety(
                     request.screen,
                     None if normalized_goal is None else normalized_goal.goal_id,
                 )
@@ -547,6 +548,7 @@ class NavigationRuntime:
                 planner_provider = provider
         elif effective_screen.candidates and all(
             candidate.risk_level in {"medium", "high", "blocked"}
+            or is_account_deletion_boundary_label(candidate.label)
             or is_state_changing_action_label(candidate.label)
             or is_dangerous_final_candidate(
                 " ".join(
@@ -820,7 +822,8 @@ class NavigationRuntime:
                     )
                 )
                 terminal = (
-                    is_state_changing_action_label(candidate.label)
+                    is_account_deletion_boundary_label(candidate.label)
+                    or is_state_changing_action_label(candidate.label)
                     or is_dangerous_final_candidate(
                         " ".join((candidate.label, candidate.icon_semantics))
                     )
@@ -1174,7 +1177,7 @@ class NavigationRuntime:
         if request.next_screen is not None:
             request = request.model_copy(
                 update={
-                    "next_screen": _contextualize_membership_cancellation_safety(
+                    "next_screen": _contextualize_destructive_safety(
                         request.next_screen,
                         str(decision.get("goal_id") or ""),
                     )
@@ -1806,13 +1809,13 @@ def _can_request_visual_reobserve(
     )
 
 
-def _contextualize_membership_cancellation_safety(
+def _contextualize_destructive_safety(
     screen: ScreenObservation,
     goal_id: str | None,
 ) -> ScreenObservation:
-    """Raise generic cancellation CTAs to high risk using grounded screen text."""
+    """Raise grounded destructive boundaries to high risk without broad substrings."""
 
-    if goal_id != "membership.cancel" or not screen.candidates:
+    if goal_id not in {"account.delete", "membership.cancel"} or not screen.candidates:
         return screen
     context_parts = [screen.window_title, screen.activity_name]
     for node in screen.nodes:
@@ -1833,12 +1836,20 @@ def _contextualize_membership_cancellation_safety(
     updated = []
     changed = False
     for candidate in screen.candidates:
-        if (
-            candidate.risk_level not in {"high", "blocked"}
+        account_deletion_boundary = (
+            goal_id == "account.delete"
+            and is_account_deletion_boundary_label(candidate.label)
+        )
+        membership_cancellation_boundary = (
+            goal_id == "membership.cancel"
             and is_contextual_membership_cancellation_action(
                 candidate.label,
                 screen_context,
             )
+        )
+        if (
+            candidate.risk_level not in {"high", "blocked"}
+            and (account_deletion_boundary or membership_cancellation_boundary)
         ):
             updated.append(candidate.model_copy(update={"risk_level": "high"}))
             changed = True
@@ -2478,6 +2489,7 @@ def _build_shadow_safety_context(
                 candidate.candidate_id
                 for candidate in candidates
                 if candidate.risk_level in {"high", "blocked"}
+                or is_account_deletion_boundary_label(candidate.label)
                 or is_state_changing_action_label(candidate.label)
                 or normalize_text(candidate.label)
                 in {

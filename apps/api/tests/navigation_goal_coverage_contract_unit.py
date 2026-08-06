@@ -23,14 +23,10 @@ def test_repository_goal_coverage_is_valid() -> None:
     assert report["apps"] == 11
     assert report["goals_per_app"] == 5
     assert report["coverage_cells"] == 55
-    assert report["successful_cells"] == 6
-    assert report["terminal_cells"] == 10
-    assert report["incomplete_cells"] == 45
-    assert report["split_counts"] == {
-        "collection": 7,
-        "locked_holdout": 3,
-        "validation": 1,
-    }
+    assert report["successful_cells"] == 7
+    assert report["terminal_cells"] == 12
+    assert report["incomplete_cells"] == 43
+    assert report["split_counts"] == {"collection": 11}
     assert report["dangerous_action_auto_executed"] == 0
 
 
@@ -48,33 +44,16 @@ def test_goal_coverage_rejects_automatic_dangerous_action() -> None:
             raise AssertionError("dangerous automatic action must be rejected")
 
 
-def test_goal_coverage_rejects_holdout_evaluation_before_collection_freeze() -> None:
+def test_every_current_app_is_a_collection_source() -> None:
     payload = json.loads(MODULE.DEFAULT_COVERAGE.read_text(encoding="utf-8"))
-    holdout = next(app for app in payload["apps"] if app["split"] == "locked_holdout")
-    holdout["goals"][0].update(
-        {
-            "status": "not_testable",
-            "display_status_ko": "현재 계정에서 검증 불가",
-            "evidence_level": "real_device_verified",
-            "evidence_refs": ["runtime:test"],
-            "last_observed_at": "2026-08-04T09:00:00+09:00",
-            "blocking_issue": "account_state",
-            "notes": "holdout must remain sealed until collection is frozen",
-        }
-    )
-    with tempfile.TemporaryDirectory() as temporary:
-        coverage = Path(temporary) / "coverage.json"
-        coverage.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        try:
-            MODULE.validate_coverage(coverage, MODULE.DEFAULT_SCHEMA, MODULE.DEFAULT_SPLITS)
-        except ValueError as error:
-            assert "before collection freeze" in str(error)
-        else:
-            raise AssertionError("locked holdout must remain sealed before collection freeze")
+    manifest = json.loads(MODULE.DEFAULT_SPLITS.read_text(encoding="utf-8"))
+    assert {app["split"] for app in payload["apps"]} == {"collection"}
+    assert {entry["split"] for entry in manifest["entries"]} == {"collection"}
+    assert len(payload["apps"]) == len(manifest["entries"]) == 11
 
 
 if __name__ == "__main__":
     test_repository_goal_coverage_is_valid()
     test_goal_coverage_rejects_automatic_dangerous_action()
-    test_goal_coverage_rejects_holdout_evaluation_before_collection_freeze()
+    test_every_current_app_is_a_collection_source()
     print("navigation goal coverage contract checks passed")

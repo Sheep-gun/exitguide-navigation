@@ -167,6 +167,21 @@ GENERIC_CANCELLATION_ACTION_LABELS = frozenset(
     }
 )
 
+# Exact labels that explicitly expose account deletion are a safe user
+# hand-off destination. Apps differ on whether these controls open an
+# explanation page or mutate immediately, so the runtime must not click them.
+# Exact matching prevents unrelated controls such as "검색 기록 삭제" from
+# becoming terminal boundaries.
+ACCOUNT_DELETION_BOUNDARY_LABELS = frozenset(
+    {
+        "계정 삭제",
+        "google 계정 삭제",
+        "delete account",
+        "delete your account",
+        "close account",
+    }
+)
+
 MEMBERSHIP_CONTEXT_MARKERS = (
     "멤버십",
     "멤버쉽",
@@ -1448,6 +1463,12 @@ def is_state_changing_action_label(label: str) -> bool:
     """Return true only when the candidate's own label commits a mutation."""
 
     return normalize_text(label) in STATE_CHANGING_ACTION_LABELS
+
+
+def is_account_deletion_boundary_label(label: str) -> bool:
+    """Return true only for an explicit account-deletion destination label."""
+
+    return normalize_text(label) in ACCOUNT_DELETION_BOUNDARY_LABELS
 
 
 def is_membership_renewal_action_label(label: str) -> bool:

@@ -1,7 +1,7 @@
 {
-  "manifest_version": "navigation-coverage-split-v1-20260804-b-fixed",
+  "manifest_version": "navigation-coverage-split-v2-20260806-all-collection",
   "created_at": "2026-08-04T09:00:00+09:00",
-  "split_policy": "app_disjoint_7_collection_3_locked_holdout_1_validation",
+  "split_policy": "current_11_apps_all_collection_future_unseen_apps_validation_holdout_after_freeze",
   "parent_runtime_manifest": {
     "path": "db/navigation_dataset_split_v1.json",
     "production_sha256": "9fa006adc74fc117c180ba051fd50e355fcb80ba6e970dd1e5b4a2fe43141142",
@@ -67,7 +67,7 @@
       "app_package": "ni.mh.android.launcher",
       "app_name": "NH농협손해보험",
       "split": "collection",
-      "reason": "seventh non-holdout app in the user-requested ten-app coverage scope",
+      "reason": "one of the eleven user-selected golden-label collection apps",
       "existing_decision_cases": 0,
       "available_on_device": false,
       "priority_app": true
@@ -75,8 +75,8 @@
     {
       "app_package": "com.instagram.android",
       "app_name": "Instagram",
-      "split": "locked_holdout",
-      "reason": "zero-record unseen social-app holdout",
+      "split": "collection",
+      "reason": "user explicitly moved every current app into golden-label collection",
       "existing_decision_cases": 0,
       "available_on_device": true,
       "priority_app": true
@@ -84,8 +84,8 @@
     {
       "app_package": "com.postype.play",
       "app_name": "포스타입",
-      "split": "locked_holdout",
-      "reason": "zero-record unseen creator-membership holdout",
+      "split": "collection",
+      "reason": "user explicitly moved every current app into golden-label collection",
       "existing_decision_cases": 0,
       "available_on_device": true,
       "priority_app": true
@@ -93,8 +93,8 @@
     {
       "app_package": "com.openai.chatgpt",
       "app_name": "ChatGPT",
-      "split": "locked_holdout",
-      "reason": "zero-record unseen subscription-app holdout",
+      "split": "collection",
+      "reason": "user explicitly moved every current app into golden-label collection",
       "existing_decision_cases": 0,
       "available_on_device": true,
       "priority_app": true
@@ -102,8 +102,8 @@
     {
       "app_package": "net.cj.cjhv.gs.tving",
       "app_name": "TVING",
-      "split": "validation",
-      "reason": "zero-record validation app; never promoted into Decision Memory",
+      "split": "collection",
+      "reason": "user explicitly moved every current app into golden-label collection",
       "existing_decision_cases": 0,
       "available_on_device": true,
       "priority_app": true

@@ -24,7 +24,7 @@
       "const": "destination_observed_without_automatic_dangerous_final_action"
     },
     "holdout_policy": {
-      "const": "locked_holdout_is_evaluated_only_after_collection_freeze_and_never_used_for_tuning_or_promotion"
+      "const": "current_apps_are_all_collection_future_unseen_apps_are_split_after_training_snapshot_freeze"
     },
     "coverage_split_manifest": {"const": "db/navigation_coverage_split_v1.json"},
     "collection_frozen_at": {"type": ["string", "null"], "format": "date-time"},

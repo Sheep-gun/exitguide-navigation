@@ -21,7 +21,7 @@ FINAL_STATUSES = {
     "state_not_applicable",
     "failed_with_evidence",
 }
-EXPECTED_SPLIT_COUNTS = {"collection": 7, "locked_holdout": 3, "validation": 1}
+EXPECTED_SPLIT_COUNTS = {"collection": 11}
 
 
 def validate_coverage(

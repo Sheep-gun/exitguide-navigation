@@ -57,6 +57,19 @@ public final class NavigationSafetyPolicyTest {
     }
 
     @Test
+    public void explicitAccountDeletionIsASafeHandoffBoundaryWithoutSubstringOverreach() {
+        assertTrue(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("계정 삭제"));
+        assertTrue(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("Google 계정 삭제"));
+        assertTrue(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("Delete account"));
+        assertTrue(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("Close account"));
+        assertFalse(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("검색 기록 삭제"));
+        assertFalse(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel("계정 삭제 방법"));
+        assertFalse(NavigationSafetyPolicy.isAccountDeletionBoundaryLabel(
+                "회원탈퇴 페이지로 이동하기"
+        ));
+    }
+
+    @Test
     public void destructiveNavigationRequiresFinalConfirmationContext() {
         assertTrue(NavigationSafetyPolicy.isContextualMembershipCancellationAction(
                 "회원탈퇴",
