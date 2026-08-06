@@ -11,6 +11,9 @@ final class StableScreenIdentity {
     private static final Pattern VOLATILE_CLOCK_PATTERN = Pattern.compile(
             "(?<!\\d)(?:\\d{1,3}:)?[0-5]?\\d:[0-5]\\d(?!\\d)"
     );
+    private static final Pattern VOLATILE_KOREAN_DURATION_PATTERN = Pattern.compile(
+            "(?<!\\d)\\d+\\s*분(?:\\s*\\d+\\s*초)?(?!\\d)|(?<!\\d)\\d+\\s*초(?!\\d)"
+    );
 
     private StableScreenIdentity() {
     }
@@ -33,8 +36,10 @@ final class StableScreenIdentity {
 
     static String normalizeVolatileText(String value) {
         String safe = value == null ? "" : value;
-        return VOLATILE_CLOCK_PATTERN.matcher(safe)
-                .replaceAll(" [time] ")
+        String withoutClock = VOLATILE_CLOCK_PATTERN.matcher(safe)
+                .replaceAll(" [time] ");
+        return VOLATILE_KOREAN_DURATION_PATTERN.matcher(withoutClock)
+                .replaceAll(" [duration] ")
                 .trim()
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);

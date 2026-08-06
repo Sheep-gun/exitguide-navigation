@@ -43,4 +43,28 @@ public final class StableScreenIdentityTest {
 
         assertNotEquals(membership, cancellation);
     }
+
+    @Test
+    public void koreanRelativeCountdownDoesNotInvalidateOperatorCommand() {
+        String first = StableScreenIdentity.fingerprint(
+                "com.sampleapp",
+                "배달의민족",
+                "android.view.View",
+                Arrays.asList(
+                        "button|마이배민",
+                        "button|15분 뒤면 사라질 5,000원 할인 14분 49초 후에 사라져요"
+                )
+        );
+        String second = StableScreenIdentity.fingerprint(
+                "com.sampleapp",
+                "배달의민족",
+                "android.view.View",
+                Arrays.asList(
+                        "button|마이배민",
+                        "button|15분 뒤면 사라질 5,000원 할인 14분 47초 후에 사라져요"
+                )
+        );
+
+        assertEquals(first, second);
+    }
 }
