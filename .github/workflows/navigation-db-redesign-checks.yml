@@ -38,6 +38,9 @@ jobs:
       - name: Compile retained Python sources
         run: python -m compileall -q apps/api/app scripts
 
+      - name: Validate Runtime generation rollover script
+        run: bash -n scripts/Activate-NavigationRuntimeGeneration.sh
+
       - name: Test decision memory
         run: python apps/api/tests/navigation_decision_memory_unit.py
 
