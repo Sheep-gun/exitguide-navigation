@@ -1,260 +1,186 @@
-# ExitGuide AI
+<p align="center">
+  <img src="docs/assets/final-proposal/ai-rookie.png" width="360" alt="AI Rookie">
+</p>
 
-> 사용자 목표 기반 판단 보조 온디바이스 AI
+<h1 align="center">ExitGuide AI</h1>
 
-ExitGuide는 스마트폰 사용이 익숙하지 않거나 복잡한 약관을 이해하기 어려운 사용자를 위해, 원하는 기능까지 단계별로 안내하고 중요한 약관을 근거와 함께 설명하는 **온디바이스 중심 하이브리드 의사결정 보조 서비스**입니다.
+<p align="center">
+  <strong>사용자 목표 기반 판단 보조 온디바이스 AI</strong><br>
+  현재 화면을 다시 읽고, 다음에 누를 위치와 선택의 의미를 함께 설명합니다.
+</p>
 
-AI가 휴대폰을 대신 조작하지 않습니다. 현재 화면에서 눌러야 할 위치와 이유를 표시하고, 사용자가 직접 누르면 달라진 화면을 다시 읽어 다음 단계를 안내합니다. 결제, 동의, 가입, 해지·탈퇴 확정과 개인정보 제출처럼 결과가 중요한 단계에서는 안내를 멈추고 최종 결정을 사용자에게 맡깁니다.
+<p align="center">
+  <a href="docs/INTEGRATED_TECHNICAL_REPORT_KR.md"><strong>통합 기술 보고서</strong></a>
+  ·
+  <a href="https://youtu.be/8YB3jl2YKNQ?si=f5ZpqoWffAoT5hZr"><strong>본선 시연 영상</strong></a>
+  ·
+  <a href="CURRENT_PRIORITY.md"><strong>현재 개발 현황</strong></a>
+</p>
 
-- 팀: **ExitGuideLab**
-- 국내 AI: **LG AI연구원 EXAONE**, **Upstage Solar·Document Parse**
-- 시연 기기: **Galaxy S25+**
-- 시연 영상: [YouTube](https://youtu.be/8YB3jl2YKNQ?si=f5ZpqoWffAoT5hZr) · [저장소 내 MVP 영상](MVP.mp4)
+ExitGuide는 복잡한 모바일 절차와 약관을 사용자가 직접 이해하고 처리하도록 돕는 **온디바이스 중심 하이브리드 의사결정 보조 서비스**입니다. 사용자가 “유튜브 프리미엄 해지 화면까지 안내해 줘”처럼 목적을 입력하면 현재 화면의 후보를 비교하고, 누를 위치와 이유를 표시한 뒤 사용자의 직접 입력을 기다립니다.
 
-## 해결하려는 문제
+결제, 동의, 가입, 해지·탈퇴 확정과 개인정보 제출은 AI가 대신 실행하지 않습니다. 중요한 선택에서는 안내를 멈추고 결과와 주의사항만 설명합니다.
 
-가입, 결제, 구독 변경과 해지 같은 모바일 절차는 메뉴가 깊고 화면이 자주 바뀝니다. 비용, 자동 갱신, 환불과 개인정보 조건은 작은 문구나 긴 약관 속에 흩어져 있어, 사용자가 원래 목적과 다른 선택을 하도록 유도되기도 합니다. 종이 계약서와 신청서 역시 핵심 조건과 원문 위치를 한눈에 확인하기 어렵습니다.
+> 이 README는 제품과 고정 결과를 빠르게 보는 문서입니다. 모델, 데이터, 런타임, 약관 RAG, 평가 단위와 한계는 [통합 기술 보고서](docs/INTEGRATED_TECHNICAL_REPORT_KR.md)에 분리해 기록했습니다.
 
-기존 서비스는 화면 읽기, 모바일 자동 조작, 약관 요약과 행동 안전 검증을 개별적으로 제공합니다. ExitGuide는 다음 기능을 하나의 사용자 흐름으로 연결합니다.
+## 문서와 구현 범위
 
-1. 사용자의 자연어 목적을 이해합니다.
-2. 현재 화면에 실제로 존재하는 행동 후보를 찾습니다.
-3. 목적과 화면 문맥에 맞는 다음 후보를 비교합니다.
-4. 누를 위치와 이유를 표시하고 사용자의 직접 입력을 기다립니다.
-5. 행동 결과를 다시 관찰해 경로를 갱신하거나 오류를 복구합니다.
-6. 앱 화면과 촬영 문서의 약관을 원문 근거와 함께 설명합니다.
+이 `main` 브랜치는 현재 **Navigation Decision API, Android Executor, Decision/Runtime DB, 검증·승격 파이프라인과 N100 배포 설정**을 중심으로 구성되어 있습니다. 약관 RAG, 촬영 문서 분석과 온디바이스 통합 APK는 본선 제안서의 통합 제품 범위와 고정 평가를 설명하는 항목이며, 이 브랜치에 모든 구현물이 포함되어 있다는 뜻은 아닙니다.
 
-## 핵심 기능
+- 제안서 기준 제품·모델·평가: [통합 기술 보고서](docs/INTEGRATED_TECHNICAL_REPORT_KR.md)
+- 현재 `main`의 코드·실기기 상태: [CURRENT_PRIORITY.md](CURRENT_PRIORITY.md)
+- 실행 가능한 API 계약: [Navigation Decision API v1](docs/NAVIGATION_API_V1.md)
 
-### 목적 기반 화면 안내
+## 한눈에 보는 고정 결과
 
-고정 좌표나 저장된 전체 경로를 재생하지 않습니다. 자연어 목적을 중간 목표와 최종 확인 단계로 바꾸고, 매 화면에서 행동 후보를 새로 비교합니다. 앱 업데이트나 팝업으로 UI가 달라져도 행동 후 화면을 다시 확인해 남은 경로를 조정합니다.
+| 실기기 평가 | 행동·복구 | 약관·안전 |
+| --- | --- | --- |
+| 31개 앱, 155개 시나리오 | 행동 후보 521/615, **84.7%** | 화면 약관 근거 41/50, **82.0%** |
+| 최종 확인 화면 137/155, **88.4%** | 오류 복귀 39/40, **97.5%** | 사용자 확인 없는 최종 행동 **0건** |
 
-### 온디바이스 행동 판단
+수치는 **2026년 8월 14일 본선 제안서 제출 시점**의 고정 평가입니다. 학습 데이터 정확도, 후보 순위 정확도, 실기기 행동 정확도와 목표 화면 도달률은 서로 다른 평가 단위입니다.
 
-Android 접근성 서비스와 OCR로 화면의 문구, 버튼, 위치, 선택 상태와 계층 구조를 읽습니다. EXAONE 4.0 1.2B Q8, LoRA와 Decision Value Head가 사용자 목적에 맞는 후보를 상대 평가합니다. 모바일 행동 지식 DB는 정답을 대신 결정하는 고정 경로가 아니라, 화면 전이와 성공·실패·복구 경험을 판단 근거로 제공합니다.
+## 핵심 아이디어
 
-### 오류 감지와 경로 복구
+![ExitGuide 사용자 흐름과 기술 구성](docs/assets/final-proposal/system-flow.png)
 
-화면이 바뀌지 않거나 목표와 다른 곳으로 이동하면 같은 후보를 반복하지 않습니다. 현재 화면을 다시 관찰하고, 스크롤·뒤로 가기·다른 후보 선택 또는 경로 재계획으로 복구합니다. 화면 정보가 부족한 경우에만 EXAONE 4.5 VLM과 Solar Pro 4의 보조 판단을 사용합니다.
+ExitGuide는 고정 좌표와 저장된 전체 경로를 재생하지 않습니다.
 
-### 앱 화면 약관 분석
+1. 자연어 목적을 중간 목표와 최종 확인 단계로 바꿉니다.
+2. AccessibilityService와 OCR로 현재 화면에 실제로 존재하는 후보를 찾습니다.
+3. EXAONE 4.0 1.2B Q8, LoRA와 Decision Value Head가 후보를 비교합니다.
+4. 누를 위치와 이유를 표시하고 사용자의 직접 터치를 기다립니다.
+5. 바뀐 화면을 다시 읽어 경로를 갱신하거나 오류를 복구합니다.
+6. 약관 화면과 촬영 문서는 원문·검색 근거와 함께 설명합니다.
 
-약관이나 동의 항목이 나타나면 Android에 탑재된 약관·소비자 사례 DB에서 관련 근거를 검색합니다. 비용, 계약 기간, 자동 결제, 해지, 환불과 개인정보 조건을 해당 문단 주변에 표시하며, 현재 화면과 검색 근거에서 확인되지 않은 내용은 생성하지 않습니다.
+## 사용자가 보는 화면
 
-### 촬영 문서 분석
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/final-proposal/goal-input.png" width="220" alt="사용자 목표 입력 화면"></td>
+    <td align="center"><img src="docs/assets/final-proposal/human-control.png" width="220" alt="사용자 직접 터치와 약관 촬영 안내"></td>
+    <td align="center"><img src="docs/assets/final-proposal/youtube-guidance.png" width="220" alt="유튜브 화면의 누를 위치 안내"></td>
+    <td align="center"><img src="docs/assets/final-proposal/terms-evidence.png" width="220" alt="X 구매자 이용약관 근거 설명"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>1. 목적 입력</strong><br>자연어로 원하는 일을 입력</td>
+    <td align="center"><strong>2. 사용자 통제</strong><br>직접 터치 원칙과 약관 촬영</td>
+    <td align="center"><strong>3. 화면 안내</strong><br>현재 화면에서 누를 위치 강조</td>
+    <td align="center"><strong>4. 약관 근거</strong><br>비용·갱신·해지 조건 표시</td>
+  </tr>
+</table>
 
-종이 계약서나 신청서를 촬영하면 Upstage Document Parse가 OCR, 문단·표 구조와 원문 위치를 추출합니다. Solar Pro 4는 약관 DB의 검색 근거를 바탕으로 비용, 계약 기간, 자동 갱신, 해지, 환불과 개인정보 조건을 정리하고, ExitGuide는 사진 속 해당 위치와 상세 결과를 연결해 보여 줍니다.
+## 제안서 기준 기술 구성
 
-### 사용자 통제형 안전 설계
+| 계층 | 구성 요소 | 역할 |
+| --- | --- | --- |
+| Android 인터페이스 | AccessibilityService, OCR, 오버레이 | 화면 문구·역할·상태·위치 수집, 안내 표시 |
+| 온디바이스 판단 | EXAONE 4.0 1.2B Q8, LoRA, Decision Value Head | 목적과 현재 화면을 해석하고 행동 후보를 상대 평가 |
+| 로컬 지식 | 모바일 행동 지식 DB, 약관 DB, SQLite FTS5 | 화면 전이·복구 경험과 약관 근거 검색 |
+| 안전 경계 | 코드 기반 행동 분류·중단 규칙 | 결제·동의·해지 확정과 개인정보 제출 차단 |
+| 선택적 서버 AI | EXAONE 4.5 33B, Solar Pro 4 | 불명확한 화면 보조, 목적 계획과 경로 복구 |
+| 촬영 문서 | Document Parse, Solar Embedding 2, Solar Pro 4 | 문단·표·위치 추출, 근거 검색과 구조화 설명 |
 
-안내의 기본 형태는 **“여기를 누르세요”**라는 시각적 강조입니다. 결제, 동의, 가입, 해지·탈퇴 확정, 본인 인증, 비밀번호와 개인정보 제출은 민감 행동으로 분류합니다. 이 단계에서는 자동 실행과 추가 안내를 중단하고 선택의 결과와 주의사항만 설명합니다.
+일반적인 화면 판단과 약관 검색은 기기 내부에서 처리합니다. 서버 AI는 화면 정보가 부족하거나 복구가 필요한 경우, 또는 촬영 문서를 분석할 때 선택적으로 사용합니다.
 
-## 시스템 구성
+> 현재 `main`의 Navigation API 런타임 문서는 선택적 Planner를 **Solar Pro 3**로 정의합니다. 위 표의 Solar Pro 4는 본선 제안서의 통합 목표 구성이며, 현재 배포 계약과 동일하다고 해석하지 않습니다.
 
-```mermaid
-flowchart LR
-    U["사용자<br/>목적 입력·직접 터치"]
+## 데이터와 평가를 섞지 않는 원칙
 
-    subgraph ANDROID["Android 기기"]
-        UI["ExitGuide 인터페이스<br/>Accessibility · OCR · 오버레이"]
-        DECIDE["온디바이스 행동 판단<br/>EXAONE 1.2B Q8 · LoRA<br/>Decision Value Head"]
-        SAFETY["안전 통제·화면 안내<br/>안내 · 차단 · 약관 주석"]
-        ACTIONDB["모바일 행동 지식 DB<br/>목적 · 화면 · 후보 · 결과 · 복구"]
-        TERMSDB["모바일 약관 DB<br/>로컬 근거 검색"]
-        PHOTO["촬영 문서 결과<br/>원문 위치 · 핵심 조건"]
-
-        UI --> DECIDE --> SAFETY
-        ACTIONDB --> DECIDE
-        TERMSDB --> SAFETY
-        PHOTO --> UI
-    end
-
-    subgraph SERVER["필요할 때만 사용하는 서버 AI"]
-        VLM["EXAONE 4.5 VLM<br/>불명확한 화면 보조"]
-        SOLAR_NAV["Solar Pro 4<br/>목적 계획·경로 복구"]
-        PARSE["Upstage Document Parse<br/>OCR·문단·표·위치 추출"]
-        SOLAR_TERMS["Solar Pro 4<br/>근거 기반 약관 분석"]
-    end
-
-    U --> UI
-    SAFETY --> U
-    UI -. "화면 정보 부족" .-> VLM
-    DECIDE -. "불확실·반복·이탈" .-> SOLAR_NAV
-    VLM -.-> UI
-    SOLAR_NAV -.-> DECIDE
-    U -. "종이 약관 촬영" .-> PARSE
-    PARSE --> SOLAR_TERMS --> PHOTO
-```
-
-일반적인 화면 판단과 약관 검색은 기기 내부에서 처리합니다. 서버는 불명확한 화면, 경로 복구와 촬영 문서 분석처럼 추가 추론이 필요한 상황에 선택적으로 사용합니다.
-
-## AI 모델과 기술의 역할
-
-| 구성 요소 | 역할 |
-| --- | --- |
-| EXAONE 4.0 1.2B Q8 | 정해진 목적, 현재 안내 단계와 화면의 행동 후보를 온디바이스에서 해석 |
-| LoRA | 실기기에서 검증한 화면·행동 사례로 모바일 절차 이해를 보완 |
-| Decision Value Head | 한 화면에 있는 후보들의 적합도를 상대 평가하고 우선순위를 결정 |
-| EXAONE 4.5 33B | 접근성 정보가 부족한 화면의 시각 해석, 약관 데이터 검토와 보조 라벨 생성 |
-| Solar Pro 4 | 자연어 목적과 중간 목표 계획, 경로 이탈 복구, 약관 근거 검증과 구조화된 설명 |
-| Solar Embedding 2 | 약관 문단과 질의를 1,024차원 벡터로 변환해 의미 기반 검색 |
-| Upstage Document Parse | 촬영 문서의 OCR, 문단·표 구조, 페이지와 원문 위치 추출 |
-
-모델과 실행 도구는 구조화된 입출력으로 연결합니다. AI가 임의 좌표를 만들거나 화면에 없는 버튼을 실행하지 않도록, 현재 화면에서 관찰된 후보와 코드 기반 안전 규칙을 마지막 경계로 사용합니다.
-
-## 데이터 구성
-
-### 모바일 행동 지식 DB
-
-AndroidControl, AMEX, GUI-Odyssey, LearnGUI, Uni-GUI/OpenMobile과 실기기 기록을 다음 공통 형식으로 정규화했습니다.
+모바일 행동 지식 DB는 다음 구조를 저장합니다.
 
 ```text
-사용자 목적 → 현재 화면 → 행동 후보 → 선택 행동 → 다음 화면 → 실행 결과 → 복구 경험
+사용자 목적 → 현재 화면 → 전체 행동 후보 → 선택 행동 → 다음 화면 → 결과 → 복구 경험
 ```
 
-DB에는 앱별 좌표나 완성된 경로 대신 다음 정보가 저장됩니다.
-
-- 목적 지식: 표준 목적, 유사 표현과 위험 등급
-- 목적지 조건: 도달 화면의 필수·보조·금지 특징과 최종 행동
-- 화면 상태: 화면 문구와 구조, 로그인 상태, Native·WebView 구분
-- 행동 후보: 버튼 기능, 주변 문맥, 위치 범주와 위험도
-- 행동 결과: 다음 화면, 목표 진행, 정체와 이탈 여부
-- 복구 지식: 실패 원인, 반복 금지 후보, 복구 행동과 결과
-- 검증 근거: 데이터 출처, 신뢰도, 앱 버전과 검증 이력
-
-| 데이터 | 규모 |
+| 데이터·평가 항목 | 결과 |
 | --- | ---: |
 | AndroidControl 정규화 행동 단계 | 83,848개 |
 | LoRA용 후보 행동 | 4,828건 |
 | 화면 전이 자료 | 10,537건 |
-| Decision Value Head 후보 비교쌍 | 22,912개 |
-
-### 약관 지식 DB
-
-공공 표준약관, 소비자 분쟁 사례와 공개 개인정보 약관을 정제했습니다. Android에는 **76,813개 근거와 SQLite FTS5 검색기**를 탑재합니다. 서버 연구 DB는 516,564개의 문단·가이드 레코드와 517,052개의 검색 청크로 구성했으며, 381,758개 고유 문단의 1,024차원 임베딩을 구축했습니다.
-
-이 수치는 검색 인프라의 규모이며 답변 정확도를 의미하지 않습니다. 약관 설명은 항상 현재 화면 또는 촬영 원문과 검색 근거의 충분성을 별도로 확인합니다.
-
-## 구현 및 검증 결과
-
-아래 수치는 **2026년 8월 14일 본선 제안서 제출 시점**의 고정 평가 결과입니다. 학습 데이터 정확도, 후보 순위 정확도, 실기기 행동 정확도, 목표 화면 도달률과 약관 분석 정확도는 서로 다른 평가 단위이므로 구분해 제시합니다.
-
-| 검증 항목 | 결과 |
-| --- | ---: |
-| 실기기 검증 범위 | 31개 앱 · 155개 시나리오 |
-| Android 화면 처리·안전 기능 자동 테스트 | 227/227 통과 |
+| Value Head 후보 비교쌍 | 22,912개 |
 | LoRA 학습 데이터 정확도 | 483/549 · 88.0% |
 | Value Head 후보 순위 정확도 | 384/446 · 86.1% |
-| 실기기 올바른 행동 후보 선택률 | 521/615 · 84.7% |
+| 실기기 행동 후보 선택률 | 521/615 · 84.7% |
 | 최종 확인 화면 도달률 | 137/155 · 88.4% |
-| 오류 발생 후 경로 복귀율 | 39/40 · 97.5% |
-| 사용자 확인 없는 최종 행동 | 0건 |
-| 화면 약관 근거 일치율 | 41/50 · 82.0% |
-| 촬영 약관 분석 정확도 | 38/50 · 76.0% |
-| 촬영 약관 평균 처리 시간 | 4.2초 |
-| 온디바이스 판단 시간 | 평균 8.0초 이하 · p95 15.0초 이하 |
-| 최대 메모리 사용량 | 2,650MB |
 
-검증 앱에는 Instagram, YouTube, Netflix, 제주항공, X, 쿠팡, 배달의민족, ChatGPT, TVING, 왓챠, Wavve, Melon, FLO, 지니뮤직, 리디, 클래스101, 요기요, 듀오링고, G마켓, NAVER, NOL, TikTok 등이 포함됩니다.
+학습 데이터 검수, 후보 순위, 실기기 행동, 화면 도달과 안전 결과는 각각 별도의 분모로 관리합니다. 공개 모바일 에이전트 연구의 점수도 ExitGuide의 실기기 성능으로 사용하지 않습니다.
 
-제안서 제출 시점의 종합 진척도는 80%입니다. 목적·화면 인식 85%, 온디바이스 행동 판단 75%, 화면 안내 85%, 앱 약관 분석·주석 85%, 촬영 약관 분석 80%, 최종 단계 정지·오류 복구 90%로 평가했습니다. 이후 변경된 구현 상태와 별도 실험 결과는 [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)에서 관리합니다.
+## 안전 원칙
 
-## 안전·신뢰 원칙
-
-- AI는 화면을 직접 조작하지 않고 눌러야 할 위치와 이유를 표시합니다.
-- 결제, 동의, 가입, 해지·탈퇴 확정, 본인 인증과 개인정보 제출 단계에서는 코드 규칙으로 안내를 중단합니다.
-- 현재 화면에 실제로 존재하는 후보만 평가하며 임의 좌표와 존재하지 않는 후보 ID를 허용하지 않습니다.
-- 행동 후 화면을 재관찰하고, 무변화·반복·경로 이탈이 발생하면 같은 후보를 반복하지 않습니다.
-- 약관은 화면 원문과 DB 검색 근거에서 확인된 내용만 설명합니다. 다른 서비스의 조항이 섞이거나 근거가 부족하면 답변을 보류합니다.
-- 일반 판단과 약관 검색은 기기 내부에서 처리합니다. 촬영 문서나 정밀 화면 분석을 서버로 보낼 때는 필요한 정보만 전송합니다.
-- `.env`, 원본 스크린샷, 계정 정보와 로컬 런타임 DB는 Git에 포함하지 않습니다.
+- AI는 휴대폰을 대신 조작하지 않고 **“여기를 누르세요”**라는 시각 안내를 제공합니다.
+- 결제, 동의, 가입, 해지·탈퇴 확정, 본인 인증과 개인정보 제출 단계에서는 안내를 중단합니다.
+- 현재 화면에서 관찰된 후보만 평가하며 임의 좌표와 존재하지 않는 후보 ID를 허용하지 않습니다.
+- 행동 후 화면을 재관찰하고 무변화·반복·경로 이탈 시 같은 후보를 반복하지 않습니다.
+- 약관은 원문과 검색 근거에서 확인된 내용만 설명하며 근거가 부족하면 답변을 보류합니다.
+- `.env`, 원본 사용자 스크린샷, 계정 정보와 로컬 런타임 DB는 Git에 포함하지 않습니다.
 
 ## 시연 시나리오
 
-1. **YouTube Premium 해지**: 현재 화면의 후보를 비교해 누를 위치를 단계별로 표시하고, 최종 해지 버튼 앞에서 안내를 중단합니다.
-2. **X 구독제 변경과 약관 설명**: 구독 관리 화면까지 안내하고 요금, 자동 갱신과 환불 조건을 해당 약관 문단 옆에 표시합니다.
-3. **부동산 계약서 촬영 분석**: 문단, 표와 원문 위치를 추출하고 보증금, 계약 기간, 해지, 위약 사항과 특약을 사진 속 근거와 연결합니다.
+1. **YouTube Premium 해지**: 현재 화면을 다시 읽으며 최종 해지 버튼 앞까지 안내하고, 실제 해지는 사용자에게 맡깁니다.
+2. **X 구독제 변경과 약관 설명**: 구독 관리 화면까지 안내하고 요금, 자동 갱신과 환불 조건을 원문 주변에 표시합니다.
+3. **부동산 계약서 촬영 분석**: 문단, 표와 위치를 추출해 보증금, 계약 기간, 해지와 특약을 촬영 원문에 연결합니다.
 
-- [본선 시연 영상 보기](https://youtu.be/8YB3jl2YKNQ?si=f5ZpqoWffAoT5hZr)
-- [저장소 내 MVP 영상 보기](MVP.mp4)
-- Windows MVP: [`dist/EGL-Navigation-MVP.exe`](dist/EGL-Navigation-MVP.exe)
+- [본선 시연 영상](https://youtu.be/8YB3jl2YKNQ?si=f5ZpqoWffAoT5hZr)
 
-## 저장소 구조
+## 저장소 안내
+
+| 목적 | 문서·경로 |
+| --- | --- |
+| 기술 전체 구조와 고정 결과 | [통합 기술 보고서](docs/INTEGRATED_TECHNICAL_REPORT_KR.md) |
+| 최신 구현·수집 상태 | [CURRENT_PRIORITY.md](CURRENT_PRIORITY.md) |
+| API 실행·입출력·안전 게이트 | [Navigation Decision API v1](docs/NAVIGATION_API_V1.md) |
+| Android 실행기 설치·동작 | [Android Executor v1](docs/ANDROID_EXECUTOR_V1.md) |
+| Decision Memory 스키마 | [Navigation Decision DB v1](docs/NAVIGATION_DECISION_DB_V1.md) |
+| 경험 프로필과 승격 경계 | [Navigation Experience Profile v1](docs/NAVIGATION_EXPERIENCE_PROFILE_V1.md) |
+| 앱·목표 커버리지 | [Navigation Goal Coverage](docs/NAVIGATION_GOAL_COVERAGE.md) |
+| 연구 아키텍처 대응 | [AndroidWorld Research Architecture](docs/ANDROIDWORLD_RESEARCH_ARCHITECTURE.md) |
+| 오프라인 A/B 평가 | [Offline A/B Evaluation](docs/OFFLINE_AB_EVALUATION.md) |
+| 실기기 수집 근거 | [Real-device Collection](docs/REAL_DEVICE_COLLECTION_2026-08-03.md) |
+| N100 연결·배포 진단 | [N100 Model Connectivity](docs/N100_MODEL_CONNECTIVITY.md) |
 
 ```text
 exitguide-navigation/
-├─ apps/
-│  ├─ api/                     # 목적 계획, 행동 판단, 약관 검색, 복구와 안전 API
-│  ├─ mobile/                  # Android 앱, AccessibilityService, OCR와 오버레이
-│  └─ web-demo/                # 브라우저 기반 데모
-├─ contracts/                  # Navigation·Terms 통합 입출력 계약
-├─ data/                       # 경로·평가 데이터와 템플릿
-├─ deploy/                     # 서버와 공개 APK 배포 설정
-├─ fixtures/
-│  └─ navigation/              # 기능 카탈로그, Gold, 평가·회귀 자료
-├─ scripts/                    # 빌드, 수집, 검증, 학습·평가와 배포 자동화
-├─ docs/                       # 아키텍처, 정책, 테스트와 연구 기록
-├─ dist/                       # MVP 실행 파일
-└─ MVP.mp4                     # MVP 시연 영상
+├─ apps/api/                   # Navigation Decision API와 안전·복구 런타임
+├─ apps/android-executor/      # Accessibility 기반 Android 실행·관찰 클라이언트
+├─ db/                         # Decision/Runtime 스키마, 계약과 검증 기준
+├─ scripts/                    # 수집, 검증, 리플레이, 승격과 개인정보 정제
+├─ deploy/n100/                # N100 서비스·환경·터널 배포 설정
+└─ docs/                       # 통합 보고서, API·DB·실기기 연구 기록
 ```
 
 ## 빠른 시작
 
-로컬 `.env`는 [`.env.example`](.env.example)을 복사해 사용합니다. 실제 API 키와 Endpoint ID가 들어 있는 `.env`는 Git에 포함하지 않습니다.
-
-### 백엔드
-
 ```powershell
+# Navigation API 의존성 설치
 cd apps\api
 python -m venv .venv
 .\.venv\Scripts\pip.exe install -r requirements.txt
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8010
-```
 
-### 모바일 앱
+# 아래 세 경로는 로컬의 실제 SQLite/manifest 절대 경로로 지정
+$env:NAVIGATION_DECISION_DB_PATH = "C:\path\navigation-decision-v1.sqlite"
+$env:NAVIGATION_RUNTIME_DB_PATH = "C:\path\navigation-runtime-v1.sqlite"
+$env:NAVIGATION_DATASET_SPLIT_MANIFEST_PATH = "C:\path\navigation_dataset_split_v1.json"
+$env:NAVIGATION_ALLOW_LOCKED_HOLDOUT = "false"
+.\.venv\Scripts\python.exe -m uvicorn app.navigation_main:app --host 127.0.0.1 --port 8100
+```
 
 ```powershell
-cd apps\mobile
-npm ci
-npm run typecheck
+# Android Executor 테스트와 debug APK 빌드
+cd apps\android-executor
+.\gradlew.bat testDebugUnitTest assembleDebug --no-daemon
+
+# API의 보존된 Python 소스와 단위 테스트 예시
+cd ..\..
+python -m compileall -q apps\api\app scripts
+python apps\api\tests\navigation_runtime_unit.py
 ```
 
-### Android 로컬 빌드와 설치
+## 현재 한계와 다음 단계
 
-```powershell
-.\scripts\Build-AndroidLocal.ps1
-```
-
-### 기본 회귀 검사
-
-```powershell
-.\scripts\Test-ApiUnit.ps1
-.\scripts\Test-NavigationDbGym.ps1 -Mode fast
-```
-
-## 주요 문서
-
-- [현재 프로젝트 현황](docs/CURRENT_PROJECT_STATUS.md)
-- [시스템 아키텍처](docs/ARCHITECTURE.md)
-- [Navigation Agent 학습 아키텍처](docs/NAVIGATION_AGENT_LEARNING_ARCHITECTURE.md)
-- [범용 Navigation Agent](docs/UNIVERSAL_NAVIGATION_AGENT.md)
-- [Navigation DB Gym](docs/NAVIGATION_DB_GYM.md)
-- [AndroidControl 연동](docs/ANDROID_CONTROL.md)
-- [API 계약](docs/API_CONTRACT.md)
-- [실기기 Human Gold 기록](docs/GOLD_RECORDING.md)
-- [휴대폰 테스트](docs/PHONE_TESTING.md)
-- [공개 APK 배포](docs/PUBLIC_APK_DEPLOYMENT.md)
-- [Navigation Agent 평가 보고서](docs/NAVIGATION_AGENT_EVALUATION.md)
-- [개발 로그](docs/DEVELOPMENT_LOG.md)
-
-## 다음 단계
-
-- 검증 범위를 100개 앱과 별도 홀드아웃 앱으로 확대
-- 여러 Android 기기에서 Q8·Value Head 후보 순위 편차와 성능 경계 검증
-- STT·TTS 기반 음성 목적 입력과 단계별 음성 안내
-- 촬영 약관의 문서 인식·근거 연결 성능 개선
-- 복지관, 디지털 교육기관과 대학에서 고령층·디지털 취약계층 대상 시범 운영
-- 기관별 행동 지식 팩과 약관 DB를 SDK 형태로 제공하는 B2B·B2G 확장
+- 제안서의 고정 실기기 평가는 31개 앱, 155개 시나리오 범위입니다.
+- 기기별 CPU·GPU·NPU와 Q8 계산 차이에 따른 후보 순위 편차를 추가 검증해야 합니다.
+- 촬영 문서 분석과 어려운 화면 복구는 네트워크와 서버 AI에 의존합니다.
+- 100개 앱 및 홀드아웃 앱 평가, STT·TTS, 고령층 시범 운영과 B2B·B2G SDK 확장이 다음 단계입니다.
 
 ExitGuide의 목표는 사용자의 결정을 대신하는 자동화가 아니라, 사용자가 이동 경로와 선택의 의미를 이해한 상태에서 복잡한 모바일 절차를 직접 수행하도록 돕는 것입니다.
